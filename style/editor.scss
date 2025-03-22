@@ -1,0 +1,32 @@
+.lyrics-view {
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.lyrics-editor,
+.lyrics-display {
+    position: relative;
+    line-height: 2.5;
+    font-size: 1.2rem;
+}
+
+.lyrics-editor *,
+.lyrics-display * {
+    position: relative;
+}
+
+
+.lyrics-editor sup,
+.lyrics-display sup {
+    position: absolute;
+    top: .2rem;
+    color: whitesmoke;
+    font-weight: bold;
+    font-size: 1rem;
+    margin-left: -0.7rem;
+}
+
+.lyrics-editor>*,
+.lyrics-display>* {
+    margin-top: .55rem;
+}

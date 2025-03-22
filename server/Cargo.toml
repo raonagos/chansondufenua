@@ -1,0 +1,28 @@
+[package]
+name = "server"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[dependencies]
+app = { path = "../app" }
+crate_core = { path = "../core" }
+domain = { path = "../domain" }
+database = { path = "../database" }
+
+axum.workspace = true
+leptos.workspace = true
+leptos_axum.workspace = true
+leptos_meta.workspace = true
+
+tokio = { version = "1.33.0", features = ["full"] }
+tower-http = { version = "0.6", features = ["full"] }
+
+anyhow = { version = "1.0.88" }
+dotenvy = { version = "0.15.7" }
+headless_chrome = { version = "=1.0.16" }
+tikv-jemallocator = { version = "0.6.0" }
+cached = { version = "0.55", features = ["async"] }
+
+[features]
+ssr = ["app/ssr", "leptos/ssr", "leptos_meta/ssr"]

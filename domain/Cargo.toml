@@ -1,0 +1,27 @@
+[package]
+name = "domain"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[dependencies]
+leptos.workspace = true
+axum = { workspace = true, optional = true }
+
+serde.workspace = true
+chrono.workspace = true
+eserde.workspace = true
+ammonia.workspace = true
+thiserror.workspace = true
+surrealdb = { workspace = true, optional = true }
+
+regex-lite = "0.1.6"
+serde_json = "1.0.120"
+clap = { version = "4.5.31", optional = true, features = [
+    "env",
+    "derive",
+    "wrap_help",
+] }
+
+[features]
+ssr = ["dep:axum", "dep:clap", "dep:surrealdb"]

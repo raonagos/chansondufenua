@@ -1,0 +1,19 @@
+[package]
+name = "web"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+app = { path = "../app" }
+
+leptos.workspace = true
+
+wasm-bindgen = "=0.2.100"
+console_error_panic_hook = "0.1.7"
+
+[features]
+hydrate = ["app/hydrate", "leptos/hydrate"]

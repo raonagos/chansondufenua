@@ -1,0 +1,265 @@
+@import "tailwindcss";
+
+@theme {
+    --color-tahiti-light: #22d3ee;
+    --color-tahiti: #06b6d4;
+    --color-tahiti-dark: #0e7490;
+    --color-tahiti-400: #22d3ee;
+    --color-tahiti-500: #06b6d4;
+    --color-tahiti-600: #0891b2;
+    --color-tahiti-700: #0e7490;
+    --color-tahiti-800: #155e75;
+    --color-tahiti-900: #164e63;
+    --color-tahiti-1000: #0a222c;
+}
+
+body {
+    @apply bg-gradient-to-br from-tahiti-500 to-tahiti-800 dark:from-tahiti-700 dark:to-tahiti-1000 text-neutral-200;
+}
+
+footer {
+    @apply bg-tahiti-900 p-8 text-center text-xs;
+}
+
+header {
+    @apply bg-tahiti-900/30 p-4 shadow-md;
+
+    &>div {
+        @apply container mx-auto flex items-center justify-end flex-wrap;
+    }
+
+    & span.hamburger {
+        @apply block h-[4px] bg-neutral-200;
+    }
+
+    & div.hamburger-btn {
+        @apply md:hidden flex flex-col items-end space-y-1;
+    }
+
+    & nav {
+        @apply max-md:basis-full flex space-x-4 max-md:flex-col max-md:items-end max-md:overflow-y-auto max-md:h-0 transition-all;
+    }
+
+    & nav a.nav-link {
+        @apply max-md:py-2 text-xl lg:text-2xl hover:text-tahiti-400 transition-colors;
+    }
+}
+
+main {
+    @apply flex-auto container mx-auto p-4;
+}
+
+.home,
+.all-song,
+.song,
+.create-song {
+    @apply max-md:px-0 max-md:py-0 px-8 py-12;
+}
+
+.home {
+    & section.title-container {
+        @apply text-center mb-20;
+
+        & h1.title {
+            @apply text-5xl font-bold dark:text-tahiti mb-6;
+        }
+
+        & p.subtitle {
+            @apply text-2xl dark:text-gray-400 mb-10 italic;
+        }
+
+        & a.title-link {
+            @apply bg-tahiti-700 hover:bg-tahiti-800 dark:bg-tahiti-600 dark:hover:bg-tahiti-500 font-bold py-3 px-8 rounded-full text-lg transition-colors duration-300 shadow-lg;
+        }
+    }
+
+    & .text-syno {
+        @apply mx-auto max-w-[800px] leading-7 text-xl;
+    }
+
+    & section.card-container {
+        @apply grid md:grid-cols-3 gap-10 mb-20;
+
+        & div.card {
+            @apply bg-neutral-200/10 backdrop-blur-md rounded-lg p-8 shadow-xl;
+        }
+
+        & h2.card-title {
+            @apply text-2xl font-semibold mb-4 dark:text-tahiti-400;
+        }
+    }
+
+    & section.tab-container {
+        @apply mb-20;
+
+        & div.tab-subcontainer {
+            @apply bg-neutral-200/10 backdrop-blur-md rounded-lg p-8 max-md:text-center md:max-w-max;
+        }
+
+        & h2.tab-title {
+            @apply text-2xl font-semibold mb-4 dark:text-tahiti-400;
+        }
+
+        & tr.tab-row {
+            @apply hover:text-tahiti-400 transition-colors;
+
+            & td.row-lyrics {
+                @apply max-md:hidden;
+            }
+        }
+
+        & a.tab-lyrics {
+            @apply inline-block truncate pt-[9px] max-md:w-[110px] md:w-[500px] lg:w-[800px];
+        }
+    }
+
+    & section.foot-container {
+        @apply text-center;
+
+        & h2.foot-title {
+            @apply text-4xl font-bold mb-8;
+        }
+
+        & p.foot-text {
+            @apply text-xl dark:text-gray-400 mb-10;
+        }
+
+        & div.foot-link-container {
+            @apply flex max-md:flex-col gap-4 items-center justify-center;
+        }
+
+        & a.foot-link-media {
+            @apply bg-neutral-200 text-tahiti-600 dark:text-tahiti-800 hover:bg-tahiti-600 dark:hover:bg-tahiti-800 hover:text-neutral-200 font-bold py-3 px-8 rounded-full text-lg transition duration-300 shadow-lg;
+        }
+
+        & a.foot-link {
+            @apply border-2 border-neutral-200 hover:border-tahiti-600 dark:hover:border-tahiti-800 hover:text-tahiti-600 dark:hover:text-tahiti-800 hover:bg-neutral-200 font-bold py-3 px-8 rounded-full text-lg transition duration-300;
+        }
+    }
+}
+
+.all-song {
+    & h1.title {
+        @apply text-3xl font-bold mb-6;
+    }
+
+    & .tab-container {
+        @apply bg-neutral-200/10 bg-transparent shadow-md rounded-lg overflow-hidden;
+    }
+
+    & .tab-container .tab-th {
+        @apply px-6 py-3 text-left;
+    }
+
+    & .tab-container .tab-row {
+        @apply border-b border-gray-200 hover:border-tahiti-800 hover:bg-tahiti-800 dark:hover:border-tahiti-600 dark:hover:bg-tahiti-600 transition duration-150 ease-in-out;
+    }
+
+    & .tab-container .tab-cell {
+        @apply px-6 py-4 whitespace-nowrap;
+    }
+
+}
+
+.song {
+    @apply bg-neutral-200/10 backdrop-blur-md shadow-md rounded-lg p-6;
+
+    & section.title-container {
+        @apply flex max-md:flex-col-reverse max-md:items-start items-center flex-wrap mb-12 gap-y-12;
+    }
+
+    & .title-link {
+        @apply bg-tahiti-700 hover:bg-tahiti-800 dark:bg-tahiti-600 dark:hover:bg-tahiti-500 transition-colors font-bold py-2 px-4 rounded duration-300 ease-in-out;
+    }
+
+    & .title-song {
+        @apply flex-1 text-4xl italic;
+    }
+
+    & .lyrics-song {
+        @apply basis-full p-4;
+    }
+}
+
+.create-song {
+    @apply text-white;
+
+    & .title {
+        @apply mb-6 text-3xl font-bold;
+    }
+
+    & .form-action {
+        @apply bg-neutral-200/10 dark:bg-tahiti-800/10 shadow-md rounded px-8 pt-6 pb-8 mb-4;
+    }
+
+    & .form-l-title,
+    .form-l-selected,
+    .form-l-lyrics {
+        @apply block text-sm font-bold mb-2;
+    }
+
+    & .form-title {
+        @apply shadow appearance-none border border-gray-300 dark:border-tahiti-700 rounded w-full py-2 px-3 bg-transparent dark:bg-tahiti-800 focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-tahiti-400 focus:border-transparent;
+    }
+
+    & .form-ulist-selected:not(:has(.form-list-selected)) {
+        @apply !w-0 !h-0 !m-0 !p-0;
+    }
+
+    & .form-ulist-selected {
+        @apply flex flex-wrap p-2 gap-2 max-w-max bg-transparent dark:bg-tahiti-900;
+    }
+
+    & .form-list-selected {
+        @apply px-4 py-2 max-w-max flex hover:bg-tahiti-400 hover:border-red-500 dark:hover:border-red-400 dark:hover:bg-tahiti-700 border rounded;
+    }
+
+    & .form-selected-delete {
+        @apply text-red-500 dark:text-red-400 ml-1;
+    }
+
+    & .form-select {
+        @apply shadow appearance-none border border-neutral-200 dark:border-tahiti-700 rounded w-full py-2 px-3 mt-2 bg-transparent dark:bg-tahiti-800 focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-tahiti-400 focus:border-transparent;
+    }
+
+    & .form-lyrics-w {
+        @apply relative;
+    }
+
+    & .form-btn-lyrics {
+        @apply flex flex-wrap-reverse border-transparent mb-2;
+    }
+
+    & .form-custom-chord {
+        @apply flex md:ml-2;
+    }
+
+    & .form-chord-btn {
+        @apply bg-tahiti-700 hover:bg-tahiti-900 transition-colors font-bold py-2 px-4;
+    }
+
+    & .form-chbx-btn {
+        @apply flex items-center bg-tahiti-700 hover:bg-tahiti-900 font-bold gap-2 px-2;
+    }
+
+    & .form-custom-chord-lyrics {
+        @apply outline-0 border border-tahiti-1000 dark:border-white max-w-[17ch] shadow appearance-none py-2 px-3 bg-transparent dark:bg-tahiti-800;
+    }
+
+    & .form-custom-chord-btn {
+        @apply px-2 bg-tahiti-700 hover:bg-tahiti-900 transition-colors;
+    }
+
+    & .form-lyrics {
+        @apply bg-transparent dark:bg-tahiti-900 shadow-inner border border-gray-300 dark:border-tahiti-700 rounded-md p-4 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-neutral-200 dark:focus:ring-tahiti-400 focus:border-transparent;
+    }
+
+    & .form-submit {
+        @apply flex items-center justify-between;
+    }
+
+    & .form-submitter {
+        @apply bg-tahiti-500 hover:bg-tahiti-700 transition-colors dark:bg-tahiti-600 dark:hover:bg-tahiti-700 font-bold py-2 px-4 rounded focus:outline-none;
+    }
+
+}

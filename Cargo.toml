@@ -1,0 +1,54 @@
+[workspace]
+resolver = "2"
+members = ["app", "core", "database", "domain", "server", "web"]
+
+[workspace.package]
+edition = "2021"
+version = "3.1.0"
+authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
+
+[workspace.dependencies]
+leptos = "0.7.7"
+leptos_axum = "0.7.7"
+leptos_meta = "0.7.7"
+leptos_router = "0.7.7"
+axum = { version = "0.7", features = ["macros"] }
+
+thiserror = "2"
+ammonia = "4.0.0"
+surrealdb = "2.1.4"
+chrono = { version = "0.4.40", features = ["serde"] }
+eserde = { version = "0.1.2", features = ["derive"] }
+serde = { version = "1.0.203", features = ["derive"] }
+
+[patch.crates-io]
+# security patch https://github.com/tetuaoro/chansondufenua/security/dependabot/106
+ring = { git = "https://github.com/briansmith/ring", rev = "52b239c5" }
+
+[[workspace.metadata.leptos]]
+name = "chansondufenua"
+style-file = "style/main.scss"
+tailwind-input-file = "style/tailwind.scss"
+assets-dir = "public"
+watch = false
+env = "DEV"
+
+bin-package = "server"
+bin-features = ["ssr"]
+
+lib-package = "web"
+lib-features = ["hydrate"]
+lib-profile-release = "wasm-release"
+
+# need to be applied only to wasm build
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 12
+panic = "abort"
+
+# Defines a size-optimized profile for the WASM bundle in release mode
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+codegen-units = 1

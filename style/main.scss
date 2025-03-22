@@ -1,0 +1,19 @@
+* {
+    font-family: 'Roboto', 'Arial', serif;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+}
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+@import 'editor.scss';

@@ -1,0 +1,18 @@
+[package]
+name = "database"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[dependencies]
+domain = { path = "../domain", features = ["ssr"] }
+
+axum.workspace = true
+leptos.workspace = true
+
+serde.workspace = true
+eserde.workspace = true
+ammonia.workspace = true
+surrealdb.workspace = true
+
+passwords = { version = "3.1.16" }

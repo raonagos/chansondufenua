@@ -1,0 +1,11 @@
+[package]
+name = "crate_core"
+edition.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[dependencies]
+database = { path = "../database" }
+
+axum.workspace = true
+leptos.workspace = true
