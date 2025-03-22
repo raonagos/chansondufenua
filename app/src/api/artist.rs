@@ -4,7 +4,6 @@ use domain::entities::Artist;
 
 use leptos::prelude::*;
 
-#[server]
 /// Retrieves all artists from the database.
 ///
 /// ## Returns
@@ -23,6 +22,7 @@ use leptos::prelude::*;
 /// ```
 ///
 /// [`ServerFnError`] : https://docs.rs/leptos/latest/leptos/prelude/enum.ServerFnError.html
+#[server]
 pub async fn get_artists() -> Result<Vec<Artist>> {
     use crate_core::state::AppState;
 

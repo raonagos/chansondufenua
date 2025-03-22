@@ -194,7 +194,7 @@ checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 
 [[package]]
 name = "app"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "axum",
  "chrono",
@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "crate_core"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "axum",
  "database",
@@ -1250,7 +1250,7 @@ checksum = "575f75dfd25738df5b91b8e43e14d44bda14637a58fae779fd2b064f8bf3e010"
 
 [[package]]
 name = "database"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "ammonia",
  "axum",
@@ -1380,7 +1380,7 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "domain"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "ammonia",
  "axum",
@@ -4335,7 +4335,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "app",
@@ -5670,7 +5670,7 @@ dependencies = [
 
 [[package]]
 name = "web"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "app",
  "console_error_panic_hook",

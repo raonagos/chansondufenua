@@ -4,7 +4,7 @@ members = ["app", "core", "database", "domain", "server", "web"]
 
 [workspace.package]
 edition = "2021"
-version = "3.1.0"
+version = "3.0.0"
 authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
 
 [workspace.dependencies]
@@ -22,11 +22,13 @@ eserde = { version = "0.1.2", features = ["derive"] }
 serde = { version = "1.0.203", features = ["derive"] }
 
 [patch.crates-io]
-# security patch https://github.com/tetuaoro/chansondufenua/security/dependabot/106
+# security patch
 ring = { git = "https://github.com/briansmith/ring", rev = "52b239c5" }
 
+# See the repo for parameters : https://github.com/leptos-rs/cargo-leptos?tab=readme-ov-file#compilation-parameters
 [[workspace.metadata.leptos]]
 name = "chansondufenua"
+hash-files = true
 style-file = "style/main.scss"
 tailwind-input-file = "style/tailwind.scss"
 assets-dir = "public"
@@ -47,7 +49,7 @@ opt-level = 3
 codegen-units = 12
 panic = "abort"
 
-# Defines a size-optimized profile for the WASM bundle in release mode
+# defines a size-optimized profile for the WASM bundle in release mode
 [profile.wasm-release]
 inherits = "release"
 opt-level = 'z'

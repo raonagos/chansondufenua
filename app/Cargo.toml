@@ -26,6 +26,7 @@ web-sys = { version = "0.3.69", features = [
 ] }
 
 [features]
+hydrate = ["leptos/hydrate"]
 ssr = [
     "leptos/ssr",
     "leptos_meta/ssr",
@@ -34,4 +35,3 @@ ssr = [
     "dep:crate_core",
     "dep:leptos_axum",
 ]
-hydrate = ["leptos/hydrate"]
