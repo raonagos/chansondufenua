@@ -23,9 +23,8 @@ pub async fn init() -> AppResult<Surreal<Client>> {
     use domain::cli::{AppCli, Parser};
 
     use leptos::logging;
-    use std::fs;
     use surrealdb::engine::remote::ws::Ws;
-    use surrealdb::opt::auth::{Record, Root};
+    use surrealdb::opt::auth::Database as AuthDatabase;
 
     // clap crates
     let AppCli {
@@ -34,82 +33,21 @@ pub async fn init() -> AppResult<Surreal<Client>> {
         db_endpoint: endpoint,
         db_user: username,
         db_password: password,
-        db_schema: schema,
     } = AppCli::parse();
 
     #[allow(non_snake_case)]
     let DB: Surreal<Client> = Surreal::init();
 
     DB.connect::<Ws>(endpoint).await?;
-    DB.signin(Root {
+    DB.use_ns(&namespace).use_db(&database).await?;
+    DB.signin(AuthDatabase {
+        namespace: &namespace,
+        database: &database,
         username: &username,
         password: &password,
     })
     .await?;
-    DB.use_ns(&namespace).use_db(&database).await?;
     logging::debug_warn!("DB ROOT LOGIN SUCCESSFUL");
-
-    if let Ok(schema) = fs::read_to_string(schema) {
-        let schema = schema.split("DEFINE").collect::<Vec<_>>();
-        let mut queries = DB.query("LET $version = 0;");
-        for q in schema.iter() {
-            let query = format!("DEFINE{q}");
-            if query.ne(&"DEFINE") {
-                queries = queries.query(query);
-            }
-        }
-
-        // match error if schema already exists
-        let mut response = queries.await?;
-        let errors = response.take_errors();
-
-        if errors.is_empty() {
-            logging::debug_warn!("DB SCHEMA UPDATED SUCCESFUL");
-        } else {
-            let mut errors = errors.iter().collect::<Vec<_>>();
-            errors.sort_by(|(a, _), (b, _)| a.cmp(&b));
-            errors.iter().for_each(|(index, err)| {
-                logging::warn!("{index} {err}");
-            });
-        }
-    }
-
-    // generate complex random string
-    let pg = passwords::PasswordGenerator {
-        length: 15,
-        numbers: true,
-        lowercase_letters: true,
-        uppercase_letters: true,
-        symbols: false,
-        spaces: false,
-        exclude_similar_characters: true,
-        strict: true,
-    };
-
-    let username = pg.generate_one().unwrap();
-    let password = pg.generate_one().unwrap();
-
-    #[derive(Debug, serde::Serialize)]
-    struct AuthParams {
-        username: String,
-        password: String,
-        role: String,
-    }
-    let auth_user = AuthParams {
-        username,
-        password,
-        role: "GUESS".to_owned(),
-    };
-
-    // connect with guess user
-    DB.signup(Record {
-        namespace: &namespace,
-        database: &database,
-        access: "account", // set the scope if needed
-        params: auth_user,
-    })
-    .await?;
-    logging::debug_warn!("DB GUESS USER LOGIN SUCCESSFUL");
 
     logging::debug_warn!("DB INITIALIZE SUCCESSFUL");
     Ok(DB)

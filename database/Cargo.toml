@@ -14,5 +14,3 @@ serde.workspace = true
 eserde.workspace = true
 ammonia.workspace = true
 surrealdb.workspace = true
-
-passwords = { version = "3.1.16" }

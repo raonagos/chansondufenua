@@ -16,4 +16,6 @@ wasm-bindgen = "=0.2.100"
 console_error_panic_hook = "0.1.7"
 
 [features]
+# activate hydrate for linter
+default = ["hydrate"]
 hydrate = ["app/hydrate", "leptos/hydrate"]

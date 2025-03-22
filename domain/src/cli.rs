@@ -3,7 +3,7 @@ pub use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "Chanson du Fenua")]
-#[command(version, about = "Sing with lyrics & chords.")]
+#[command(version, about = "Sing tahitian song with lyrics & chords.")]
 // Add/Mark `Option` if you add more database provider or make a `feature`
 pub struct AppCli {
     /// Namespace database provider
@@ -25,8 +25,4 @@ pub struct AppCli {
     /// Password database provider
     #[arg(long, env = "DB_PASSWORD")]
     pub db_password: String,
-
-    /// Definition schema database provider
-    #[arg(long, env = "DB_SCHEMA_INIT")]
-    pub db_schema: String,
 }

@@ -120,18 +120,3 @@ DEFINE FUNCTION IF NOT EXISTS fn::create_song($title: string, $lyrics: string, $
 
     RETURN $new_song[0];
 };
-
-DEFINE TABLE IF NOT EXISTS user SCHEMAFULL;
-
-DEFINE FIELD IF NOT EXISTS username ON user TYPE string;
-DEFINE FIELD IF NOT EXISTS password ON user TYPE string;
-DEFINE FIELD IF NOT EXISTS ROLE ON user TYPE string;
-
-DEFINE INDEX IF NOT EXISTS username_i ON user FIELDS username UNIQUE;
-
-DEFINE ACCESS IF NOT EXISTS account
-    ON DATABASE TYPE RECORD
-	    SIGNUP (CREATE user SET ROLE = $role, username = $username, password = crypto::argon2::generate($password))
-	    SIGNIN (SELECT * FROM user WHERE username = $username AND crypto::argon2::compare(password, $password))
-    DURATION
-        FOR SESSION 6w;
