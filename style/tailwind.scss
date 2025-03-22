@@ -37,7 +37,7 @@ header {
     }
 
     & nav {
-        @apply max-md:basis-full flex space-x-4 max-md:flex-col max-md:items-end max-md:overflow-y-auto max-md:h-0 transition-all;
+        @apply max-md:basis-full flex space-x-4 max-md:flex-col max-md:items-end max-md:overflow-y-auto transition-all;
     }
 
     & nav a.nav-link {
