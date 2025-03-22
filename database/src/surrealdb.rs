@@ -22,7 +22,6 @@ use surrealdb::{Connection, RecordId, Surreal};
 pub async fn init() -> AppResult<Surreal<Client>> {
     use domain::cli::{AppCli, Parser};
 
-    use leptos::logging;
     use surrealdb::engine::remote::ws::Ws;
     use surrealdb::opt::auth::Database as AuthDatabase;
 
@@ -47,15 +46,15 @@ pub async fn init() -> AppResult<Surreal<Client>> {
         password: &password,
     })
     .await?;
-    logging::debug_warn!("DB ROOT LOGIN SUCCESSFUL");
+    logging::debug("DB ROOT LOGIN SUCCESSFUL");
 
-    logging::debug_warn!("DB INITIALIZE SUCCESSFUL");
+    logging::debug("DB INITIALIZE SUCCESSFUL");
     Ok(DB)
 }
 
 // impl
 
-#[axum::async_trait]
+#[async_trait::async_trait]
 impl<C: Connection> Database for Surreal<C> {
     async fn create_song(&self, data: SongBodyCreation) -> AppResult<Song> {
         use surrealdb::sql::statements::{BeginStatement, CommitStatement};
