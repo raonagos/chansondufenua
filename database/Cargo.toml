@@ -7,12 +7,10 @@ authors.workspace = true
 [dependencies]
 domain = { path = "../domain", features = ["ssr"] }
 
-axum.workspace = true
-leptos.workspace = true
-
 serde.workspace = true
 eserde.workspace = true
 ammonia.workspace = true
 surrealdb.workspace = true
 
-passwords = { version = "3.1.16" }
+logging = "0.1.0"
+async-trait = "0.1.88"

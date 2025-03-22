@@ -119,6 +119,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ansi_term"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b3568b48b7cefa6b8ce125f9bb4989e52fbcc29ebea88df04cc7c5f12f70455"
+
+[[package]]
 name = "anstream"
 version = "0.6.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -194,7 +200,7 @@ checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 
 [[package]]
 name = "app"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "axum",
  "chrono",
@@ -1123,7 +1129,7 @@ dependencies = [
 
 [[package]]
 name = "crate_core"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "axum",
  "database",
@@ -1250,14 +1256,13 @@ checksum = "575f75dfd25738df5b91b8e43e14d44bda14637a58fae779fd2b064f8bf3e010"
 
 [[package]]
 name = "database"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "ammonia",
- "axum",
+ "async-trait",
  "domain",
  "eserde",
- "leptos",
- "passwords",
+ "logging",
  "serde",
  "surrealdb",
 ]
@@ -1380,7 +1385,7 @@ checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "domain"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "ammonia",
  "axum",
@@ -2752,6 +2757,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
 
 [[package]]
+name = "logging"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "461a8beca676e8ab1bd468c92e9b4436d6368e11e96ae038209e520cfe665e46"
+dependencies = [
+ "ansi_term",
+]
+
+[[package]]
 name = "mac"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3148,15 +3162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "passwords"
-version = "3.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11407193a7c2bd14ec6b0ec3394da6fdcf7a4d5dcbc8c3cc38dfb17802c8d59c"
-dependencies = [
- "random-pick",
-]
-
-[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3392,12 +3397,6 @@ dependencies = [
  "quote",
  "syn 2.0.100",
 ]
-
-[[package]]
-name = "proc-macro-hack"
-version = "0.5.20+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro-utils"
@@ -3645,37 +3644,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
 dependencies = [
  "getrandom 0.3.2",
-]
-
-[[package]]
-name = "random-number"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fc8cdd49be664772ffc3dbfa743bb8c34b78f9cc6a9f50e56ae878546796067"
-dependencies = [
- "proc-macro-hack",
- "rand 0.8.5",
- "random-number-macro-impl",
-]
-
-[[package]]
-name = "random-number-macro-impl"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5135143cb48d14289139e4615bffec0d59b4cbfd4ea2398a3770bd2abfc4aa2"
-dependencies = [
- "proc-macro-hack",
- "quote",
- "syn 2.0.100",
-]
-
-[[package]]
-name = "random-pick"
-version = "1.2.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c179499072da789afe44127d5f4aa6012de2c2f96ef759990196b37387a2a0f8"
-dependencies = [
- "random-number",
 ]
 
 [[package]]
@@ -4335,7 +4303,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "anyhow",
  "app",
@@ -5670,7 +5638,7 @@ dependencies = [
 
 [[package]]
 name = "web"
-version = "3.1.0"
+version = "3.0.0"
 dependencies = [
  "app",
  "console_error_panic_hook",

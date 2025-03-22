@@ -6,7 +6,7 @@ use domain::forms::SongBodyCreation;
 ///
 /// This trait is used to abstract database interactions related to songs and artists.
 /// It is intended to be implemented by a database access layer.
-#[axum::async_trait]
+#[async_trait::async_trait]
 pub trait Database: std::fmt::Debug + Send + Sync {
     /// Creates a new song in the database.
     ///

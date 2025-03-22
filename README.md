@@ -16,7 +16,7 @@ Chanson du *fenua* is an application that allows you to sing and play songs with
 
 ## Installation
 
-1. Clone this repository: `git clone https://github.com/tetuaoro/chansondufenua.git`
+1. Clone this repository: `git clone https://github.com/raonagos/chansondufenua.git`
 2. Navigate to the project directory: `cd chansondufenua`
 3. Install a chromium engine
 4. Install the dependencies: `cargo-leptos build`
