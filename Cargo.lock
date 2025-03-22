@@ -119,12 +119,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ansi_term"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b3568b48b7cefa6b8ce125f9bb4989e52fbcc29ebea88df04cc7c5f12f70455"
-
-[[package]]
 name = "anstream"
 version = "0.6.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1262,7 +1256,7 @@ dependencies = [
  "async-trait",
  "domain",
  "eserde",
- "logging",
+ "log",
  "serde",
  "surrealdb",
 ]
@@ -2755,15 +2749,6 @@ name = "log"
 version = "0.4.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
-
-[[package]]
-name = "logging"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "461a8beca676e8ab1bd468c92e9b4436d6368e11e96ae038209e520cfe665e46"
-dependencies = [
- "ansi_term",
-]
 
 [[package]]
 name = "mac"
@@ -4317,6 +4302,7 @@ dependencies = [
  "leptos",
  "leptos_axum",
  "leptos_meta",
+ "log",
  "tikv-jemallocator",
  "tokio",
  "tower-http",

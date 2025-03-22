@@ -46,9 +46,9 @@ pub async fn init() -> AppResult<Surreal<Client>> {
         password: &password,
     })
     .await?;
-    logging::debug("DB ROOT LOGIN SUCCESSFUL");
+    log::debug!("DB ROOT LOGIN SUCCESSFUL");
 
-    logging::debug("DB INITIALIZE SUCCESSFUL");
+    log::debug!("DB INITIALIZE SUCCESSFUL");
     Ok(DB)
 }
 
