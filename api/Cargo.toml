@@ -1,38 +1,20 @@
 [package]
-name = "app"
+name = "api"
 edition.workspace = true
 version.workspace = true
 authors.workspace = true
 
 [dependencies]
-api = { path = "../api" }
 domain = { path = "../domain" }
 crate_core = { path = "../core", optional = true }
 
 leptos.workspace = true
-leptos_meta.workspace = true
-leptos_router.workspace = true
 axum = { workspace = true, optional = true }
 leptos_axum = { workspace = true, optional = true }
 
-serde.workspace = true
-chrono.workspace = true
-eserde.workspace = true
-thiserror.workspace = true
-
-web-sys = { version = "0.3.69", features = [
-    "Range",
-    "Selection",
-    "MediaQueryList",
-] }
-
 [features]
-hydrate = ["leptos/hydrate"]
 ssr = [
-    "api/ssr",
     "leptos/ssr",
-    "leptos_meta/ssr",
-    "leptos_router/ssr",
     "dep:axum",
     "dep:crate_core",
     "dep:leptos_axum",

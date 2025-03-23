@@ -193,9 +193,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 
 [[package]]
+name = "api"
+version = "3.0.0"
+dependencies = [
+ "axum",
+ "crate_core",
+ "domain",
+ "leptos",
+ "leptos_axum",
+]
+
+[[package]]
 name = "app"
 version = "3.0.0"
 dependencies = [
+ "api",
  "axum",
  "chrono",
  "crate_core",
@@ -4291,6 +4303,7 @@ name = "server"
 version = "3.0.0"
 dependencies = [
  "anyhow",
+ "api",
  "app",
  "axum",
  "cached",

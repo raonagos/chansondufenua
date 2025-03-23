@@ -20,8 +20,6 @@ use leptos::prelude::*;
 ///     Err(e) => eprintln!("Error retrieving artists: {:?}", e),
 /// }
 /// ```
-///
-/// [`ServerFnError`] : https://docs.rs/leptos/latest/leptos/prelude/enum.ServerFnError.html
 #[server]
 pub async fn get_artists() -> Result<Vec<Artist>> {
     use crate_core::state::AppState;

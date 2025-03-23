@@ -66,7 +66,7 @@ fn Table1() -> impl IntoView {
     let resource = Resource::new(
         || (),
         |_| async move {
-            use crate::api::song::get_songs_fetch_artist;
+            use api::song::get_songs_fetch_artist;
             get_songs_fetch_artist(0, Some(5)).await.unwrap_or_default()
         },
     );
@@ -96,7 +96,7 @@ fn Table2() -> impl IntoView {
     let resource_by_view = Resource::new(
         || (),
         |_| async move {
-            use crate::api::song::get_songs_fetch_artist_by_view;
+            use api::song::get_songs_fetch_artist_by_view;
             get_songs_fetch_artist_by_view(0, Some(5))
                 .await
                 .unwrap_or_default()
@@ -154,11 +154,11 @@ fn SongRow(song: Song, #[prop(optional)] inverse: bool) -> impl IntoView {
 
     view! {
         <tr
-            class="tab-row"
-            role="button"
             tabindex="0"
-            aria-label=format!("Go to the song {}", song.get_title())
+            role="button"
+            class="tab-row"
             onclick=format!("window.location='{}'", href)
+            aria-label=format!("Go to the song {}", song.get_title())
         >
 
             {if inverse { Either::Left(left) } else { Either::Right(right) }}

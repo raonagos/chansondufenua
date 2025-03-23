@@ -23,7 +23,7 @@ pub fn BodyWrapper(children: Children) -> impl IntoView {
 fn Analytics() -> impl IntoView {
     let resource = Resource::new(
         || (),
-        |_| async move { crate::api::core::is_the_project_in_production().await },
+        |_| async move { api::core::is_the_project_in_production().await },
     );
 
     let is_prod = move || {

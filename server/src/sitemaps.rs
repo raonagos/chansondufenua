@@ -4,21 +4,29 @@ use crate_core::state::AppState;
 use axum::http as AxumHttp;
 use axum::response::{IntoResponse, Response};
 
-pub async fn index_sitemap() -> Response {
+/// Generates and returns the index sitemap as an HTTP response.
+///
+/// This function creates an index sitemap, which is a list of URLs for the website.
+/// It is used by search engines to crawl and index the site's content efficiently.
+///
+/// **Note:**
+/// - Ensure that the `generate_index_sitemap` function is implemented to generate the
+///   sitemap content correctly.
+pub async fn generate_index_sitemap() -> Response {
     use AxumHttp::header::CONTENT_TYPE;
-    ([(CONTENT_TYPE, "text/xml")], generate_index_sitemap()).into_response()
+    ([(CONTENT_TYPE, "text/xml")], index_sitemap()).into_response()
 }
 
-pub async fn himene_sitemap(state: State<AppState>) -> Response {
+/// Generates and returns the himene sitemap as an HTTP response.
+///
+/// This function creates a sitemap specific to the "Himene" section of the website.
+/// It is used by search engines to crawl and index the content related to Himene.
+pub async fn generate_himene_sitemap(state: State<AppState>) -> Response {
     use AxumHttp::header::CONTENT_TYPE;
-    (
-        [(CONTENT_TYPE, "text/xml")],
-        generate_himene_sitemap(&state).await,
-    )
-        .into_response()
+    ([(CONTENT_TYPE, "text/xml")], himene_sitemap(&state).await).into_response()
 }
 
-fn generate_index_sitemap() -> String {
+fn index_sitemap() -> String {
     let sitemap = r#"<?xml version="1.0" encoding="UTF-8"?>
         <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
             <url>
@@ -33,7 +41,7 @@ fn generate_index_sitemap() -> String {
     sitemap.into()
 }
 
-async fn generate_himene_sitemap(state: &AppState) -> String {
+async fn himene_sitemap(state: &AppState) -> String {
     let AppState { pool: db, .. } = state;
 
     let songs = db

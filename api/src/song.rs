@@ -25,8 +25,6 @@ use leptos::server_fn::codec::PostUrl;
 ///     Err(e) => eprintln!("Error creating song: {:?}", e),
 /// }
 /// ```
-///
-/// [`ServerFnError`]: https://docs.rs/leptos/latest/leptos/prelude/enum.ServerFnError.html
 #[server(input = PostUrl)]
 pub async fn create_song(data: SongBodyCreation) -> Result<Song> {
     use crate_core::state::AppState;
@@ -64,12 +62,10 @@ pub async fn create_song(data: SongBodyCreation) -> Result<Song> {
 ///     Err(e) => eprintln!("Error retrieving song: {:?}", e),
 /// }
 /// ```
-///
-/// [`ServerFnError`] : https://docs.rs/leptos/latest/leptos/prelude/enum.ServerFnError.html
 #[server]
 pub async fn get_song_fetch_artist(id: String) -> Result<Song> {
     use crate_core::state::AppState;
-    use domain::errors::AppError;
+    use domain::error::AppError;
 
     let AppState { pool: db, .. } = expect_context::<AppState>();
 
@@ -100,8 +96,6 @@ pub async fn get_song_fetch_artist(id: String) -> Result<Song> {
 ///     Err(e) => eprintln!("Error retrieving songs: {:?}", e),
 /// }
 /// ```
-///
-/// [`ServerFnError`] : https://docs.rs/leptos/latest/leptos/prelude/enum.ServerFnError.html
 #[server]
 pub async fn get_songs(page: u8, limit: Option<u8>) -> Result<Vec<Song>> {
     use crate_core::state::AppState;
@@ -131,8 +125,6 @@ pub async fn get_songs(page: u8, limit: Option<u8>) -> Result<Vec<Song>> {
 ///     Err(e) => eprintln!("Error retrieving songs with artists: {:?}", e),
 /// }
 /// ```
-///
-/// [`ServerFnError`] : https://docs.rs/leptos/latest/leptos/prelude/enum.ServerFnError.html
 #[server]
 pub async fn get_songs_fetch_artist(page: u8, limit: Option<u8>) -> Result<Vec<Song>> {
     use crate_core::state::AppState;
@@ -162,8 +154,6 @@ pub async fn get_songs_fetch_artist(page: u8, limit: Option<u8>) -> Result<Vec<S
 ///     Err(e) => eprintln!("Error retrieving songs with artists by view: {:?}", e),
 /// }
 /// ```
-///
-/// [`ServerFnError`] : https://docs.rs/leptos/latest/leptos/prelude/enum.ServerFnError.html
 #[server]
 pub async fn get_songs_fetch_artist_by_view(page: u8, limit: Option<u8>) -> Result<Vec<Song>> {
     use crate_core::state::AppState;
