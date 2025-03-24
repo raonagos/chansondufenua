@@ -14,7 +14,7 @@ use std::sync::LazyLock as Lazy;
 ///
 /// This constant defines the types of assets that are eligible for caching.
 const ASSETS_TYPE: Lazy<Vec<&str>> =
-    Lazy::new(|| vec!["css", "javascript", "wasm", "webp", "ttf", "x-icon", "png"]);
+    Lazy::new(|| vec!["css", "javascript", "wasm", "webp", "ttf", "x-icon"]);
 
 /// Asynchronous function to handle cached responses.
 ///

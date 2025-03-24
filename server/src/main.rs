@@ -30,17 +30,13 @@ async fn main() {
     _ = AppCli::parse();
 
     // init logger
-    simple_logger::SimpleLogger::new()
-        .with_module_level("html5ever", log::LevelFilter::Off)
-        .env()
-        .init()
-        .expect("couldn't initialize the logger");
+    simple_logger::init_with_env().expect("couldn't initialize logging");
 
-    let conf = get_configuration(None).expect("couldn't initialize the leptos configuration");
+    let conf = get_configuration(None).expect("couldn't retrieve leptos configuration");
     let leptos_options = conf.leptos_options;
 
     // create db client & a shared state
-    let pool = init_database().await.expect("couldn't initialize the database");
+    let pool = init_database().await.expect("couldn't init database");
     let state = AppState {
         pool: Arc::new(pool),
         leptos_options: leptos_options.clone(),
