@@ -53,26 +53,11 @@ const CACHE_C_V: &str = "public, max-age=31536000";
 /// - **Cache Hit :** If the requested file is already cached, the function returns the cached response with a [*206 Partial Content* status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/206)).
 /// - **Cache Miss :** If the file is not cached but meets the caching criteria, it caches the response. This cached response will be returned on subsequent requests.
 pub async fn handle(req: Request, next: Next) -> Response {
-    // if not match, returns next
-    // else continue
-
-    if !req
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| {
-            value
-                .to_str()
-                .map(|type_| ASSETS_TYPE.iter().any(|t| type_.contains(t)))
-                .ok()
-        })
-        .unwrap_or_default()
     {
-        return next.run(req).await;
-    }
-
-    {
-        let cache_size = CACHED_RESPONSE.lock().await.cache_size();
-        log::debug!("the cache size is {cache_size} / 200");
+        let mt = CACHED_RESPONSE.lock().await;
+        let cache_size = mt.cache_size();
+        let cache_capacity = mt.cache_capacity();
+        log::debug!("the cache size is {cache_size} / {cache_capacity:?}");
     }
 
     let uri = req.uri();
@@ -87,9 +72,25 @@ pub async fn handle(req: Request, next: Next) -> Response {
         return response;
     }
 
-    // else `cached`
-
     let mut response = next.run(req).await;
+
+    // if matches the condition, continue
+    // else returns response
+    if !response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|header_value| {
+            header_value
+                .to_str()
+                .map(|value| ASSETS_TYPE.iter().any(|type_| value.contains(type_)))
+                .ok()
+        })
+        .unwrap_or_default()
+    {
+        return response;
+    }
+
+    // `cached`
 
     let c_x_v = HeaderValue::from_static(CACHE_X_V);
     let c_c_v = HeaderValue::from_static(CACHE_C_V);

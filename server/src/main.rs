@@ -26,9 +26,12 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 #[tokio::main]
 async fn main() {
-    // Load environment variables from .env file & check configuration environment
+    // load environment variables from .env file & check configuration environment
     _ = dotenvy::dotenv();
     _ = AppCli::parse();
+
+    // init logger
+    simple_logger::init_with_env().expect("couldn't initialize logging");
 
     let conf = get_configuration(None).expect("couldn't retrieve leptos configuration");
     let leptos_options = conf.leptos_options;

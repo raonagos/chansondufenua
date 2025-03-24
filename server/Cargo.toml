@@ -21,11 +21,14 @@ log.workspace = true
 tokio = { version = "1.33.0", features = ["full"] }
 tower-http = { version = "0.6", features = ["full"] }
 
-anyhow = { version = "1.0.88" }
-dotenvy = { version = "0.15.7" }
-headless_chrome = { version = "=1.0.16" }
-tikv-jemallocator = { version = "0.6.0" }
+anyhow = "1.0.88"
+dotenvy = "0.15.7"
+headless_chrome = "=1.0.16"
+tikv-jemallocator = "0.6.0"
 cached = { version = "0.55", features = ["async"] }
+simple_logger = { version = "5.0.0", default-features = false, features = [
+    "colors",
+] }
 
 [features]
 ssr = ["app/ssr", "leptos/ssr", "leptos_meta/ssr"]
