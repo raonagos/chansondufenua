@@ -5,7 +5,7 @@ members = ["api", "app", "core", "database", "domain", "server", "web"]
 
 [workspace.package]
 edition = "2021"
-version = "3.1.0"
+version = "3.1.1"
 authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
 
 [workspace.dependencies]
