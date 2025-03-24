@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+# also know as layers
 members = ["api", "app", "core", "database", "domain", "server", "web"]
 
 [workspace.package]

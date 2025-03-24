@@ -58,3 +58,14 @@ gh pr create
 - Describe the expected behavior and the actual behavior.
 - Include steps to reproduce the issue.
 - Mention your operating system and any other relevant details.
+
+## Notes
+
+The project aims to adopt a hexagonal architecture by separating interchangeable parts into distinct layers. Using Cargo's workspace feature, we define these layers within the workspace and strive to minimize interdependencies among them. The primary layers are :
+
+- api : manages the API endpoints and communication
+- core : provides essential utilities and services used across the application
+- domain : contains the core business logic and rules
+- database : handles database interactions and data persistence.
+
+Additionally, there are sub-layers like `server`, `web`, and `app`, which are more tightly integrated with the `core` layer. These components work together to deliver the application's functionality, while the other layers can evolve more independently due to their reduced dependency on the core.
