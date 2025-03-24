@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["app", "core", "database", "domain", "server", "web"]
+members = ["api", "app", "core", "database", "domain", "server", "web"]
 
 [workspace.package]
 edition = "2021"
-version = "3.0.0"
+version = "3.1.0"
 authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
 
 [workspace.dependencies]
@@ -14,6 +14,7 @@ leptos_meta = "0.7.7"
 leptos_router = "0.7.7"
 axum = { version = "0.7", features = ["macros"] }
 
+log = "0.4.26"
 thiserror = "2"
 ammonia = "4.0.0"
 surrealdb = "2.1.4"
@@ -42,7 +43,7 @@ lib-package = "web"
 lib-features = ["hydrate"]
 lib-profile-release = "wasm-release"
 
-# need to be applied only to wasm build
+# need to be applied only to binary build
 [profile.release]
 lto = true
 opt-level = 3

@@ -17,7 +17,7 @@ pub fn AllSongPage() -> impl IntoView {
             page.parse::<u8>().unwrap_or_default()
         },
         |page| async move {
-            use crate::api::song::get_songs;
+            use api::song::get_songs;
             get_songs(page, Some(255)).await.unwrap_or_default()
         },
     );

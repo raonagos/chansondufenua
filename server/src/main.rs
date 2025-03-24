@@ -5,10 +5,12 @@ mod sitemaps;
 use crate::image::*;
 use crate::sitemaps::*;
 
+#[allow(unused_imports)]
+use api::shared::*;
+use app::App;
 use crate_core::state::AppState;
 use database::init_database;
 use domain::cli::{AppCli, Parser};
-use app::App;
 
 use axum::{middleware, routing::get, Router};
 use leptos::logging;
@@ -24,9 +26,12 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 #[tokio::main]
 async fn main() {
-    // Load environment variables from .env file & check configuration environment
+    // load environment variables from .env file & check configuration environment
     _ = dotenvy::dotenv();
     _ = AppCli::parse();
+
+    // init logger
+    simple_logger::init_with_env().expect("couldn't initialize logging");
 
     let conf = get_configuration(None).expect("couldn't retrieve leptos configuration");
     let leptos_options = conf.leptos_options;
@@ -57,10 +62,10 @@ async fn main() {
             },
         )
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
-        .route("/sitemap.xml", get(index_sitemap))
-        .route("/himene/sitemap.xml", get(himene_sitemap))
-        .route("/drive/genog/:timestamp/himene/:id", get(generate_image_og))
-        .route("/drive/gentw/:timestamp/himene/:id", get(generate_image_tw))
+        .route("/sitemap.xml", get(generate_index_sitemap))
+        .route("/himene/sitemap.xml", get(generate_himene_sitemap))
+        .route("/drive/genog/:timestamp/himene/:id", get(generate_og_img))
+        .route("/drive/gentw/:timestamp/himene/:id", get(generate_tw_img))
         .layer(compression)
         .layer(middleware::from_fn(cache::handle))
         .with_state(state);

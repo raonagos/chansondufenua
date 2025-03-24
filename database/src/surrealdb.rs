@@ -1,8 +1,9 @@
 use crate::database::Database;
 
 use domain::entities::{Artist, Song};
-use domain::errors::{AppError, AppResult};
+use domain::error::AppError;
 use domain::forms::SongBodyCreation;
+use domain::result::AppResult;
 
 use eserde::Deserialize;
 use serde::Serialize;
@@ -46,9 +47,9 @@ pub async fn init() -> AppResult<Surreal<Client>> {
         password: &password,
     })
     .await?;
-    logging::debug("DB ROOT LOGIN SUCCESSFUL");
 
-    logging::debug("DB INITIALIZE SUCCESSFUL");
+    log::debug!("DB INITIALIZE SUCCESSFUL");
+
     Ok(DB)
 }
 

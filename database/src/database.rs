@@ -1,5 +1,5 @@
 use domain::entities::{Artist, Song};
-use domain::errors::AppResult;
+use domain::result::AppResult;
 use domain::forms::SongBodyCreation;
 
 /// Trait defining the database operations for managing songs and artists.

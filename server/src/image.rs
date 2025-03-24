@@ -19,7 +19,16 @@ enum Platform {
     TW,
 }
 
-pub async fn generate_image_og(
+/// Generates an Open Graph, [`Platform::OG`], image in PNG format using the `headless_chrome` crate.
+///
+/// This function creates an image that can be used as an Open Graph image for social media sharing.
+/// It utilizes a headless Chrome browser to render the image, so a compatible Chromium-based browser
+/// must be installed on the server.
+///
+/// **Note :**
+/// - Proper error handling should be implemented to manage scenarios where image generation fails.
+/// - Consider the performance implications of running a headless browser on the server, especially under high load.
+pub async fn generate_og_img(
     State(state): State<AppState>,
     Path((timestamp, id)): Path<(i64, String)>,
 ) -> Result<Response, AxumHttp::StatusCode> {
@@ -33,7 +42,8 @@ pub async fn generate_image_og(
     Ok(([(AxumHttp::header::CONTENT_TYPE, "image/png")], image_data).into_response())
 }
 
-pub async fn generate_image_tw(
+/// Generates a X.com (twitter), [`Platform::TW`], image in PNG format using the `headless_chrome` crate.
+pub async fn generate_tw_img(
     State(state): State<AppState>,
     Path((timestamp, id)): Path<(i64, String)>,
 ) -> Result<Response, AxumHttp::StatusCode> {

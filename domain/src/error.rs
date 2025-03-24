@@ -2,8 +2,6 @@
 use surrealdb::Error as SurrealError;
 use thiserror::Error;
 
-pub type AppResult<T> = std::result::Result<T, AppError>;
-
 #[derive(Debug, Error)]
 pub enum AppError {
     #[cfg(feature = "ssr")]

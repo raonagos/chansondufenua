@@ -11,7 +11,7 @@ pub fn SongPage() -> impl IntoView {
 
     let resource_song = Resource::new(
         move || read_id_from_params(),
-        |id| async move { crate::api::song::get_song_fetch_artist(id.unwrap_or_default()).await },
+        |id| async move { api::song::get_song_fetch_artist(id.unwrap_or_default()).await },
     );
 
     view! {

@@ -1,5 +1,5 @@
-use crate::api::artist::get_artists;
-use crate::api::song::CreateSong;
+use api::artist::get_artists;
+use api::song::CreateSong;
 
 use crate::components::{
     Area, BtnAnchorChord, BtnCustomChord, CheckboxBemol, CheckboxDiez, CheckboxMinor, ID_EDITABLE,
