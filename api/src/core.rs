@@ -9,6 +9,8 @@ pub async fn is_the_project_in_production() -> Result<bool> {
 
     let AppState { leptos_options, .. } = expect_context::<AppState>();
 
+    // ! need to set LEPTOS_ENV env variable
+    // default to DEV
     match leptos_options.env {
         Env::PROD => Ok(true),
         _ => Ok(false),
