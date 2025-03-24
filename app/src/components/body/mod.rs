@@ -10,8 +10,12 @@ pub fn BodyWrapper(children: Children) -> impl IntoView {
         <main>{children()}</main>
         <footer>
             <p>
-                "2024 Chanson du fenua. Tous droits réservés " <a href="https://www.rao-nagos.pf" target="_blank" rel="noopener noreferrer">
+                "2024 Chanson du fenua. Tous droits réservés "
+                <a class="hover:underline" href="https://www.rao-nagos.pf" target="_blank" rel="noopener noreferrer">
                     "❤️"
+                </a> ". Contributing to this "
+                <a class="hover:underline" href="https://github.com/raonagos/chansondufenua" target="_blank" rel="noopener noreferrer">
+                    "project"
                 </a> "."
             </p>
         </footer>

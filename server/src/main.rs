@@ -13,7 +13,6 @@ use database::init_database;
 use domain::cli::{AppCli, Parser};
 
 use axum::{middleware, routing::get, Router};
-use leptos::logging;
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use leptos_meta::*;
@@ -71,7 +70,7 @@ async fn main() {
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    logging::log!("listening on http://{}", &addr);
+    log::info!("listening on http://{}", &addr);
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
@@ -88,9 +87,9 @@ fn shell(options: LeptosOptions) -> impl IntoView {
                 <meta name="theme-color" content="#155e75" media="(prefers-color-scheme: dark)"/>
                 <link
                     rel="preload stylesheet"
-                    href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;700&display=swap"
-                    r#as="style"
                     r#type="text/css"
+                    r#as="style"
+                    href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;700&display=swap"
                 />
                 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;700&display=swap"/>
                 <link rel="shortcut icon" href="/logos/logo_b32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: light)"/>
