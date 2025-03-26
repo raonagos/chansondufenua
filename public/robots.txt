@@ -1,7 +1,13 @@
 User-agent: *
-Disallow: /pkg/
-Allow: /himene/
-Allow: /sitemap.xml
+
+Disallow: /pkg
+Disallow: /himene/api
+
+Allow: /
+Allow: /himene
 
 Sitemap: https://www.chansondufenua.pf/sitemap.xml
+Sitemap: https://www.chansondufenua.pf/sitemap.xml.br
+Sitemap: https://www.chansondufenua.pf/sitemap.xml.gz
+
 Sitemap: https://www.chansondufenua.pf/himene/sitemap.xml

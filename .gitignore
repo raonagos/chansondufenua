@@ -10,3 +10,4 @@ pkg
 .env*
 .vscode
 .cargo
+*.bkp

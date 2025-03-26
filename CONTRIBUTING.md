@@ -68,4 +68,6 @@ The project aims to adopt a hexagonal architecture by separating interchangeable
 - domain : contains the core business logic and rules
 - database : handles database interactions and data persistence.
 
-Additionally, there are sub-layers like `server`, `web`, and `app`, which are more tightly integrated with the `core` layer. These components work together to deliver the application's functionality, while the other layers can evolve more independently due to their reduced dependency on the core.
+Additionally, there are sub-layers like `server`, `web`, and `app`, which are more tightly integrated with the `core` layer. These components work together to deliver the application's functionality, while the other layers can evolve more independently due to their reduced dependency on the core. To illustrate how the project architecture is made, there is the [ARCHITECTURE](./ARCHITECTURE.xml) file, which provides a visual representation of these layers and their interactions.
+
+We follow specific design patterns and practices to minimize interdependencies, ensuring that each layer remains focused on its responsibilities. This approach allows for greater flexibility and maintainability as the project evolves.

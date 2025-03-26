@@ -6,6 +6,8 @@ use leptos_meta::*;
 use leptos_router::components::*;
 use leptos_router::*;
 
+//todo: add an error page handler to the routes
+
 /// Entrypoint component for web app.
 ///
 /// Provides the routes and the error pages.
@@ -22,8 +24,8 @@ pub fn App() -> impl IntoView {
         <Router>
             <BodyWrapper>
                 <Routes fallback=|| "La page n'existe pas.".into_view()>
-                    <Route path=StaticSegment("") view=|| HomePage(HomePageProps { canonical: false })/>
-                    <Route path=StaticSegment("aepa") view=|| HomePage(HomePageProps { canonical: true })/>
+                    <Route path=StaticSegment("") view=|| view! { <HomePage/> }/>
+                    <Route path=StaticSegment("aepa") view=|| view! { <HomePage canonical=true/> }/>
                     <ParentRoute path=StaticSegment("himene") view=Outlet>
                         <Route path=StaticSegment("") view=AllSongPage/>
                         <Route path=StaticSegment("api") view=CreateSongPage/>
