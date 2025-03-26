@@ -1,9 +1,9 @@
 mod cache;
 mod image;
-mod sitemaps;
+mod sitemap;
 
 use crate::image::*;
-use crate::sitemaps::*;
+use crate::sitemap::*;
 
 #[allow(unused_imports)]
 use api::shared::*;
@@ -65,7 +65,6 @@ async fn main() {
             },
         )
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
-        .route("/sitemap.xml", get(generate_index_sitemap))
         .route("/himene/sitemap.xml", get(generate_himene_sitemap))
         .route("/drive/genog/:timestamp/himene/:id", get(generate_og_img))
         .route("/drive/gentw/:timestamp/himene/:id", get(generate_tw_img))
