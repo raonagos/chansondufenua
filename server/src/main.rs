@@ -7,7 +7,7 @@ use crate::sitemap::*;
 
 #[allow(unused_imports)]
 use api::shared::*;
-use app::App;
+use app::{shell, App};
 use crate_core::state::AppState;
 use database::init_database;
 use domain::cli::{AppCli, Parser};
@@ -15,7 +15,6 @@ use domain::cli::{AppCli, Parser};
 use axum::{middleware, routing::get, Router};
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
-use leptos_meta::*;
 use std::sync::Arc;
 use tower_http::compression::{CompressionLayer, CompressionLevel};
 
@@ -40,7 +39,9 @@ async fn main() {
     let leptos_options = conf.leptos_options;
 
     // create db client & a shared state
-    let pool = init_database().await.expect("couldn't initialize the database");
+    let pool = init_database()
+        .await
+        .expect("couldn't initialize the database");
     let state = AppState {
         pool: Arc::new(pool),
         leptos_options: leptos_options.clone(),
@@ -77,35 +78,4 @@ async fn main() {
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
-}
-
-fn shell(options: LeptosOptions) -> impl IntoView {
-    view! {
-        <!DOCTYPE html> 
-        <html lang="fr" class="dark">
-            <head>
-                <meta charset="utf-8"/>
-                <meta name="viewport" content="width=device-width, initial-scale=1"/>
-                <meta name="theme-color" content="#0891b2" media="(prefers-color-scheme: light)"/>
-                <meta name="theme-color" content="#155e75" media="(prefers-color-scheme: dark)"/>
-                <link
-                    rel="preload stylesheet"
-                    r#type="text/css"
-                    r#as="style"
-                    href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;700&display=swap"
-                />
-                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;700&display=swap"/>
-                <link rel="shortcut icon" href="/logos/logo_b32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: light)"/>
-                <link rel="shortcut icon" href="/logos/logo_w32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: dark)"/>
-
-                <AutoReload options=options.clone()/>
-                <HydrationScripts options=options.clone()/>
-                <HashedStylesheet id="leptos" options/>
-                <MetaTags/>
-            </head>
-            <body>
-                <App/>
-            </body>
-        </html>
-    }
 }
