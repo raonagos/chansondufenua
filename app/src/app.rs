@@ -8,6 +8,40 @@ use leptos_router::*;
 
 //todo: add an error page handler to the routes
 
+pub fn shell(options: LeptosOptions) -> impl IntoView {
+    view! {
+        <!DOCTYPE html> 
+        <html lang="fr" class="dark">
+            <head>
+                <meta charset="utf-8"/>
+                <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                <meta name="theme-color" content="#0891b2" media="(prefers-color-scheme: light)"/>
+                <meta name="theme-color" content="#155e75" media="(prefers-color-scheme: dark)"/>
+                <link
+                    rel="preload stylesheet"
+                    r#type="text/css"
+                    r#as="style"
+                    href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;700&display=swap"
+                />
+                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Serif:wght@400;700&display=swap"/>
+                <link rel="shortcut icon" href="/logos/logo_b32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: light)"/>
+                <link rel="shortcut icon" href="/logos/logo_w32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: dark)"/>
+
+                // todo: move css style files here
+                // <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+                <AutoReload options=options.clone()/>
+                <HydrationScripts options=options.clone()/>
+                <HashedStylesheet id="leptos" options/>
+                <MetaTags/>
+            </head>
+            <body>
+                <App/>
+            </body>
+        </html>
+    }
+}
+
 /// Entrypoint component for web app.
 ///
 /// Provides the routes and the error pages.

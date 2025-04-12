@@ -14,7 +14,6 @@ database = { path = "../database" }
 axum.workspace = true
 leptos.workspace = true
 leptos_axum.workspace = true
-leptos_meta.workspace = true
 
 log.workspace = true
 
@@ -31,4 +30,4 @@ simple_logger = { version = "5.0.0", default-features = false, features = [
 ] }
 
 [features]
-ssr = ["app/ssr", "leptos/ssr", "leptos_meta/ssr"]
+ssr = ["app/ssr", "leptos/ssr"]
