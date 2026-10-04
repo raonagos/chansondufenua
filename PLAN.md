@@ -75,8 +75,9 @@ want integration tests against the lib. Default: **single crate**.
 > Alternative if we want the absolute minimum: `rusqlite` + `bundled` behind a
 > tiny pool. Slightly less code, but sync. **Recommendation stands: `sqlx`.**
 
-The one-off conversion of the existing SurrealDB data into SQLite is **step 3**
-(below) and needs a `surreal export` dump from the live instance.
+The one-off conversion of the existing SurrealDB data into SQLite is **step 3b**
+(below). The schema itself does *not* need the dump — it is transcribed from
+`database/migrations/surrealdb` in step 3a.
 
 ### 2.3 Styling — `class!` composition, zero hand-written CSS
 
@@ -179,7 +180,8 @@ Every step must build and (where applicable) pass tests **before** its commit.
 | 0 | `add: rewrite plan (topcoat + sqlite)` | this file, on `rewrite/topcoat` | committed |
 | 1 | `add: bootstrap topcoat single-crate app` | new `Cargo.toml` + `src/main.rs`; leptos crates removed from the branch | `cargo run` serves a plain "hello" page; **tailwind feature proven or fallback chosen** |
 | 2 | `add: domain entities and rules` | `src/domain/{song,artist}.rs` ported (`clean_lyrics`, `to_jsonld`, `get_meta_data`, + markdown render) with unit tests | `cargo test` green |
-| 3 | `add: sqlite layer + schema + data import` | `migrations/0001_init.sql`, `src/db/*`, `seed` from SurrealDB dump | songs/artists round-trip; import verified on real dump |
+| 3a | `add: sqlite layer + schema` | `migrations/0001_init.sql`, `src/db/*` (pool, WAL, queries, create_song ported), `src/db/fixtures.rs` with a few representative songs | songs/artists round-trip in tests; **no dump required** |
+| 3b | `add: importer for surreal dump` → then run it | `src/db/import.rs` reading the `surreal export` output | deferred until the dump arrives; **not on the critical path** (§5) |
 | 4 | `add: app shell, layout and design tokens` | `src/ui/*` (layout, header/nav, footer, `class!` tokens) | pages render inside the shell; print variants present |
 | 5 | `add: home page` | `/` and `/aepa` (hero, cards, latest + most-viewed tables) | parity with `HomePage` |
 | 6 | `add: songs index page` | `/himene` table | parity with `AllSongPage` |
@@ -195,7 +197,13 @@ Every step must build and (where applicable) pass tests **before** its commit.
 
 ---
 
-## 5. Data migration (step 3)
+## 5. Data migration (step 3b — deferred, not blocking)
+
+> **The dump is not on the critical path.** The schema is fully recoverable from
+> `database/migrations/surrealdb` (the `DEFINE TABLE`/`DEFINE FIELD` statements
+> and the seven `fn::` functions), so step 3a builds the SQLite layer *and its
+> tests* against hand-written fixtures. Only the real 46 rows need the export.
+> Steps 1–12 all proceed without it.
 
 1. `surreal export --ns <ns> --db <db> --user ... --pass ... > dump.surrealql`
    (maintainer runs this on the live host — I have no credentials/access).
@@ -277,8 +285,10 @@ Mapped to the isitagentready.com categories:
    PAT, a repo **deploy key** (preferred — no long-lived token in my
    environment), or a maintainer-created **machine account** added as a
    collaborator. I cannot create a GitHub account myself (§9).
-2. **SurrealDB dump** for step 3 — the maintainer will run `surreal export` and
-   drop the file in. I have no access to the live database.
+2. **SurrealDB dump** — needed for **step 3b only** (loading the real 46 rows).
+   I have no access to the live database, so the maintainer runs
+   `surreal export` when convenient. Steps 1–12 use committed fixtures instead
+   and are **not blocked** by this.
 3. **"Roadmap that are checked"** — I found no checkbox roadmap in the repo, so
    I've assumed it means *do not add previously-planned features; rebuild the
    current app only*. Correct me if you meant a specific list.
