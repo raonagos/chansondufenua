@@ -780,7 +780,10 @@ mod tests {
     #[tokio::test]
     async fn an_invalid_artist_name_is_a_domain_error() {
         let db = seeded().await;
-        let error = create_song(db.pool(), "Titre valide", &lyrics_of(120), "abc")
+        // Nothing short is invalid any more (the floor is 1), so the only way
+        // to reach the rule from the form is past the ceiling.
+        let too_long = "a".repeat(crate::domain::artist::FULLNAME_MAX + 1);
+        let error = create_song(db.pool(), "Titre valide", &lyrics_of(120), &too_long)
             .await
             .unwrap_err();
         assert!(matches!(error, DbError::Domain(_)), "got {error:?}");
@@ -790,17 +793,18 @@ mod tests {
     async fn title_length_is_counted_in_characters_not_bytes() {
         let db = fresh().await;
 
-        // 100 characters, 200 bytes. v3's ASSERT used `string::len`, which
-        // counts characters; a byte-based CHECK would reject this and quietly
-        // make long Tahitian titles unwritable.
-        let title = "Ā".repeat(100);
+        // A title at the ceiling, in twice as many bytes. v3's ASSERT used
+        // `string::len`, which counts characters; a byte-based CHECK would
+        // reject this and quietly make long Tahitian titles unwritable.
+        let max = crate::domain::song::TITLE_MAX;
+        let title = "Ā".repeat(max);
         let created = create_song(db.pool(), &title, &lyrics_of(120), "")
             .await
             .unwrap();
-        assert_eq!(created.get_title().chars().count(), 100);
-        assert_eq!(created.get_title().len(), 200);
+        assert_eq!(created.get_title().chars().count(), max);
+        assert_eq!(created.get_title().len(), max * 2);
 
-        let too_long = "Ā".repeat(101);
+        let too_long = "Ā".repeat(max + 1);
         assert!(matches!(
             create_song(db.pool(), &too_long, &lyrics_of(120), "")
                 .await

@@ -7,10 +7,14 @@ use super::error::{AppError, AppResult};
 
 type Datetime = DateTime<Utc>;
 
-/// Schema bounds, transcribed verbatim from v3 (`legacy/surrealdb.surql`) and
-/// mirrored by the `CHECK` constraints in `migrations/0001_init.sql`.
-pub const FULLNAME_MIN: usize = 4;
-pub const FULLNAME_MAX: usize = 50;
+/// Schema bounds, mirrored by the `CHECK` constraint in
+/// `migrations/0001_init.sql`.
+///
+/// v3's `ASSERT` clause was 4..=50; both ends were loosened on review
+/// (2026-10-04). The real names in the 2025-03-22 export run 5..=18 characters,
+/// so neither the old bound nor the new one has ever rejected one.
+pub const FULLNAME_MIN: usize = 1;
+pub const FULLNAME_MAX: usize = 255;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 /// Structure representing an artist.
@@ -120,8 +124,10 @@ mod tests {
 
     #[test]
     fn validate_fullname_bounds() {
-        assert!(Artist::validate_fullname("Joe").is_err());
-        assert!(Artist::validate_fullname("Jose").is_ok());
+        // The floor is 1 now, so the only rejected inputs are blank ones.
+        assert!(Artist::validate_fullname("").is_err());
+        assert!(Artist::validate_fullname("   ").is_err());
+        assert!(Artist::validate_fullname("a").is_ok());
         assert!(Artist::validate_fullname(&"a".repeat(FULLNAME_MAX)).is_ok());
         assert!(Artist::validate_fullname(&"a".repeat(FULLNAME_MAX + 1)).is_err());
         // Counts characters, not bytes: real names here include ā, ', ē.

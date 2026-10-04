@@ -10,9 +10,16 @@
 --   * Timestamps are RFC 3339 UTC, stored as TEXT. That is exactly what the v3
 --     dump contained, it round-trips through `chrono` without loss, and it sorts
 --     lexicographically in the same order it sorts chronologically.
---   * `CHECK` constraints mirror v3's `ASSERT` clauses. `src/domain` enforces the
---     same bounds *before* SQL is reached, so a CHECK failure means a bug in the
+--   * `CHECK` constraints mirror v3's `ASSERT` clauses, except where review
+--     deliberately moved a bound on 2026-10-04 (`artist.fullname` 4..=50 ->
+--     1..=255, `song.title` 4..=100 -> 4..=255). `src/domain` enforces the same
+--     bounds *before* SQL is reached, so a CHECK failure means a bug in the
 --     layer above — not bad user input.
+--
+--     This file is frozen once v4 is deployed. Until then it is edited in place,
+--     which invalidates the checksum sqlx records in `_sqlx_migrations` for any
+--     database already created — delete and recreate the local file when that
+--     happens.
 --   * `length()` counts characters (not bytes) for TEXT in SQLite, which matches
 --     SurrealDB's `string::len()` and Rust's `chars().count()`. Bytes would break
 --     every Tahitian title containing ā, ', ē or ō.
@@ -23,7 +30,7 @@
 
 CREATE TABLE artist (
     id         TEXT PRIMARY KEY NOT NULL,
-    fullname   TEXT NOT NULL CHECK (length(fullname) BETWEEN 4 AND 50),
+    fullname   TEXT NOT NULL CHECK (length(fullname) BETWEEN 1 AND 255),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -64,7 +71,7 @@ END;
 
 CREATE TABLE song (
     id         TEXT PRIMARY KEY NOT NULL,
-    title      TEXT NOT NULL CHECK (length(title) BETWEEN 4 AND 100),
+    title      TEXT NOT NULL CHECK (length(title) BETWEEN 4 AND 255),
     -- Stored raw: this column holds the chord markup (`<sup data-nosnippet>`)
     -- exactly as the author typed it. Never normalise it on the way in, or the
     -- rendered song stops matching what the author wrote.

@@ -160,14 +160,42 @@ async fn the_schema_rejects_what_the_domain_rejects() {
     .unwrap_err();
     assert!(mentions_check(&zero_views), "view_count: {zero_views}");
 
-    let short_artist = sqlx::query(
-        "INSERT INTO artist (id, fullname, created_at, updated_at) VALUES ('cccc00000000000000c', 'abc', ?1, ?1)",
+    let blank_artist = sqlx::query(
+        "INSERT INTO artist (id, fullname, created_at, updated_at) VALUES ('cccc00000000000000c', '', ?1, ?1)",
     )
     .bind("2026-01-01T00:00:00.000000000Z")
     .execute(db.pool())
     .await
     .unwrap_err();
-    assert!(mentions_check(&short_artist), "artist: {short_artist}");
+    assert!(mentions_check(&blank_artist), "artist: {blank_artist}");
+
+    // The ceilings are backstops too. `title` and `fullname` are 255 characters
+    // now, so an over-long value must be refused here even though the domain
+    // gets to it first.
+    let long_title = sqlx::query(
+        "INSERT INTO song (id, title, lyrics, view_count, published, created_at, updated_at) \
+VALUES ('dddd00000000000000d', ?1, ?2, 1, 1, ?3, ?3)",
+    )
+    .bind("T".repeat(256))
+    .bind(&valid_lyrics)
+    .bind("2026-01-01T00:00:00.000000000Z")
+    .execute(db.pool())
+    .await
+    .unwrap_err();
+    assert!(mentions_check(&long_title), "title ceiling: {long_title}");
+
+    let long_artist = sqlx::query(
+        "INSERT INTO artist (id, fullname, created_at, updated_at) VALUES ('eeee00000000000000e', ?1, ?2, ?2)",
+    )
+    .bind("A".repeat(256))
+    .bind("2026-01-01T00:00:00.000000000Z")
+    .execute(db.pool())
+    .await
+    .unwrap_err();
+    assert!(
+        mentions_check(&long_artist),
+        "artist ceiling: {long_artist}"
+    );
 
     let _ = std::fs::remove_file(&path);
 }

@@ -667,3 +667,76 @@ The SQLite layer, built against the real dump rather than guesses.
    boots and serves `GET /` → 200 with the Tailwind asset, schema created with
    exactly `artist`, `artist_fts`, `song`, `song_artist` (+ FTS shadow tables) —
    **no `user`, `session`, `access` or `token` table anywhere**.
+
+## 14. Appendix — review round 1 (2026-10-04)
+
+Seven inline comments on draft PR #11 (`tetuaoro`), all addressed.
+
+### Bounds moved
+
+Four constants. Each was checked against the 2025-03-22 export *before* being
+changed — the real data sits well inside every new range:
+
+| bound | before | after | real range in the export | source |
+|---|---|---|---|---|
+| `artist.fullname` min | 4 | **1** | shortest 5 ("Jonas") | review |
+| `artist.fullname` max | 50 | **255** | longest 18 ("2B Brothers Tahiti") | review |
+| `song.title` max | 100 | **255** | longest 28 | review |
+| `song.artists` max | 75 | **10** | busiest song has 2 | review |
+
+`TITLE_MIN` (4), `LYRICS_MIN` (100) and `LYRICS_MAX` (6000) are unchanged and
+still v3's. The "transcribed verbatim from v3" comments on the constants and in
+`migrations/0001_init.sql` were rewritten: after this, two of the bounds are
+ours and the comments had to stop claiming otherwise.
+
+**Consequence worth naming:** with `FULLNAME_MIN = 1` *and*
+`Artist::split_fullnames` dropping blanks, no short name can be invalid any
+more. The only reachable way for the create-song form to breach the artist rule
+is to exceed the ceiling. A small review note moved the sole failure mode from
+"too short" to "too long", and the tests were rewritten to say so.
+
+### Tests that had to move with them
+
+Five assertions broke — and **four had been passing for the wrong reason**,
+each hardcoding a literal that merely happened to sit outside the old bound:
+
+| test | literal | now |
+|---|---|---|
+| `domain::artist::validate_fullname_bounds` | `"Joe"` | `""`, `"   "`, `"a"` |
+| `domain::song::validate_propagates_the_artist_rule` | `"Joe"` | `""` |
+| `db::queries::an_invalid_artist_name_is_a_domain_error` | `"abc"` | `FULLNAME_MAX + 1` |
+| `db::queries::title_length_is_counted_in_characters_not_bytes` | `101` | `TITLE_MAX + 1` |
+| `sqlite_file::the_schema_rejects_what_the_domain_rejects` | `'abc'` | `''` |
+
+All five now derive from the constant, so the next bound change cannot quietly
+turn a test into a tautology. Two ceiling cases were added to the SQL-level
+test, whose upper ends were previously uncovered.
+
+### Traps hit
+
+- **Three edits to one file in a single batch raced, and two were silently
+  lost.** Each edit re-reads the whole file and writes it back, so concurrent
+  writes clobber each other. The verification greps caught it; the "replaced 1
+  occurrence" success messages did not. One file at a time, or one scripted
+  edit.
+- **Editing `0001_init.sql` in place invalidates the checksum sqlx stores in
+  `_sqlx_migrations`**, so any database created before the edit then refuses to
+  open. v4 has never been deployed, so editing the initial migration is still
+  the right call — but the local `data/chansondufenua.db` had to be moved aside,
+  and this stops being acceptable the moment v4 ships. The migration header now
+  says so.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **61 tests green**
+(55 lib + 6 file-backed). Build → `topcoat asset bundle` → boot: `GET /` 200 and
+the hashed stylesheet 200 `text/css`, with the database recreated from the
+amended migration.
+
+### `env.example`
+
+Restored at the root — it was deleted in step 1. Documents the two variables
+that exist, `DATABASE_URL` and `HOST`/`PORT`, with the honest note that nothing
+loads the file automatically (there is no dotenv loader). `HOST`/`PORT` support
+was confirmed empirically rather than assumed: with `PORT=3999`, `:3999` answers
+200 and `:3000` refuses.
