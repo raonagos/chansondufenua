@@ -129,10 +129,9 @@ Plan: a ~100-line `i18n` module, no dependencies:
 - **No new product features.** Per the maintainer: this is a rewrite, so we do
   **not** pull in previously-planned/checked roadmap items (ukulele-chords
   extras, transposition tool, etc.). Goal is **parity**.
-- **Reconsidered (needs a call):** OG/Twitter image generation via
-  `headless_chrome` (needs Chromium **on the server** — heavy for "simple").
-  Proposal: render OG cards in pure Rust (`image` + text shaping) or ship
-  pre-generated ones. Flagged in §7.
+- **Decided (2026-10-04):** OG/Twitter cards render in **pure Rust**
+  (`image` + text shaping). `headless_chrome` and its server-side Chromium
+  requirement are dropped — see §7 item 6.
 
 ---
 
@@ -270,12 +269,16 @@ Mapped to the isitagentready.com categories:
 
 **Blocking / needs the maintainer**
 
-1. **Push access & git identity.** I cloned over HTTPS and can commit locally.
-   I have no push credentials for `raonagos/chansondufenua`. Commits on this
-   branch are authored as `tetuaoro <65575727+tetuaoro@users.noreply.github.com>`
-   (the repo's existing author) so they match history — say the word if you'd
-   rather see a distinct agent identity.
-2. **SurrealDB dump** for step 3 — I can't reach the live database.
+1. **Push access & git identity.** I cloned over HTTPS and can commit locally,
+   but I have **no push credentials** for `raonagos/chansondufenua`.
+   *Decided (2026-10-04): the maintainer pushes.* Commits on this branch are
+   authored as `tetuaoro <65575727+tetuaoro@users.noreply.github.com>` to match
+   history. If direct pushing is wanted later, the options are a fine-grained
+   PAT, a repo **deploy key** (preferred — no long-lived token in my
+   environment), or a maintainer-created **machine account** added as a
+   collaborator. I cannot create a GitHub account myself (§9).
+2. **SurrealDB dump** for step 3 — the maintainer will run `surreal export` and
+   drop the file in. I have no access to the live database.
 3. **"Roadmap that are checked"** — I found no checkbox roadmap in the repo, so
    I've assumed it means *do not add previously-planned features; rebuild the
    current app only*. Correct me if you meant a specific list.
@@ -309,3 +312,20 @@ Mapped to the isitagentready.com categories:
 - `isitagentready.com` score materially improved (robots, sitemap, Link headers,
   Markdown negotiation, `llms.txt`).
 - `cargo test` green; `main` untouched; work on `rewrite/topcoat`, committed step by step.
+
+---
+
+## 9. Appendix — can alice create its own GitHub account?
+
+**No, and it shouldn't be attempted.** Checked on 2026-10-04:
+
+- Network reachability is fine (`github.com` → 200; `api.github.com` ok), and
+  `git`/`ssh` exist. But there is **no `gh` CLI**, **no mail tool**, and no
+  mailbox this agent can read.
+- Account creation is blocked in practice by GitHub's **CAPTCHA** and by
+  **email verification** — I have no email address to verify with.
+- It is also against GitHub's Acceptable Use: accounts must be registered by a
+  human. Bot accounts are permitted, but a human must create and own them.
+
+**Consequence:** any bot/machine account must be created by the maintainer
+(option C in §7 item 1), then granted access. For now, the maintainer pushes.
