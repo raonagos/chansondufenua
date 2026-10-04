@@ -14,3 +14,4 @@ pkg
 
 # local smoke-test scratch (logs, pids)
 /.run/
+data/

@@ -11,10 +11,7 @@ use thiserror::Error;
 pub enum AppError {
     /// A rule in this layer rejected the input.
     #[error("invalid {field}: {reason}")]
-    Invalid {
-        field: &'static str,
-        reason: String,
-    },
+    Invalid { field: &'static str, reason: String },
 
     /// Catch-all, kept from v3 (`domain/src/error.rs`).
     #[error("Something wrong !")]

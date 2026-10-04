@@ -22,12 +22,7 @@ pub struct Artist {
 }
 
 impl Artist {
-    pub fn new(
-        id: String,
-        fullname: String,
-        created_at: Datetime,
-        updated_at: Datetime,
-    ) -> Self {
+    pub fn new(id: String, fullname: String, created_at: Datetime, updated_at: Datetime) -> Self {
         Self {
             id,
             fullname,

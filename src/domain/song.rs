@@ -609,9 +609,11 @@ mod tests {
 
         let meta_data = song.get_meta_data();
         assert_eq!(meta_data.page_title, "Song Title | Chanson du fenua");
-        assert!(meta_data
-            .meta_description
-            .contains("Lyrics of | Paroles de | Parau hīmene nō Song Title"));
+        assert!(
+            meta_data
+                .meta_description
+                .contains("Lyrics of | Paroles de | Parau hīmene nō Song Title")
+        );
     }
 
     #[test]
@@ -638,19 +640,25 @@ mod tests {
             meta_data.page_title,
             "Song Title - Artist Name | Chanson du fenua"
         );
-        assert!(meta_data
-            .meta_description
-            .contains("Lyrics of | Paroles de | Parau hīmene nō Song Title"));
+        assert!(
+            meta_data
+                .meta_description
+                .contains("Lyrics of | Paroles de | Parau hīmene nō Song Title")
+        );
         assert_eq!(
             meta_data.meta_og_url,
             "https://www.chansondufenua.pf/himene/Song ID"
         );
-        assert!(meta_data
-            .meta_img_url_og
-            .starts_with("https://www.chansondufenua.pf/drive/genog/"));
-        assert!(meta_data
-            .meta_img_url_tw
-            .starts_with("https://www.chansondufenua.pf/drive/gentw/"));
+        assert!(
+            meta_data
+                .meta_img_url_og
+                .starts_with("https://www.chansondufenua.pf/drive/genog/")
+        );
+        assert!(
+            meta_data
+                .meta_img_url_tw
+                .starts_with("https://www.chansondufenua.pf/drive/gentw/")
+        );
     }
 
     #[test]
@@ -722,15 +730,30 @@ mod tests {
         assert!(song.validate().is_ok());
 
         song.title = "abc".to_string();
-        assert!(matches!(song.validate(), Err(AppError::Invalid { field: "title", .. })));
+        assert!(matches!(
+            song.validate(),
+            Err(AppError::Invalid { field: "title", .. })
+        ));
 
         song.title = "Song Title".to_string();
         song.lyrics = "short".to_string();
-        assert!(matches!(song.validate(), Err(AppError::Invalid { field: "lyrics", .. })));
+        assert!(matches!(
+            song.validate(),
+            Err(AppError::Invalid {
+                field: "lyrics",
+                ..
+            })
+        ));
 
         song.lyrics = "x".repeat(LYRICS_MIN);
         song.view_count = 0;
-        assert!(matches!(song.validate(), Err(AppError::Invalid { field: "view_count", .. })));
+        assert!(matches!(
+            song.validate(),
+            Err(AppError::Invalid {
+                field: "view_count",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -745,7 +768,13 @@ mod tests {
             ));
         }
 
-        assert!(matches!(song.validate(), Err(AppError::Invalid { field: "artists", .. })));
+        assert!(matches!(
+            song.validate(),
+            Err(AppError::Invalid {
+                field: "artists",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -758,6 +787,12 @@ mod tests {
             Utc::now(),
         ));
 
-        assert!(matches!(song.validate(), Err(AppError::Invalid { field: "fullname", .. })));
+        assert!(matches!(
+            song.validate(),
+            Err(AppError::Invalid {
+                field: "fullname",
+                ..
+            })
+        ));
     }
 }

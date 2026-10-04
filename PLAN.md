@@ -147,24 +147,33 @@ Plan: a ~100-line `i18n` module, no dependencies:
 
 ```
 chansondufenua/
-├─ Cargo.toml                 # single binary crate, v4.0.0
+├─ Cargo.toml                 # single crate, v4.0.0 — lib + bin targets
 ├─ build.rs                   # renders the Tailwind stylesheet at build time
 ├─ PLAN.md                    # this file
 ├─ README.md  CONTRIBUTING.md # updated (no more leptos/cargo-leptos)
 ├─ migrations/
-│  └─ 0001_init.sql           # songs, artists, song_artists (SQLite)
+│  └─ 0001_init.sql           # artist, song, song_artist, artist_fts (SQLite)
 ├─ legacy/
 │  └─ surrealdb.surql         # v3 schema kept as the source of truth for 3a
+├─ tests/
+│  └─ sqlite_file.rs          # integration tests on a real file-backed database
+├─ data/                      # the SQLite file lives here (gitignored)
 ├─ assets/                    # logos (webp/ico), fonts
 └─ src/
    ├─ main.rs                 # Topcoat serve + router + DB pool in app context
+   ├─ lib.rs                  # `pub mod db; pub mod domain;` — so tests/ and
+   │                          #   src/bin/import.rs can reuse the real code paths
+   ├─ bin/
+   │  └─ import.rs            # step 3b: one-shot SurrealQL → SQLite
    ├─ domain/
    │  ├─ mod.rs
    │  ├─ song.rs              # Song + rules: clean_lyrics, jsonld, meta, markdown
    │  └─ artist.rs
    ├─ db/
-   │  ├─ mod.rs               # pool, migrate, queries
-   │  └─ seed.rs              # optional: import dump -> SQLite
+   │  ├─ mod.rs               # pool, WAL, migrations, DbError
+   │  ├─ queries.rs           # every SQL statement in the app
+   │  ├─ fixtures.rs          # four real songs from the v3 dump
+   │  └─ import.rs            # step 3b
    ├─ i18n.rs                 # Lang + catalogs
    ├─ ui/                     # reusable components + design tokens
    │  ├─ mod.rs  layout.rs  theme.rs
@@ -178,6 +187,12 @@ chansondufenua/
       └─ og.rs                # /drive/genog|gentw/... (see §7)
 ```
 
+> **Added in 3a: `src/lib.rs`.** Two reasons, both concrete: `tests/` can only
+> reach the database layer through a library target, and the 3b importer needs
+> the same `db` code the server uses. Still **one crate** — the lib/bin split is
+> a target, not a workspace. §2.1's "two crates is the only split worth
+> considering" anticipated exactly this; this is the binary half of it.
+
 ---
 
 ## 4. Steps — one commit each
@@ -190,8 +205,8 @@ Every step must build and (where applicable) pass tests **before** its commit.
 | 0 ✅ | `add: rewrite plan (topcoat + sqlite)` | this file, on `rewrite/topcoat` | committed |
 | 1 ✅ | `add: bootstrap topcoat single-crate app` | new `Cargo.toml` + `src/main.rs`; leptos crates removed from the branch | `cargo run` serves a plain "hello" page; **tailwind feature proven or fallback chosen** |
 | 2 ✅ | `add: domain entities and rules` | `src/domain/{song,artist}.rs` ported (`clean_lyrics`, `to_jsonld`, `get_meta_data`, + markdown render) with unit tests | `cargo test` green |
-| 3a | `add: sqlite layer + schema` | `migrations/0001_init.sql`, `src/db/*` (pool, WAL, queries, create_song ported), `src/db/fixtures.rs` with a few representative songs | songs/artists round-trip in tests; **no dump required** |
-| 3b | `add: importer for surreal dump` → then run it | `src/db/import.rs` reading the `surreal export` output | deferred until the dump arrives; **not on the critical path** (§5) |
+| 3a ✅ | `add: sqlite layer + schema` | `migrations/0001_init.sql`, `src/db/*` (pool, WAL, queries, create_song ported), `src/db/fixtures.rs` — **four real songs**, not invented ones; `src/lib.rs` added so `tests/` can drive a file-backed database | 52 tests green (46 lib + 6 file-backed), clippy clean, binary boots and creates the schema |
+| 3b | `add: importer for surreal dump` → then run it | `src/bin/import.rs` reading the SurrealQL export | **dump received 2026-10-04**; 43 of the 46 live songs import with their original ids (§5) |
 | 4 | `add: app shell, layout and design tokens` | `src/ui/*` (layout, header/nav, footer, `class!` tokens) | pages render inside the shell; print variants present |
 | 5 | `add: home page` | `/` and `/aepa` (hero, cards, latest + most-viewed tables) | parity with `HomePage` |
 | 6 | `add: songs index page` | `/himene` table | parity with `AllSongPage` |
@@ -208,50 +223,101 @@ Every step must build and (where applicable) pass tests **before** its commit.
 
 ---
 
-## 5. Data migration (step 3b — deferred, not blocking)
+## 5. Data migration (step 3b)
 
-> **The dump is not on the critical path.** The schema is fully recoverable from
-> `database/migrations/surrealdb` (the `DEFINE TABLE`/`DEFINE FIELD` statements
-> and the seven `fn::` functions), so step 3a builds the SQLite layer *and its
-> tests* against hand-written fixtures. Only the real 46 rows need the export.
-> Steps 1–12 all proceed without it.
+> **Update 2026-10-04 — the dump arrived, and it changes the picture favourably.**
+> `chansondufenua_backup_22032025.db` (105 KB, sha256 `1a8ad5b7…0fc2b`) is *not* a
+> SQLite file despite the extension. It is a **SurrealQL export from v3**, and it
+> is a direct ancestor of the live database:
+>
+> * **43 of the 46 live songs are in it, with identical record ids.** All 43 ids
+>   in the dump exist live; none were deleted. The 3 live-only songs were added
+>   after 22 March 2025.
+> * **All 43 songs are byte-for-byte identical to what the site serves today.**
+>   Each live page's `lyrics-display` block was extracted and compared raw against
+>   the dump's `lyrics` column: 43/43 identical, 0 mismatches. So importing the
+>   dump cannot regress a single character of content.
+> * It also carries the parts of v3 that are **not** web content: the `DEFINE
+>   ACCESS account` JWT signing key, and 135 `user` rows holding argon2id hashes.
+>   Neither is imported, and the file must never be committed (§12.4).
 
-1. `surreal export --ns <ns> --db <db> --user ... --pass ... > dump.surrealql`
-   (maintainer runs this on the live host — I have no credentials/access).
-2. Write a small importer that reads the dump (or a JSON export) and inserts
-   into SQLite: `artist`, `song`, `song_artists`, preserving ids, `created_at`,
-   `updated_at`, `view_count`, `published`.
-3. Verify counts (~46 songs) and spot-check a few `/himene/{id}` pages.
+So the import is 4 % incomplete (3 songs), not "deferred". Two ways to close the
+gap, in preference order:
 
-Schema sketch:
+1. **Scrape the 3 missing songs** from the live pages (which is where the other
+   43 were just validated against anyway), or
+2. ask for a fresh export.
+
+Either way it is a top-up, not a blocker: the schema, the id scheme and the
+credit model are all confirmed against real data.
+
+1. The exporter is `surreal export`, which emits exactly the format now sitting
+   in `.run/inbox/`: `DEFINE …` statements, then one `INSERT [ {…}, {…} ]` line
+   per table.
+2. `src/bin/import.rs` reads that and inserts into SQLite, preserving `id`,
+   `created_at`, `updated_at`, `view_count`, `published` and the **order** of
+   each song's credit list. Timestamps are kept at nanosecond precision.
+3. Verify: counts (43 songs / 34 artists), id-for-id equality with the live
+   sitemap, and the byte-for-byte lyrics comparison above.
+
+Schema as built (`migrations/0001_init.sql`):
 
 ```sql
 CREATE TABLE artist (
   id         TEXT PRIMARY KEY,
-  fullname   TEXT NOT NULL,
+  fullname   TEXT NOT NULL CHECK (length(fullname) BETWEEN 4 AND 50),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 CREATE TABLE song (
   id         TEXT PRIMARY KEY,
-  title      TEXT NOT NULL,
-  lyrics     TEXT NOT NULL,
-  view_count INTEGER NOT NULL DEFAULT 1,
-  published  INTEGER NOT NULL DEFAULT 1,
+  title      TEXT NOT NULL CHECK (length(title) BETWEEN 4 AND 100),
+  lyrics     TEXT NOT NULL CHECK (length(lyrics) BETWEEN 100 AND 6000),
+  view_count INTEGER NOT NULL DEFAULT 1 CHECK (view_count > 0),
+  published  INTEGER NOT NULL DEFAULT 1 CHECK (published IN (0,1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 CREATE TABLE song_artist (
   song_id   TEXT NOT NULL REFERENCES song(id)   ON DELETE CASCADE,
-  artist_id TEXT NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+  artist_id TEXT NOT NULL REFERENCES artist(id) ON DELETE RESTRICT,
   position  INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (song_id, artist_id)
 );
 ```
 
-(The current SurrealDB schema asserts `title` 4–100 chars, `lyrics` 100–6000
-chars, `fullname` 4–50 chars. Replicate as `CHECK` constraints so the editor
-cannot store garbage either way.)
+(The v3 schema asserts `title` 4–100 chars, `lyrics` 100–6000, `fullname` 4–50.
+Replicated as `CHECK` constraints so the editor cannot store garbage either way.
+SQLite's `length()` counts characters, matching SurrealDB's `string::len()` — a
+byte-based check would miscount every title containing ā, ', ē or ō.)
+
+> **Deviation from the first draft of this plan:** `song_artist.artist_id` is
+> `ON DELETE RESTRICT`, not `CASCADE`. Cascading would let a single
+> `DELETE FROM artist` silently strip a credit off every song that named them —
+> changing song pages without anyone editing a song. Restricting forces the
+> deletion to be explicit about the credits first. The `song_id` side *is*
+> `CASCADE`: deleting a song should take its credit rows with it.
+
+## 5b. What the dump revealed that we did not know
+
+Three things worth recording, because each one is an argument for the rewrite:
+
+1. **Chords are marked up inconsistently in production.** Some songs use
+   `<sup data-nosnippet="">F</sup>`; others use `<sup data-nosnippet>F</sup>`
+   with a bare attribute. Both are live, in the same database. Any sanitiser
+   that whitelists only one spelling silently mangles the other, which is
+   exactly why `lyrics_html()` names `data-nosnippet` as a *generic* attribute
+   rather than matching a literal string.
+2. **`/himene` is client-side rendered.** The server sends
+   `<!--s-1-o--><tr><td>Chargement...</td></tr><!--s-1-c-->` and the real rows
+   arrive in a `<template>` that hydration clones in. An agent — or anything
+   without a JS engine — fetching that page sees *"Chargement…"* and no songs
+   at all.
+3. **The song links are not links.** Rows are
+   `<a href class="tab-link">Title</a>` — an `href` with no value, plus an
+   `onclick="window.location=…"`. Crawlers cannot follow them. This is the
+   single clearest example of the problem step 10 exists to fix, and it is worth
+   demonstrating with a before/after in the README.
 
 ---
 
@@ -455,3 +521,70 @@ What the step established, and what it changed about the plan:
    ./target/debug/chansondufenua`. `cargo run` alone still panics (§10.5). A
    local `.run/smoke.sh` does the three steps and curls the result; `.run/` is
    gitignored.
+
+---
+
+## 12. Appendix — verified in step 3a (2026-10-04)
+
+The SQLite layer, built against the real dump rather than guesses.
+
+1. **`id` is the v3 record key, verbatim.** Every song's URL is
+   `/himene/{id}`, so re-minting ids would have quietly broken every inbound
+   link and reset the sitemap history. The dump's ids are 20 chars of `[0-9a-z]`;
+   new ids are made with SQLite's own `lower(hex(randomblob(10)))`, which is the
+   same shape and costs zero dependencies (no RNG crate).
+
+2. **Timestamps are RFC 3339 in UTC, at nanosecond precision, stored as TEXT.**
+   v3 wrote values like `2025-03-09T20:09:12.123456789Z`. Truncating to
+   milliseconds on import would have made every migrated row differ from live.
+   TEXT also sorts lexicographically in chronological order, so
+   `ORDER BY created_at DESC` needs no conversion.
+
+3. **Ordering was measured, not assumed.** `/himene` lists songs by
+   `created_at DESC` — confirmed by extracting all 46 rows from the live page's
+   hydration template and checking the sequence against the dump's timestamps
+   (43/43 in exactly that order). The `ORDER BY` clauses carry an `s.id`
+   tiebreaker: without it, two songs sharing a `created_at` interleave their
+   credit rows and the row-folding reader emits half-songs.
+
+4. **The dump is now git-ignored, and it has to be.** It contains a
+   `DEFINE ACCESS account … WITH JWT ALGORITHM HS512 KEY '<secret>'` — the
+   production JWT signing key — plus 135 `user` rows with argon2id hashes.
+   `.run/` was already ignored; the importer reads from there and never stages
+   the file. **If that access definition is still live, the key in this file
+   should be rotated**: it has now been copied off the host, and the export
+   format gives no way to tell whether the definition is still in force.
+
+5. **Artist search uses FTS5, not `LIKE`.** v3 indexed `artist.fullname` with a
+   `punct_lower_ascii` SEARCH ANALYZER (PUNCT tokenizer; LOWERCASE + ASCII
+   filters). The SQLite analogue is `unicode61 remove_diacritics 2`, so
+   `barthelemy` finds `Barthélémy` and `theo` finds `Théo Sulpice` — both real
+   names in the data, both pinned by tests. Two honest limits are recorded as
+   tests rather than hidden: (a) punctuation splits tokens, so `T'Angelo` is
+   indexed as `t` + `angelo` and `tangelo` does **not** match — identical to
+   v3's PUNCT tokenizer, so not a regression; (b) the search needle is quoted
+   before it reaches FTS5, so `*`, `NEAR(` and `"` are treated as text.
+
+6. **`create_song` is atomic.** v3's `fn::create_song` created artists and then
+   the song as separate statements; a failure in between left orphan artists.
+   Here it is one transaction, and validation happens *before* the transaction
+   opens. `a_rejected_song_leaves_nothing_behind` asserts exactly that: a
+   two-character title plus a brand-new artist name leaves the artist count
+   unchanged. Credit order is preserved (`position`), and duplicate names in the
+   form field are collapsed in order rather than tripping the primary key.
+
+7. **`src/lib.rs` was added.** `tests/` cannot reach a binary-only crate, and
+   the 3b importer needs the same `db` code as the server. This is a target
+   split inside one crate, not a return to the seven-crate workspace (§3).
+
+8. **Fixtures are real songs, not invented ones.** Four rows copied verbatim
+   from the dump, chosen to cover the awkward cases: one with no credited artist
+   (5 of the 43 are like this), one with two artists where credit order shows on
+   the page, one with chords *inside* words, and the shortest lyric set. A
+   synthetic fixture would have been shorter to write and would have missed all
+   four.
+
+9. **Numbers:** 52 tests (46 lib + 6 file-backed), `cargo clippy --all-targets`
+   clean, `cargo fmt --check` clean. The binary boots, creates
+   `data/chansondufenua.db`, reports WAL mode, and applies migration 1 —
+   including the FTS5 shadow tables.

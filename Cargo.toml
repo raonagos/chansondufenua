@@ -11,6 +11,16 @@ authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
 [dependencies]
 topcoat = { version = "0.10.0", features = ["sitemap", "tailwind"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+# Embedded SQLite. `sqlite` bundles libsqlite3 (via libsqlite3-sys) so nothing
+# needs installing on the host; `macros` is only for `sqlx::migrate!` and the
+# `FromRow` derive — the compile-time-checked `query!` family is deliberately
+# unused, so builds never need a live DATABASE_URL.
+sqlx = { version = "0.8", default-features = false, features = [
+    "sqlite",
+    "runtime-tokio",
+    "migrate",
+    "macros",
+] }
 chrono = { version = "0.4.45", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

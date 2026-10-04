@@ -6,6 +6,7 @@
 //! Step 1 of `PLAN.md`: the smallest thing that boots. The real app shell and
 //! design tokens arrive in step 4.
 
+use chansondufenua::db::{self, Db, SongOrder};
 use topcoat::{
     Result,
     asset::{AssetBundle, RouterBuilderAssetExt},
@@ -14,15 +15,41 @@ use topcoat::{
     view::{View, class, view},
 };
 
-// The domain layer (step 2 of `PLAN.md`). Nothing in `main` calls it yet — the
-// pages arrive in steps 5-9 — so the dead-code and unused-import lints are
-// silenced rather than letting real rules be deleted to appease a warning.
-#[allow(dead_code, unused_imports)]
-mod domain;
+/// Where the embedded database lives when `DATABASE_URL` is not set.
+const DEFAULT_DATABASE_URL: &str = "sqlite://data/chansondufenua.db";
 
 #[tokio::main]
 async fn main() {
+    let db = bootstrap_database().await;
+    report(&db).await;
+
     topcoat::start(router()).await.unwrap();
+}
+
+/// Open (and migrate) the database described by `DATABASE_URL`.
+///
+/// Failing loudly is right here: a renderer without its database serves 500s,
+/// and a process that refuses to start is far easier to notice than one that
+/// boots and lies.
+async fn bootstrap_database() -> Db {
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_owned());
+    Db::open(&url)
+        .await
+        .unwrap_or_else(|error| panic!("cannot open database {url}: {error}"))
+}
+
+/// Prove the schema is usable at boot. Replaced by the real pages in step 5.
+async fn report(db: &Db) {
+    let songs = db::songs(db.pool(), SongOrder::Newest, None)
+        .await
+        .expect("reading songs");
+    let artists = db::artists(db.pool()).await.expect("reading artists");
+    eprintln!(
+        "chansondufenua v{} — {} songs, {} artists",
+        env!("CARGO_PKG_VERSION"),
+        songs.len(),
+        artists.len()
+    );
 }
 
 /// The router is built from this module, so `#[page]` items declared here (and
