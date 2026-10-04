@@ -11,3 +11,6 @@ pkg
 .vscode
 .cargo
 *.bkp
+
+# local smoke-test scratch (logs, pids)
+/.run/

@@ -1,58 +1,24 @@
-[workspace]
-resolver = "2"
-# also know as layers
-members = ["api", "app", "core", "database", "domain", "server", "web"]
-
-[workspace.package]
-edition = "2021"
-version = "3.1.3"
+[package]
+name = "chansondufenua"
+version = "4.0.0"
+edition = "2024"
+rust-version = "1.98"
+description = "Sing tahitian songs with lyrics and chords."
+homepage = "https://www.chansondufenua.pf"
+repository = "https://github.com/raonagos/chansondufenua"
 authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
 
-[workspace.dependencies]
-leptos = "0.7.7"
-leptos_axum = "0.7.7"
-leptos_meta = "0.7.7"
-leptos_router = "0.7.7"
-axum = { version = "0.7", features = ["macros"] }
+[dependencies]
+topcoat = { version = "0.10.0", features = ["sitemap", "tailwind"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
-log = "0.4.26"
-thiserror = "2"
-ammonia = "4.0.0"
-surrealdb = "2.1.4"
-chrono = { version = "0.4.40", features = ["serde"] }
-eserde = { version = "0.1.2", features = ["derive"] }
-serde = { version = "1.0.203", features = ["derive"] }
+# `tailwind` on the build dependency only: `BuildConfig::render()` runs in
+# build.rs to scan the sources and emit the stylesheet as an asset.
+[build-dependencies]
+topcoat = { version = "0.10.0", default-features = false, features = ["tailwind"] }
 
-[patch.crates-io]
-# security patch
-ring = { git = "https://github.com/briansmith/ring", rev = "52b239c5" }
-
-# See the repo for parameters : https://github.com/leptos-rs/cargo-leptos?tab=readme-ov-file#compilation-parameters
-[[workspace.metadata.leptos]]
-name = "chansondufenua"
-hash-files = true
-style-file = "style/main.scss"
-tailwind-input-file = "style/tailwind.scss"
-assets-dir = "public"
-watch = false
-env = "DEV"
-
-bin-package = "server"
-bin-features = ["ssr"]
-
-lib-package = "web"
-lib-features = ["hydrate"]
-lib-profile-release = "wasm-release"
-
-# need to be applied only to binary build
 [profile.release]
 lto = true
 opt-level = 3
 codegen-units = 12
 panic = "abort"
-
-# defines a size-optimized profile for the WASM bundle in release mode
-[profile.wasm-release]
-inherits = "release"
-opt-level = 'z'
-codegen-units = 1

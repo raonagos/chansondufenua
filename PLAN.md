@@ -141,10 +141,13 @@ Plan: a ~100-line `i18n` module, no dependencies:
 ```
 chansondufenua/
 ├─ Cargo.toml                 # single binary crate, v4.0.0
+├─ build.rs                   # renders the Tailwind stylesheet at build time
 ├─ PLAN.md                    # this file
 ├─ README.md  CONTRIBUTING.md # updated (no more leptos/cargo-leptos)
 ├─ migrations/
 │  └─ 0001_init.sql           # songs, artists, song_artists (SQLite)
+├─ legacy/
+│  └─ surrealdb.surql         # v3 schema kept as the source of truth for 3a
 ├─ assets/                    # logos (webp/ico), fonts
 └─ src/
    ├─ main.rs                 # Topcoat serve + router + DB pool in app context
@@ -339,3 +342,41 @@ Mapped to the isitagentready.com categories:
 
 **Consequence:** any bot/machine account must be created by the maintainer
 (option C in §7 item 1), then granted access. For now, the maintainer pushes.
+
+---
+
+## 10. Appendix — verified in step 1 (2026-10-04)
+
+Everything below was **proven by building and running**, not read off docs:
+
+1. **Topcoat 0.10.0 builds and serves here.** `topcoat::start(module_router!().build())`,
+   `#[page]`, `#[component]`, `#[layout]`, `#[page]`-derived routes — all work.
+   Binary binds `127.0.0.1:3000`; override with `HOST` / `PORT`.
+2. **`edition = "2024"` is required.** Topcoat's attribute macros emit code
+   referencing `Future` unqualified, which only resolves via the Rust 2024
+   prelude. On edition 2021 every `#[page]`/`#[component]` fails with
+   `cannot find trait Future in this scope`. The crate's own tests are 2024.
+3. **`class!` (and `view!`) must be imported.** They are proc macros re-exported
+   from `topcoat::view`, so `use topcoat::view::{class, view}` is needed —
+   `class!` is not in the prelude.
+4. **The `tailwind` feature works, including the download.** `build.rs` calling
+   `topcoat::tailwind::BuildConfig::new().render()` downloads the pinned
+   standalone **Tailwind CLI v4.3.2** from GitHub and writes minified CSS to
+   `$OUT_DIR/tailwind.css`. It scans Rust sources for *literal* classes — so
+   classes must never be assembled at runtime. Network egress to GitHub
+   releases is allowed from this host.
+5. **`tailwind::stylesheet!()` is an asset**, so it panics at render time with
+   *"no asset config registered in this router context"* unless the router
+   installs `.assets(AssetBundle::load().unwrap())`. That in turn reads
+   `assets/` **next to the binary**, which is produced by
+   `topcoat asset bundle` — i.e. **`topcoat-cli` is a build/deploy dependency**,
+   not just a dev convenience. Installed here as
+   `workspace/.tools/cargo-install/bin/topcoat` (v0.10.0).
+   Consequence: `cargo run` alone is not enough; the flow is
+   `cargo build && topcoat asset bundle && ./target/debug/chansondufenua`.
+6. **Response headers already include `vary: Accept`.** Useful — RFC 8288
+   `Link` headers and the `Accept: text/markdown` negotiation in step 10 are
+   the natural next move on that axis.
+7. **`#[memoize]` (per-request) and the `sitemap` feature exist** and are the
+   replacements for the old `cached` middleware (`server/src/cache.rs`) and the
+   hand-rolled `sitemap` module respectively.
