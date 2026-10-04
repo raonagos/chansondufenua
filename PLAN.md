@@ -124,9 +124,16 @@ Plan: a ~100-line `i18n` module, no dependencies:
 
 - **Dropped:** SurrealDB, Leptos, Axum, `cargo-leptos`, wasm target,
   `leptos_meta/router/axum`, `eserde` (only needed for Surreal's `RecordId`),
-  `ammonia`'s inline use, the `[patch.crates-io] ring` git pin (was a
+  the `[patch.crates-io] ring` git pin (was a
   rustls/leptos-era security patch), `headless_chrome`, `tikv-jemallocator`,
   `clap`, the `.env`/`env.example` DB credentials.
+- **Kept, contrary to the first draft of this plan: `ammonia`.** The draft listed
+  "ammonia's inline use" as dropped, on the theory that `clean_lyrics` only
+  needed a text extractor. Step 2 showed why that was wrong: v3 rendered the
+  **raw** `lyrics` column into the page (`MetaSongData.song_lyrics =
+  self.get_lyrics()`), and the "add the lyrics" form is open to anyone. The
+  sanitiser is load-bearing, not decoration — `Song::lyrics_html()` is now the
+  only route from the column to a template.
 - **No new product features.** Per the maintainer: this is a rewrite, so we do
   **not** pull in previously-planned/checked roadmap items (ukulele-chords
   extras, transposition tool, etc.). Goal is **parity**.
@@ -180,9 +187,9 @@ Every step must build and (where applicable) pass tests **before** its commit.
 
 | # | Commit (`add:`/`update:` style, matches repo) | Deliverable | Done when |
 |---|---|---|---|
-| 0 | `add: rewrite plan (topcoat + sqlite)` | this file, on `rewrite/topcoat` | committed |
-| 1 | `add: bootstrap topcoat single-crate app` | new `Cargo.toml` + `src/main.rs`; leptos crates removed from the branch | `cargo run` serves a plain "hello" page; **tailwind feature proven or fallback chosen** |
-| 2 | `add: domain entities and rules` | `src/domain/{song,artist}.rs` ported (`clean_lyrics`, `to_jsonld`, `get_meta_data`, + markdown render) with unit tests | `cargo test` green |
+| 0 ✅ | `add: rewrite plan (topcoat + sqlite)` | this file, on `rewrite/topcoat` | committed |
+| 1 ✅ | `add: bootstrap topcoat single-crate app` | new `Cargo.toml` + `src/main.rs`; leptos crates removed from the branch | `cargo run` serves a plain "hello" page; **tailwind feature proven or fallback chosen** |
+| 2 ✅ | `add: domain entities and rules` | `src/domain/{song,artist}.rs` ported (`clean_lyrics`, `to_jsonld`, `get_meta_data`, + markdown render) with unit tests | `cargo test` green |
 | 3a | `add: sqlite layer + schema` | `migrations/0001_init.sql`, `src/db/*` (pool, WAL, queries, create_song ported), `src/db/fixtures.rs` with a few representative songs | songs/artists round-trip in tests; **no dump required** |
 | 3b | `add: importer for surreal dump` → then run it | `src/db/import.rs` reading the `surreal export` output | deferred until the dump arrives; **not on the critical path** (§5) |
 | 4 | `add: app shell, layout and design tokens` | `src/ui/*` (layout, header/nav, footer, `class!` tokens) | pages render inside the shell; print variants present |
@@ -398,3 +405,53 @@ Everything below was **proven by building and running**, not read off docs:
 7. **`#[memoize]` (per-request) and the `sitemap` feature exist** and are the
    replacements for the old `cached` middleware (`server/src/cache.rs`) and the
    hand-rolled `sitemap` module respectively.
+
+---
+
+## 11. Appendix — verified in step 2 (2026-10-04)
+
+The domain layer is ported: **23 unit tests green**, `cargo clippy --all-targets`
+clean, and the app still boots (`GET /` → 200; Tailwind asset → 200 `text/css`).
+What the step established, and what it changed about the plan:
+
+1. **Parity is now tested against the live site, not eyeballed.** Real markup was
+   pulled from `https://www.chansondufenua.pf/himene/7114wvk91gffr2bj6wza`
+   ("'Āhani e", 2B Brothers Tahiti) and its real `og:description` used as an
+   oracle. `clean_lyrics_matches_live_output` asserts byte-for-byte equality with
+   what the v3 site serves today. `clean_lyrics` is therefore frozen as a *parity*
+   function, quirks included.
+2. **The real lyrics markup** — worth writing down, it drove three decisions:
+   lines are `<div>`, blank lines are `<div><br></div>`, and chords are
+   `<sup data-nosnippet="true">C</sup>` placed **inline inside words**:
+   `Hina'a<sup>Eb</sup>ro` is one word whose chord falls on the "ro". Chord
+   removal must therefore *rejoin*, not separate — which is exactly why v3's
+   regex order (`<sup.*?</sup>` before `<.*?>`) matters.
+3. **ammonia is kept** (see §2.6), with two adjustments:
+   - its defaults allow `div`, `br`, `sup`, `p`, but strip every `data-*`
+     attribute, so `data-nosnippet` was added to `generic_attributes`. Losing it
+     would have silently changed how chords appear in search snippets.
+   - because that attribute now survives sanitising, v3's literal `<sup>` pattern
+     became `<sup.*?</sup>`. For attribute-free input the two are identical.
+4. **A v3 bug found and deliberately *not* fixed.** The `&.*?;` → `" "` rule runs
+   after `<.*?>` → `", "`, so named entities are deleted rather than decoded:
+   `Line &amp; more` becomes `Line more` in `og:description` and in the JSON-LD
+   `text`. Pinned by `clean_lyrics_drops_named_entities_v3_parity` so it is a
+   recorded behaviour rather than a later surprise. Fixing it is a behaviour
+   change and belongs in its own step (8 or 10), for the maintainer to decide.
+5. **`lyrics_markdown()` is new, and lossless.** Chords stay where the author put
+   them, rendered `[Eb]` at the same offset; `<div><br></div>` becomes a blank
+   line. This is the payload for the `Accept: text/markdown` negotiation in
+   step 10 — the cheapest high-value agent-readiness item on the list.
+6. **Validation moved into the domain.** v3 expressed the bounds only as SurrealDB
+   `ASSERT` clauses. They are now `Song::validate()` / `Artist::validate_fullname()`
+   too, so bad input is rejected *before* a write; the SQL `CHECK` constraints in
+   step 3a remain the backstop. Same numbers: title 4..=100, lyrics 100..=6000,
+   fullname 4..=50, `view_count > 0`, artists ≤ 75.
+7. **Owned-`String` getters kept, `eserde` dropped.** `Song`/`Artist` keep v3's
+   getter names and signatures, but `eserde` (needed only to read Surreal's
+   `RecordId`) is replaced by plain `serde`. Two `//todo` assertions in v3's
+   artist tests — impossible then — are real assertions now.
+8. **Build/run flow, for the record:** `cargo build && topcoat asset bundle &&
+   ./target/debug/chansondufenua`. `cargo run` alone still panics (§10.5). A
+   local `.run/smoke.sh` does the three steps and curls the result; `.run/` is
+   gitignored.

@@ -14,6 +14,12 @@ use topcoat::{
     view::{View, class, view},
 };
 
+// The domain layer (step 2 of `PLAN.md`). Nothing in `main` calls it yet — the
+// pages arrive in steps 5-9 — so the dead-code and unused-import lints are
+// silenced rather than letting real rules be deleted to appease a warning.
+#[allow(dead_code, unused_imports)]
+mod domain;
+
 #[tokio::main]
 async fn main() {
     topcoat::start(router()).await.unwrap();

@@ -11,6 +11,12 @@ authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
 [dependencies]
 topcoat = { version = "0.10.0", features = ["sitemap", "tailwind"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+ammonia = "4.2.1"
+regex-lite = "0.1.9"
+thiserror = "2.0.21"
 
 # `tailwind` on the build dependency only: `BuildConfig::render()` runs in
 # build.rs to scan the sources and emit the stylesheet as an asset.
