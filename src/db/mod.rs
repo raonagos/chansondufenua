@@ -10,11 +10,16 @@
 //! layout (see `PLAN.md` §2.1).
 
 pub mod fixtures;
+pub mod import;
 pub mod queries;
 
+pub use import::{Dump, ImportReport, ImportedArtist, ImportedSong, import_dump};
 pub use queries::{
     SongOrder, artists, create_song, increment_view_count, search_artists, song, songs,
 };
+
+/// Where the database lives when `DATABASE_URL` is not set.
+pub const DEFAULT_URL: &str = "sqlite://data/chansondufenua.db";
 
 use std::str::FromStr;
 use std::time::Duration;
@@ -45,6 +50,10 @@ pub enum DbError {
     /// Creating the directory for a file-backed database failed.
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    /// A `surreal export` dump could not be read (step 3b).
+    #[error(transparent)]
+    Import(#[from] import::ImportError),
 
     #[error("no {entity} with id {id}")]
     NotFound { entity: &'static str, id: String },

@@ -15,9 +15,6 @@ use topcoat::{
     view::{View, class, view},
 };
 
-/// Where the embedded database lives when `DATABASE_URL` is not set.
-const DEFAULT_DATABASE_URL: &str = "sqlite://data/chansondufenua.db";
-
 #[tokio::main]
 async fn main() {
     let db = bootstrap_database().await;
@@ -32,7 +29,7 @@ async fn main() {
 /// and a process that refuses to start is far easier to notice than one that
 /// boots and lies.
 async fn bootstrap_database() -> Db {
-    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_owned());
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| db::DEFAULT_URL.to_owned());
     Db::open(&url)
         .await
         .unwrap_or_else(|error| panic!("cannot open database {url}: {error}"))
