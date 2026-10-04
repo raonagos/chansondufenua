@@ -195,8 +195,9 @@ Every step must build and (where applicable) pass tests **before** its commit.
 | 11 | `add: og/twitter image route` | `og.rs` per §7 decision | images render |
 | 12 | `update: docs, version v4.0.0, drop leptos leftovers` | README/CONTRIBUTING, `ARCHITECTURE.xml` refreshed, dead files removed | no `leptos`/`surrealdb` anywhere; tag `v4.0.0` |
 
-> Small commits, reviewable diffs, `main` untouched. Nothing is pushed without
-> the maintainer's go-ahead (see §7, credentials).
+> Small commits, reviewable diffs, `main` untouched. Work is pushed to
+> `alice-agent-zc/chansondufenua` (the fork); nothing goes to `raonagos/*` without
+> the maintainer's go-ahead (see §7 item 1 for credentials and authorship).
 
 ---
 
@@ -280,14 +281,25 @@ Mapped to the isitagentready.com categories:
 
 **Blocking / needs the maintainer**
 
-1. **Push access & git identity.** I cloned over HTTPS and can commit locally,
-   but I have **no push credentials** for `raonagos/chansondufenua`.
-   *Decided (2026-10-04): the maintainer pushes.* Commits on this branch are
-   authored as `tetuaoro <65575727+tetuaoro@users.noreply.github.com>` to match
-   history. If direct pushing is wanted later, the options are a fine-grained
-   PAT, a repo **deploy key** (preferred — no long-lived token in my
-   environment), or a maintainer-created **machine account** added as a
-   collaborator. I cannot create a GitHub account myself (§9).
+1. **Push access & git identity.** ✅ **Resolved (2026-10-04).** The maintainer
+   created the GitHub account **`alice-agent-zc`** and registered this agent's
+   SSH key on it, as **both** an authentication key and a signing key. alice
+   pushes to the maintainer-created **fork** `alice-agent-zc/chansondufenua`;
+   `origin` stays `raonagos/chansondufenua`, and `main` is never pushed to
+   directly. Commits on this branch are **authored and committed as
+   `alice-agent-zc <337614769+alice-agent-zc@users.noreply.github.com>`** and
+   **signed** (`gpg.format=ssh`, no GPG keyring needed), so GitHub reports
+   `verified: true` on each one — checked against the forge API, not assumed.
+
+   *Decided (2026-10-04, maintainer):* **alice stays the author.** The work
+   should be attributable to the agent that did it — now and for future
+   collaboration. This supersedes the earlier "the maintainer pushes / commit as
+   `tetuaoro`" call.
+
+   Pitfall for whoever clones next: a clone can carry **repo-local**
+   `user.name` / `user.email`, which silently override the global identity.
+   Check `git config --local --list` before committing, or the commits go out
+   under someone else's name and unsigned.
 2. **SurrealDB dump** — needed for **step 3b only** (loading the real 46 rows).
    I have no access to the live database, so the maintainer runs
    `surreal export` when convenient. Steps 1–12 use committed fixtures instead
@@ -301,9 +313,10 @@ Mapped to the isitagentready.com categories:
 4. **Topcoat is 0.10.0, published 2026-04-17, self-described "early-stage and
    experimental — expect breaking changes."** Mitigation: pin the exact version,
    keep page code thin, isolate Topcoat-specific bits in `ui/`.
-5. **Tailwind feature build** (may fetch a standalone binary). Proven or
-   replaced in step 1. `cmake` is available at `workspace/.tools/cmake/bin` if a
-   transitive dep needs it.
+5. **Tailwind feature build** (may fetch a standalone binary). Proven in step 1
+   (§10.4) — it downloads the pinned standalone CLI. `cmake` is now installed
+   system-wide (`/usr/bin/cmake`, 3.28.3) if a transitive dep needs it; the old
+   `workspace/.tools/cmake/bin` workaround is obsolete.
 6. **OG image generation** currently needs Chromium on the server. Options:
    (a) pure-Rust image rendering, (b) pre-generated static cards, (c) keep
    headless Chrome (contradicts "simple"). **Recommendation: (a)**. Decide at
@@ -328,20 +341,25 @@ Mapped to the isitagentready.com categories:
 
 ---
 
-## 9. Appendix — can alice create its own GitHub account?
+## 9. Appendix — the `alice-agent-zc` account
 
-**No, and it shouldn't be attempted.** Checked on 2026-10-04:
+**Created by the maintainer on 2026-10-04.** That is the correct order of
+events, and the reasoning from the earlier check is worth keeping on record:
 
-- Network reachability is fine (`github.com` → 200; `api.github.com` ok), and
-  `git`/`ssh` exist. But there is **no `gh` CLI**, **no mail tool**, and no
+- Network reachability was fine (`github.com` → 200; `api.github.com` ok), and
+  `git`/`ssh` exist — but there is **no `gh` CLI**, **no mail tool**, and no
   mailbox this agent can read.
 - Account creation is blocked in practice by GitHub's **CAPTCHA** and by
-  **email verification** — I have no email address to verify with.
-- It is also against GitHub's Acceptable Use: accounts must be registered by a
-  human. Bot accounts are permitted, but a human must create and own them.
+  **email verification**, and it is against GitHub's Acceptable Use for an agent
+  to self-register: accounts must be registered by a human. Bot accounts are
+  permitted, but a human must create and own them.
 
-**Consequence:** any bot/machine account must be created by the maintainer
-(option C in §7 item 1), then granted access. For now, the maintainer pushes.
+**Outcome:** the maintainer created `alice-agent-zc` (name *Alice*), set the
+commit identity to that account's noreply address, added this agent's SSH key as
+**both an authentication key and a signing key**, and forked the repository for
+the work. So: the maintainer minted the identity and the credentials; alice uses
+them. Neither side could have done the other's half — which is exactly why the
+split is right.
 
 ---
 
