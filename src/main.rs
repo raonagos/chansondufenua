@@ -1,26 +1,20 @@
 //! Chanson du fenua — Tahitian songs with lyrics and chords.
 //!
-//! v4 is a single-binary rewrite: Topcoat for server-rendered HTML, an
-//! embedded SQLite database, and no WASM or client build step.
+//! v4 is a single-binary rewrite: Topcoat for server-rendered HTML, an embedded
+//! SQLite database, and no WASM or client build step.
 //!
-//! Step 1 of `PLAN.md`: the smallest thing that boots. The real app shell and
-//! design tokens arrive in step 4.
+//! The binary does three things and nothing else: open the database, say what it
+//! found, and serve [`chansondufenua::router`]. The shell and the pages are
+//! library items so that `tests/` and the layout can name them.
 
 use chansondufenua::db::{self, Db, SongOrder};
-use topcoat::{
-    Result,
-    asset::{AssetBundle, RouterBuilderAssetExt},
-    router::{Router, RouterBuilderDiscoverExt, module_router, page},
-    tailwind,
-    view::{View, class, view},
-};
 
 #[tokio::main]
 async fn main() {
     let db = bootstrap_database().await;
     report(&db).await;
 
-    topcoat::start(router()).await.unwrap();
+    topcoat::start(chansondufenua::router()).await.unwrap();
 }
 
 /// Open (and migrate) the database described by `DATABASE_URL`.
@@ -35,7 +29,7 @@ async fn bootstrap_database() -> Db {
         .unwrap_or_else(|error| panic!("cannot open database {url}: {error}"))
 }
 
-/// Prove the schema is usable at boot. Replaced by the real pages in step 5.
+/// Prove the schema is usable at boot. The pages that read it arrive in step 5.
 async fn report(db: &Db) {
     let songs = db::songs(db.pool(), SongOrder::Newest, None)
         .await
@@ -47,35 +41,4 @@ async fn report(db: &Db) {
         songs.len(),
         artists.len()
     );
-}
-
-/// The router is built from this module, so `#[page]` items declared here (and
-/// in child modules) map onto `/`. Assets are loaded from `assets/` next to the
-/// binary — run `topcoat asset bundle` after building.
-fn router() -> Router {
-    module_router!()
-        .discover()
-        .assets(AssetBundle::load().unwrap())
-        .build()
-}
-
-#[page]
-async fn home() -> Result<impl View> {
-    Ok(view! {
-        <!DOCTYPE html>
-        <html lang="fr">
-            <head>
-                <meta charset="utf-8"/>
-                <meta name="viewport" content="width=device-width, initial-scale=1"/>
-                <title>"Chanson du fenua"</title>
-                <link rel="stylesheet" href=(tailwind::stylesheet!())/>
-            </head>
-            <body class=(class!("bg-white", "text-slate-900"))>
-                <main class=(class!("mx-auto", "max-w-3xl", "p-8"))>
-                    <h1 class=(class!("text-3xl", "font-bold"))>"Chanson du fenua"</h1>
-                    <p class=(class!("mt-4"))>"Tahitian songs with lyrics and chords."</p>
-                </main>
-            </body>
-        </html>
-    })
 }

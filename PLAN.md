@@ -88,6 +88,17 @@ The one-off conversion of the existing SurrealDB data into SQLite is **step 3b**
 - Keep a **design-token module** (`ui/theme.rs`) so colors/spacing are named
   once in Rust and composed everywhere — this is the "Rust design system" the
   current `tailwind.scss` `@theme` block gestures at.
+- **No `.css` file in the tree — not even a token file.** Tailwind v4 reads
+  `@theme` only from CSS, and `BuildConfig` exposes exactly one knob for
+  supplying it, `input(path)` (verified against `topcoat-tailwind` 0.10.0's
+  `src/build/config.rs`, not guessed). So `build.rs` **generates** the input
+  stylesheet into `$OUT_DIR/tailwind-input.css` from `src/ui/palette.rs`, which
+  it pulls in with `include!`. One palette, two readers: the crate compiles it
+  as a module, the build script as its own opening items.
+- That generated file lands in `$OUT_DIR` — inside `target/`, gitignored — which
+  is precisely where `topcoat-tailwind` writes its own default input when
+  `input` is unset. Nothing about the build differs from the default path except
+  which CSS text is fed in, and that text is derived from Rust.
 - **Print stays.** A chord songbook gets printed. That is done with Tailwind's
   `print:` variants inside classes, not a separate print stylesheet — the point
   of the rule is *no hand-written CSS*, not *no CSS emitted*.
@@ -740,3 +751,108 @@ that exist, `DATABASE_URL` and `HOST`/`PORT`, with the honest note that nothing
 loads the file automatically (there is no dotenv loader). `HOST`/`PORT` support
 was confirmed empirically rather than assumed: with `PORT=3999`, `:3999` answers
 200 and `:3000` refuses.
+
+---
+
+## 15. Appendix — verified in step 4 (2026-10-04)
+
+The app shell: layout, chrome, and the design tokens they compose. `src/ui/`
+replaces v3's Leptos `components/` plus two SCSS files.
+
+### The palette is Rust, not CSS
+
+`src/ui/palette.rs` is the single definition of every colour. It is read twice:
+`mod palette` for the crate, `include!("src/ui/palette.rs")` for `build.rs`.
+`build.rs` renders the `@theme` block into `$OUT_DIR/tailwind-input.css` and
+hands that path to `BuildConfig::input`.
+
+The `include!` is why the file carries no `//!` inner docs and no `use`
+statements — it has to compile as the opening items of a build-script crate root
+exactly as happily as it does as a module.
+
+### Proven live, not just present
+
+A colour was edited in `palette.rs` and the build re-run:
+
+| | `--color-tahiti-1000` | asset hash |
+|---|---|---|
+| after edit | `#0a222d` | `tailwind-79c2950cd4d1aa86.css` |
+| after revert | `#0a222c` | `tailwind-69dd4bce0d05c7dc.css` |
+
+The hash returns to its original value on revert, so the pipeline is
+content-addressed: a token change busts caches by itself, with nothing to
+remember.
+
+### Two guards the palette made possible
+
+- `every_colour_used_by_a_token_exists` — scans every class in every token for
+  `tahiti*` names and asserts each one has a palette entry. A colour with no
+  `--color-*` behind it is the quietest failure this module can have: the class
+  is still valid to write, Tailwind emits no rule for it, and the element renders
+  unstyled with nothing logged.
+- `the_palette_defines_each_name_once` — `build.rs` writes the block, so a
+  duplicate name would let one definition silently shadow another.
+
+### Judgement calls
+
+1. **The themed `@theme` route is generated, so §2.3 now holds literally.**
+   The previous shape kept `src/styles/theme.css` in the tree. `BuildConfig` has
+   no Rust-side theme API, so *something* has to reach Tailwind as CSS — the
+   choice was where that CSS lives. It now lives in `src/ui/palette.rs` as data
+   and is materialised at build time.
+2. **The hamburger is a checkbox.** v3 needed Leptos signals. v4 has no client
+   runtime, so the toggle is a `peer`-driven checkbox — same look, works with JS
+   off. Slight a11y trade-off: it announces as a checkbox, not a button.
+3. **The Google Fonts `<link>` is dropped.** v3 requested *Roboto Serif* while
+   its own stack named *Roboto/Arial/serif*, so the request could never apply. It
+   was an external render-blocking request buying nothing. If Serif is wanted,
+   the honest fixes are a `<link>` matching the stack, or Topcoat's `font` module
+   to self-host — `--font-sans` in `palette.rs` is the single place to change it.
+4. **`class="dark"` on `<html>` is kept.** v3's stylesheet contains zero `.dark`
+   rules — dark mode is `prefers-color-scheme`, which is what v4 compiles to.
+   `palette.rs` inherits that deliberately.
+
+### Known gap, carried to step 5
+
+`GET /himene/nope` returns **404 with an empty body**. Topcoat's default 404 is
+bare markup; v3 at least said *"La page n'existe pas."* Step 5 should add a
+branded `error_boundary` in the layout rather than widening step 4.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **70 tests green**
+(64 lib + 6 file-backed). `GET /`, `/aepa`, `/himene` → 200; `/himene/nope` →
+404; the `<link>`ed stylesheet → 200 `text/css` and carries
+`--color-tahiti-1000:#0a222c` and `--font-sans:Roboto, Arial, serif`. Nav
+`aria-current="page"` on the current section. `<html lang="fr">`.
+
+---
+
+## 16. Appendix — Rust/UI assessment (2026-10-04)
+
+Requested by the maintainer for the design: <https://rust-ui.com/docs/components>.
+
+**Verdict: it cannot be used with Topcoat.** It is a **Dioxus** component library
+(`rsx!`, `dioxus::prelude` — 11 occurrences on the Button page; zero `view!`).
+The installation page says Leptos is the supported framework and Dioxus is
+planned, while the component pages themselves are Dioxus — so the docs lag the
+library. Across the three pages fetched, **`topcoat` appears zero times**, as do
+`htmx`, `datastar` and `alpine`.
+
+What *is* portable is the styling: the components are Tailwind-class-based
+(`/assets/tailwind-dxh583b0ef4220fbc4.css`), and they are advertised as
+copy-and-paste with no third-party dependency, so the class recipes could be
+transcribed into `class!` tokens. What is not portable is behaviour: the
+components are built on framework reactivity (`onclick` handlers over signals),
+and v4 ships no client runtime. Interactive pieces would have to be rebuilt on
+`htmx` / `datastar`, which Topcoat does provide.
+
+Options, pending a decision:
+
+1. **Adopt Rust/UI's visual language only** — transcribe its Tailwind recipes
+   into `ui/theme.rs` and its palette into `ui/palette.rs`. Keeps the
+   zero-dependency, zero-CSS posture; costs a manual pass per component.
+2. **Keep v3's look** (what step 4 does today) and revisit later.
+3. **Switch framework to Dioxus** to get Rust/UI directly. This reintroduces the
+   client runtime and the hydration the rewrite exists to remove, so it trades
+   away the agent-readiness goal.
