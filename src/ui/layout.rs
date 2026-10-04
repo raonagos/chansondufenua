@@ -5,7 +5,13 @@
 //!
 //! * the menu toggle is a checkbox instead of a scripted button,
 //! * the dead `class="dark"` on `<html>` is kept, and
-//! * the Google Fonts request is dropped because it can never apply.
+//! * v3's Google Fonts request is replaced by three self-hosted families.
+//!
+//! The font change is the one visible redesign in this step. v3 asked Google
+//! for *Roboto Serif* and then wrote `font-family: Roboto, Arial, serif` — a
+//! different family — so the file it downloaded was never applied to anything.
+//! v4 names the families it actually ships and serves them from this binary;
+//! see [`crate::ui::fonts`].
 //!
 //! Everything else is the same markup with the same tokens, so this step is a
 //! change of mechanism rather than of design.
@@ -19,7 +25,7 @@ use topcoat::{
 };
 
 use crate::pages::{home, songs};
-use crate::ui::theme;
+use crate::ui::{fonts, theme};
 
 /// The layout every page renders inside.
 ///
@@ -47,6 +53,20 @@ pub async fn root_layout(slot: Slot<'_>) -> Result<impl View> {
                 <link rel="shortcut icon" href="/logos/logo_b32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: light)"/>
                 <link rel="shortcut icon" href="/logos/logo_w32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: dark)"/>
                 <link rel="stylesheet" href=(stylesheet)/>
+                // The `@font-face` rules, served from this binary at
+                // `/_topcoat/fonts/…`.
+                //
+                // `preload: false` deliberately. `link(font:)` would otherwise
+                // emit a `rel="preload"` per face, and a preload bypasses
+                // `unicode-range` — it fetches the file unconditionally. Three
+                // families across two subsets is ten faces, so the default would
+                // force ten downloads on every page, including the Latin
+                // Extended files that only a song with macrons ever needs.
+                // Letting the browser find the faces through the stylesheet
+                // costs one round trip and fetches only what the page draws.
+                topcoat::font::link(font: fonts::LITERATA, preload: false)
+                topcoat::font::link(font: fonts::FRAUNCES, preload: false)
+                topcoat::font::link(font: fonts::JETBRAINS_MONO, preload: false)
             </head>
             <body class=(theme::SHELL)>
                 header()

@@ -32,9 +32,40 @@ fn main() {
         css.push_str(hex);
         css.push_str(";\n");
     }
-    css.push_str("  --font-sans: ");
-    css.push_str(FONT_SANS);
-    css.push_str(";\n}\n");
+    // Typography. Only the *family names* go here; the `@font-face` rules that
+    // actually fetch a file are served by `src/ui/fonts.rs` from
+    // `/_topcoat/fonts/…`. Tailwind needs the name to write `font-family`, and
+    // `--font-sans` additionally feeds its preflight default, which is why the
+    // body face can be set from here without a `*` selector.
+    for (name, family) in [
+        ("sans", FONT_SANS),
+        ("display", FONT_DISPLAY),
+        ("mono", FONT_MONO),
+    ] {
+        css.push_str("  --font-");
+        css.push_str(name);
+        css.push_str(": ");
+        css.push_str(family);
+        css.push_str(";\n");
+    }
+
+    // Depth. Same single-source rule as the colours: the values live in
+    // `palette.rs`, `theme.rs` refers to them as `rounded-card` / `shadow-card`,
+    // and this is the only place the two are joined. A name that never reaches
+    // Tailwind is a utility that silently does not exist.
+    for (namespace, tokens) in [("radius", RADII), ("shadow", SHADOWS)] {
+        for (name, value) in tokens {
+            css.push_str("  --");
+            css.push_str(namespace);
+            css.push('-');
+            css.push_str(name);
+            css.push_str(": ");
+            css.push_str(value);
+            css.push_str(";\n");
+        }
+    }
+
+    css.push_str("}\n");
 
     // Write only when the contents change, so the file's mtime stays stable and
     // an unrelated rebuild does not look like a stylesheet change.

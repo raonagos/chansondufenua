@@ -40,10 +40,52 @@ pub const PALETTE: &[(&str, &str)] = &[
 
 /// v3 applied `* { font-family: Roboto, Arial, serif }` by hand.
 ///
-/// Setting `--font-sans` instead lets Tailwind's preflight inherit the same
-/// stack everywhere, including form controls, without the `*` selector.
+/// v3 also asked Google Fonts for *Roboto Serif* while writing
+/// `font-family: Roboto, Arial, serif` — two different families, so the
+/// downloaded font was never applied and no visitor ever saw it. v4 fixes that
+/// by naming the family it actually ships; see `PLAN.md` §15.
 ///
-/// Note this is Tailwind's *default* `sans` stack, replaced. v3 also asked
-/// Google Fonts for *Roboto Serif*, which this stack never referenced — see
-/// PLAN.md §15.
-pub const FONT_SANS: &str = "Roboto, Arial, serif";
+/// **`FONT_SANS` is the body face, and it is a serif.** The name is Tailwind's,
+/// not a description: `--font-sans` is what Tailwind's preflight reads for the
+/// document default (`--default-font-family`), so whatever is named here
+/// inherits everywhere, form controls included. Renaming the variable to
+/// `--font-body` would mean overriding `--default-font-family` to match, for no
+/// gain.
+///
+/// The three names below are hand-written string literals because `build.rs`
+/// cannot see a `Font`, which is a compile-time value from the crate. The
+/// duplication is checked rather than trusted: `family_names_match_the_palette`
+/// in `src/ui/fonts.rs` asserts each one equals the family of the font actually
+/// declared there — the exact drift that broke v3.
+pub const FONT_SANS: &str = "Literata";
+pub const FONT_DISPLAY: &str = "Fraunces";
+pub const FONT_MONO: &str = "JetBrains Mono";
+
+/// Corner radii, in the `--radius-*` namespace, so Tailwind emits
+/// `rounded-card` and `rounded-panel`.
+///
+/// Depth in a dark theme is mostly this: without a radius and a border,
+/// elevation has nothing to sit on. Tailwind's defaults (`rounded-md` and up)
+/// are a little tight for card-shaped content at these sizes.
+pub const RADII: &[(&str, &str)] = &[("card", "0.75rem"), ("panel", "1.25rem")];
+
+/// Shadows, in the `--shadow-*` namespace, so Tailwind emits `shadow-card` and
+/// `shadow-lift`.
+///
+/// Two layers each, and deliberately restrained: a tight contact shadow for the
+/// edge plus a wide, low-alpha one for the lift. On a dark background a single
+/// large blur reads as a grey smudge, so the contact layer is what keeps the
+/// element looking attached to the page.
+///
+/// Both use `rgb(0 0 0 / …)` rather than the palette, because a shadow is
+/// absence of light and does not take the hue of the surface it falls on.
+pub const SHADOWS: &[(&str, &str)] = &[
+    (
+        "card",
+        "0 1px 2px rgb(0 0 0 / 0.30), 0 10px 30px -12px rgb(0 0 0 / 0.55)",
+    ),
+    (
+        "lift",
+        "0 2px 6px rgb(0 0 0 / 0.35), 0 20px 45px -18px rgb(0 0 0 / 0.65)",
+    ),
+];

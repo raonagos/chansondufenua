@@ -22,8 +22,8 @@ use crate::ui::theme;
 pub async fn songs() -> Result<impl View> {
     Ok(view! {
         <section class=(theme::PAGE)>
-            <h1 class="text-3xl font-bold mb-6">"Chanson"</h1>
-            <p class="opacity-70">
+            <h1 class=(theme::H1)>"Chanson"</h1>
+            <p class=(theme::LEAD)>
                 "La liste des chansons arrive à l'étape 6."
             </p>
         </section>

@@ -9,7 +9,15 @@ repository = "https://github.com/raonagos/chansondufenua"
 authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
 
 [dependencies]
-topcoat = { version = "0.10.0", features = ["sitemap", "tailwind"] }
+topcoat = { version = "0.10.0", features = [
+    "sitemap",
+    "tailwind",
+    # `font-fontsource` pulls in the vendored Fontsource catalog and the `font!`
+    # macros. `font` and `asset` are already in the default set, and `asset` is
+    # what makes `host: Asset` work — fonts are bundled and served from this
+    # binary rather than fetched from a CDN. See `src/ui/fonts.rs`.
+    "font-fontsource",
+] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 # Embedded SQLite. `sqlite` bundles libsqlite3 (via libsqlite3-sys) so nothing
 # needs installing on the host; `macros` is only for `sqlx::migrate!` and the

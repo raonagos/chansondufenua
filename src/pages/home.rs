@@ -44,19 +44,21 @@ pub async fn aepa() -> Result<impl View> {
 pub async fn home_body(canonical: bool) -> Result<impl View> {
     Ok(view! {
         <section class=(class!(theme::PAGE, "text-center"))>
-            <h1 class="text-5xl font-bold mb-6 dark:text-tahiti">
-                "Chanson du fenua"
-            </h1>
-            <p class="text-2xl italic mb-10 dark:text-gray-400">
-                "Les plus belles chansons du fenua, avec paroles et accords."
-            </p>
-            <p class="text-sm opacity-70">
-                if canonical {
-                    "(servie aussi à /aepa)"
-                } else {
-                    ""
-                }
-            </p>
+            <div class=(class!(theme::CARD, "mx-auto max-w-2xl"))>
+                <h1 class=(theme::H1)>
+                    "Chanson du fenua"
+                </h1>
+                <p class=(theme::LEAD)>
+                    "Les plus belles chansons du fenua, avec paroles et accords."
+                </p>
+                <p class="text-sm text-neutral-400">
+                    if canonical {
+                        "(servie aussi à /aepa)"
+                    } else {
+                        ""
+                    }
+                </p>
+            </div>
         </section>
     })
 }
