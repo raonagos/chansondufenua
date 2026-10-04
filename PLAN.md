@@ -140,6 +140,15 @@ Plan: a ~100-line `i18n` module, no dependencies:
 - **Decided (2026-10-04):** OG/Twitter cards render in **pure Rust**
   (`image` + text shaping). `headless_chrome` and its server-side Chromium
   requirement are dropped — see §7 item 6.
+- **No authentication, and no auth tables** (maintainer, 2026-10-04). v3 carried a
+  `user` table (135 rows of argon2id hashes) and a `DEFINE ACCESS account` JWT
+  signing key. v4 has **no** `user`, `session`, `token`, `access`, `role` or
+  `credential` table, and none is planned: the only write surface is the
+  anonymous create-song form, exactly as v3's public pages already behave, and
+  the admin path stays "the maintainer edits the database". The importer therefore
+  *counts and skips* those rows, and a test asserts `sqlite_master` holds no
+  `user` table after a full import of the real dump. The JWT key in the dump is
+  consequently dead weight — see §12.4.
 
 ---
 
@@ -206,7 +215,7 @@ Every step must build and (where applicable) pass tests **before** its commit.
 | 1 ✅ | `add: bootstrap topcoat single-crate app` | new `Cargo.toml` + `src/main.rs`; leptos crates removed from the branch | `cargo run` serves a plain "hello" page; **tailwind feature proven or fallback chosen** |
 | 2 ✅ | `add: domain entities and rules` | `src/domain/{song,artist}.rs` ported (`clean_lyrics`, `to_jsonld`, `get_meta_data`, + markdown render) with unit tests | `cargo test` green |
 | 3a ✅ | `add: sqlite layer + schema` | `migrations/0001_init.sql`, `src/db/*` (pool, WAL, queries, create_song ported), `src/db/fixtures.rs` — **four real songs**, not invented ones; `src/lib.rs` added so `tests/` can drive a file-backed database | 52 tests green (46 lib + 6 file-backed), clippy clean, binary boots and creates the schema |
-| 3b | `add: importer for surreal dump` → then run it | `src/bin/import.rs` reading the SurrealQL export | **dump received 2026-10-04**; 43 of the 46 live songs import with their original ids (§5) |
+| 3b ✅ | `add: surreal export importer (step 3b)` | `src/db/import.rs` (SurrealQL parser + transactional load) + `examples/import.rs` CLI | importer written and **proven against the real dump** (34 artists / 43 songs / 42 credits, byte-for-byte round-trip, order matches live); *running* it on real data is held for the v4 release — `11226ca` |
 | 4 | `add: app shell, layout and design tokens` | `src/ui/*` (layout, header/nav, footer, `class!` tokens) | pages render inside the shell; print variants present |
 | 5 | `add: home page` | `/` and `/aepa` (hero, cards, latest + most-viewed tables) | parity with `HomePage` |
 | 6 | `add: songs index page` | `/himene` table | parity with `AllSongPage` |
@@ -241,22 +250,34 @@ Every step must build and (where applicable) pass tests **before** its commit.
 >   ACCESS account` JWT signing key, and 135 `user` rows holding argon2id hashes.
 >   Neither is imported, and the file must never be committed (§12.4).
 
-So the import is 4 % incomplete (3 songs), not "deferred". Two ways to close the
-gap, in preference order:
+> **Update 2026-10-04 (maintainer): the import runs at the v4 release, not now.**
+> The code is finished and proven (`11226ca`); what is deferred is *executing* it.
+> Reasons: (a) the rewrite must not be gated on data — every step from 4 onward
+> works from committed fixtures; (b) a release-time import can take a **fresh**
+> export, which closes the 3-song gap exactly rather than approximately; and (c)
+> the dump is more useful kept intact as the specification of the data shape than
+> consumed now. The dump stays in `.run/inbox/` (gitignored) as that reference.
 
-1. **Scrape the 3 missing songs** from the live pages (which is where the other
-   43 were just validated against anyway), or
-2. ask for a fresh export.
+So the import is 4 % incomplete (3 songs) whenever it does run. Two ways to close
+the gap, in preference order:
+
+1. **A fresh export at release time** — now the default, since it costs one
+   command and closes the gap exactly rather than approximately.
+2. **Scrape the 3 missing songs** from the live pages (which is where the other
+   43 were just validated against anyway).
 
 Either way it is a top-up, not a blocker: the schema, the id scheme and the
 credit model are all confirmed against real data.
 
+The mechanism, end to end:
+
 1. The exporter is `surreal export`, which emits exactly the format now sitting
    in `.run/inbox/`: `DEFINE …` statements, then one `INSERT [ {…}, {…} ]` line
    per table.
-2. `src/bin/import.rs` reads that and inserts into SQLite, preserving `id`,
+2. `src/db/import.rs` reads that and inserts into SQLite, preserving `id`,
    `created_at`, `updated_at`, `view_count`, `published` and the **order** of
    each song's credit list. Timestamps are kept at nanosecond precision.
+   `examples/import.rs` is the CLI: `cargo run --example import -- <dump>`.
 3. Verify: counts (43 songs / 34 artists), id-for-id equality with the live
    sitemap, and the byte-for-byte lyrics comparison above.
 
@@ -339,6 +360,16 @@ Mapped to the isitagentready.com categories:
     already renders `clean_lyrics`, and Topcoat has no markdown, so we emit it
     ourselves.
   - `llms.txt` at the root: what the site is + canonical entry points.
+- **Real links, not JS navigation.** Every song row renders
+  `<a href="/himene/{id}">Title</a>` **server-side**. v3 emitted
+  `<a href class="tab-link">` — an `href` with no value — plus
+  `onclick="window.location=…"`. That element is not a link: nothing without a
+  JavaScript engine can follow it, and it is also unreachable by keyboard,
+  un-middle-clickable and un-copyable. The `href` is what makes the page a
+  document rather than an app. `data-nosnippet` on the chord `<sup>`s is kept for
+  the reason the maintainer gave: Google prints page text in snippets, and a chord
+  sitting over a syllable reads as a typo there. Chords belong in the song, not in
+  the search result — the metas are already chord-free via `clean_lyrics`.
 - **Bot Access Control**
   - Explicit AI-bot rules + a **Content-Signal** policy in `robots.txt`
     (search vs. ai-input vs. ai-train) — the maintainer chooses the policy.
@@ -373,10 +404,10 @@ Mapped to the isitagentready.com categories:
    `user.name` / `user.email`, which silently override the global identity.
    Check `git config --local --list` before committing, or the commits go out
    under someone else's name and unsigned.
-2. **SurrealDB dump** — needed for **step 3b only** (loading the real 46 rows).
-   I have no access to the live database, so the maintainer runs
-   `surreal export` when convenient. Steps 1–12 use committed fixtures instead
-   and are **not blocked** by this.
+2. **SurrealDB dump** — ✅ **Received (2026-10-04)** and analysed (§5, §5b). The
+   importer is written and proven against it (`11226ca`). Loading it into the
+   shipped database is **held for the v4 release** by maintainer decision (§5);
+   steps 4–12 work from committed fixtures and are **not blocked**.
 3. **"Roadmap that are checked"** — I found no checkbox roadmap in the repo, so
    I've assumed it means *do not add previously-planned features; rebuild the
    current app only*. Correct me if you meant a specific list.
@@ -588,3 +619,51 @@ The SQLite layer, built against the real dump rather than guesses.
    clean, `cargo fmt --check` clean. The binary boots, creates
    `data/chansondufenua.db`, reports WAL mode, and applies migration 1 —
    including the FTS5 shadow tables.
+
+---
+
+## 13. Appendix — verified in step 3b (2026-10-04)
+
+1. **A second binary breaks `topcoat asset bundle`, and `default-run` does not
+   fix it.** It scans `target/debug/` for the binary to read assets out of; with
+   `src/bin/import.rs` present it refuses to guess:
+
+   ```text
+   cargo produced multiple targets; pass --bin or --package to choose one,
+   or set `[package] default-run` in Cargo.toml
+   ```
+
+   Setting `default-run = "chansondufenua"` — the fix it suggests — was tried and
+   **ignored** by topcoat-cli 0.10.0. The importer therefore lives in
+   **`examples/import.rs`**, which builds into `target/debug/examples/`, so the
+   deploy path stays `cargo build && topcoat asset bundle && ./target/debug/chansondufenua`.
+   Invoke it with `cargo run --example import -- <dump>`. Anything that adds a
+   `src/bin/*.rs` to this crate will break the deploy step until it declares its
+   binary explicitly — keep dev-only binaries in `examples/`.
+
+2. **Tailwind scans every source file, including `examples/` and doc comments.**
+   Adding the importer changed the emitted stylesheet's hash and size
+   (`tailwind-3e1ec238c97a489a.css`, 8949 B, from 8887 B). Class-like words in
+   prose or in a doc comment can end up in the bundle. Nothing broke, but it means
+   the CSS hash is not a stable function of the pages alone — do not treat a hash
+   change as evidence that a page changed.
+
+3. **A clippy suggestion was wrong about lifetimes, and one was right.** The lint
+   flagged `table_of<'a>(fields: &'a [..]) -> Result<&'a str, _>` (one input
+   lifetime — genuinely elidable, fixed) and I misread it as pointing at
+   `field<'a>` (two input lifetimes — *not* elidable; "fixing" it fails with
+   `E0106`). Read the span before applying a lint suggestion across several
+   similar functions.
+
+4. **The one test failure in this step was the test, not the code.**
+   `a_missing_field_is_reported_not_defaulted` omitted both `title` and `artists`
+   from its fixture; because `song_from` reads `artists` first, the error named
+   `artists`. A real export always carries the key (one of the 43 songs has
+   `artists: []`), so the strictness is correct and the fixture was simply
+   unrealistic. Worth recording because "the failing assertion is the wrong one"
+   is the common case, and the temptation is to loosen the code instead.
+
+5. **Numbers:** 61 tests (55 lib + 6 file-backed), clippy and fmt clean, binary
+   boots and serves `GET /` → 200 with the Tailwind asset, schema created with
+   exactly `artist`, `artist_fts`, `song`, `song_artist` (+ FTS shadow tables) —
+   **no `user`, `session`, `access` or `token` table anywhere**.
