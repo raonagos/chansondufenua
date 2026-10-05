@@ -1082,3 +1082,126 @@ comma-joined in v3's order, uncredited ones carry an empty cell; zero `onclick`,
 `last:border-b-0`, `px-6`, `rounded-card` — and, now, `truncate` and
 `max-md:hidden`. `/` unchanged (ten rows), `/himene/nope` still 404 with the
 chrome.
+
+---
+
+## 19. Appendix — verified in step 7 (2026-10-05)
+
+The song sheet: `/himene/{id}`, transcribed from v3's `SongPage`
+(`app/src/pages/himene/song.rs`) — the title, the lyric with its chords, and, for
+the first time here, a `<head>` that belongs to the page rather than to the site.
+
+### The head is the layout's job, so a song costs one extra read
+
+Topcoat 0.10 has no per-page `<head>` API: in node position a view may declare a
+`StatusCode` and response headers and nothing else. v3 went the other way —
+`leptos_meta` hoisted the page's `<Title>`/`<Meta>`/`<Script>` up into the
+document. So `document_head` in `src/ui/layout.rs` reads `uri(cx).path()` and
+loads the same row the page loads, by primary key.
+
+That second read is a deliberate trade, not an oversight: it is an indexed
+lookup in a database compiled into this binary, and the alternative is a head
+that is wrong for every song — which is the whole reason this step has a metadata
+section. A path the layout cannot resolve (a missing song, a draft, a deeper path
+under `/himene/`) falls back to the site head; the page is what turns those into
+a 404, so the fallback is never what a visitor sees.
+
+### v3's tags, kept — and the one that had to change
+
+The Open Graph and Twitter set is v3's, field for field, including the two
+`twitter_` fields that differ from their Open Graph twins (the images genuinely
+are different crops). They are emitted **only** on a song route, which is where
+v3 declared them; the home page has never carried them and still does not.
+`og:url` and the canonical link are the same URL, because v3 set both from
+`meta_og_url`.
+
+`theme-color` is the one place v3's markup had to go: it carried two values
+scoped to `prefers-color-scheme`. v4 is dark-only, so one value is correct, and
+the scheme itself is declared by the base rule `build.rs` writes next to the
+`@theme` block. A dark document that does not declare its scheme gets light
+native scrollbars and controls.
+
+The JSON-LD is rendered through `Unescaped`. That is not a hole in the escaping:
+`<script>` is a raw-text element, so entities inside it are **not** decoded, and
+an escaped JSON-LD block is broken JSON that a crawler cannot parse. The escaping
+that matters happened in the domain — `serde_json` serialises it and the only
+visitor-writable string in it has already been through `ammonia`.
+
+### The lyric is parsed, not injected
+
+v3 dropped `data.song_lyrics` into the page with `inner_html`, so every visual
+decision about a chord had to be a CSS rule matching a `<sup>`. v4 parses the
+same sanitised HTML into lines and spans (`Song::lyrics_lines`) and renders them
+with the site's own tokens: a line is a positioned `div`, a blank line is the
+same `div` with the verse-break height, and a chord is an absolutely positioned
+`<sup>` that takes no width so the words underneath still read as one line. v3's
+`data-nosnippet` on every chord is kept — a search engine that quotes the page
+prints the chords inline with the words, where they read as typos.
+
+Three differences from v3, all deliberate:
+
+1. **The credits are shown.** v3 carried the artists only inside the page's
+   metadata, so a reader arriving from a search result never saw who wrote the
+   song. The index has listed them since step 6; the sheet now does too.
+2. **A missing or unpublished song is a 404.** v3 rendered nothing at all when
+   the fetch failed. `db::song` returns drafts on purpose (the editor needs
+   them), so the page — not the query — is what filters on `published`.
+3. **The title is a heading in the display face.** v3 set it in the body face at
+   a fixed size, in a slant no shipped face can draw.
+
+### `view_count`: one line the draft was missing
+
+The plan's step-7 row lists the `view_count` increment among the deliverables,
+and v3 has it — `fn::get_song_fetch_artist` opened with
+`UPDATE song SET view_count += 1`. The draft of this step had every visible
+thing and not this one, because nothing renders the count on this page: it is
+only read back by the home page's most-viewed table. Found by reading the Done
+column rather than the code.
+
+Order is the one difference. v3 incremented before it read, so an id that did not
+exist incremented nothing and a *draft* still counted. v4 increments only for a
+sheet it is about to serve, which is what the most-viewed table means by a view.
+
+### Three defects the verification found, and the tests could not
+
+1. **The stylesheet carried an invalid declaration.** Tailwind reads the *text*
+   of every scanned file, and `src/db/import.rs` holds SurrealQL test data —
+   `artists: [artist:uynyy…]` — whose bracketed id it read as an arbitrary-value
+   utility. The served CSS contained `.\[artist\:uynyy…\]{artist:uynyy…}`: not a
+   rule, a broken declaration, on every page. Fixed in `build.rs` with
+   `@source not "<manifest>/src/db"`; nothing outside `src/ui` and `src/pages`
+   carries markup.
+2. **Prose that named the utilities it published.** `RADII`/`SHADOWS`' doc
+   comments spelled the very class names they generate, so `rounded-panel` and
+   `shadow-lift` were compiled into the stylesheet for no one to use — in a file
+   whose own header claims none of its comments spells a class name. Reworded,
+   and the claim is now true. The same trap caught this module's own guard table:
+   listing Tailwind's nine weight utilities would put eight unusable rules in
+   every stylesheet, so the names are assembled with `concat!` — a compile-time
+   constant, so the table is unchanged, but the scanner no longer reads a class.
+3. **The dead-CSS check itself was wrong.** It read the pseudo-class half of a
+   selector as part of the class: `focus-visible:outline-2`, `hover:bg-ink-800`,
+   `last:border-b-0` and `peer-focus-visible:ring-2` all appeared "unused" while
+   sitting in the markup. The name now ends at the first unescaped colon.
+
+What survives all that is unavoidable from Rust and is now **reported rather than
+asserted**: Tailwind reads `src/` as text, so `&'static str`, a `.filter(` call
+and the ordinary word "invisible" in a sentence all compile to rules nothing can
+match — six of them. The assertion is scoped to the vocabulary `palette.rs`
+publishes (24 rules), which is the part this repository owns, and a second check
+now asserts the direction that actually breaks a page: **every class in the
+markup has a rule behind it**. Stylesheet: 22 138 B → **20 776 B**.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **99 tests green**
+(93 lib + 6 file-backed). Against the real 22 March dump, imported into a
+scratch database: `/himene/7114wvk91gffr2bj6wza` → 200 with title
+`'Āhani e - 2B Brothers Tahiti | Chanson du fenua`, 50 lyric lines, 50 chords,
+6 verse gaps, the credits `2B Brothers Tahiti`; canonical == `og:url` == the
+song's own URL; the JSON-LD parses as a `MusicComposition` naming the song and
+carrying the clean lyric text; **43 of 43 published songs** render a sheet;
+two fetches moved that song's `view_count` 29 → 31. `/` and `/himene` unchanged
+— ten rows, 43 links, `<title>Chanson du Fenua</title>` — and `/himene/nope`
+still 404 with the chrome. 41/41 HTML checks and 27/27 stylesheet checks in
+`.run/step7.sh`.

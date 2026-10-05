@@ -13,6 +13,7 @@
 //! that path ambiguous.
 
 pub mod home;
+pub mod song;
 pub mod songs;
 
 // Every URL that matches nothing else.

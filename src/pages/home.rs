@@ -16,8 +16,8 @@
 //!   *also* put correct `<a href>` elements inside it. v4 keeps the anchors and
 //!   drops the rest: the same destination, reachable without executing anything.
 //! * **The surfaces are the v4 panel.** v3's cards and table panels were a
-//!   translucent `bg-neutral-200/10` wash under a `backdrop-blur`; v4 uses the
-//!   one raised-panel token the header and footer already speak. This is the one
+//!   translucent wash under a frosted backdrop; v4 uses the one raised-panel
+//!   token the header and footer already speak. This is the one
 //!   *visible* change in the step — see `PLAN.md` §16.
 //!
 //! The copy is v3's, byte for byte. It lives in [`copy`] as constants rather than
@@ -33,6 +33,7 @@ use topcoat::{
 
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
+use crate::pages::song as sheet;
 use crate::pages::songs;
 use crate::state;
 use crate::ui::theme;
@@ -141,7 +142,12 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             <section class=(theme::HERO)>
                 <h1 class=(theme::HERO_TITLE)>(copy::HERO_TITLE)</h1>
                 <p class=(theme::HERO_SUBTITLE)>(copy::HERO_SUBTITLE)</p>
-                <a href=(songs_link) class=(theme::BUTTON_PRIMARY)>(copy::HERO_CTA)</a>
+                <a
+                    href=(songs_link)
+                    class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))
+                >
+                    (copy::HERO_CTA)
+                </a>
             </section>
 
             <section class=(theme::CARD_GRID)>
@@ -193,11 +199,14 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
                 <div class=(theme::FOOT_LINKS)>
                     <a
                         href="https://facebook.com/chansondufenua"
-                        class=(theme::BUTTON_LIGHT)
+                        class=(class!(theme::BUTTON_LIGHT, theme::FOCUS))
                     >
                         (copy::FOOT_FACEBOOK)
                     </a>
-                    <a href="/himene/api" class=(theme::BUTTON_OUTLINE)>
+                    <a
+                        href="/himene/api"
+                        class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))
+                    >
                         (copy::FOOT_CTA)
                     </a>
                 </div>
@@ -212,12 +221,16 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
 /// with it, the most-viewed table leads with the title — v3's arrangement, kept.
 ///
 /// The whole chord-free lyric is in the markup. v3 did not truncate on the
-/// server either; `truncate` in [`theme::TABLE_LYRICS`] is what makes it one
-/// line, and the per-breakpoint width there is what gives it something to cut
-/// against.
+/// server either; the truncation utility in [`theme::TABLE_LYRICS`] is what
+/// makes it one line, and the per-breakpoint width there is what gives it
+/// something to cut against.
+///
+/// The URL comes from the song page's own route through `href!`, so `/himene/`
+/// is spelled in exactly one file — see `src/pages/song.rs`. `cx` is not
+/// optional for that: resolving a parameterised `href` needs the request.
 #[component]
-pub async fn song_row(song: Song, #[default] inverse: bool) -> Result<impl View> {
-    let url = format!("/himene/{}", song.get_id());
+pub async fn song_row(cx: &Cx, song: Song, #[default] inverse: bool) -> Result<impl View> {
+    let url = href!(sheet::song, sheet::Id(song.get_id())).resolve(cx);
     let title = song.get_title();
     let lyrics = song.clean_lyrics();
 
@@ -225,17 +238,27 @@ pub async fn song_row(song: Song, #[default] inverse: bool) -> Result<impl View>
         <tr class=(theme::TABLE_ROW)>
             if inverse {
                 <td class=(theme::TABLE_LYRICS_CELL)>
-                    <a class=(theme::TABLE_LYRICS) href=(url.clone())>(lyrics.clone())</a>
+                    <a
+                        class=(class!(theme::TABLE_LYRICS, theme::LINK))
+                        href=(url.clone())
+                    >
+                        (lyrics.clone())
+                    </a>
                 </td>
                 <td class=(theme::TABLE_CELL)>
-                    <a href=(url.clone())>(title.clone())</a>
+                    <a class=(theme::LINK) href=(url.clone())>(title.clone())</a>
                 </td>
             } else {
                 <td class=(theme::TABLE_CELL)>
-                    <a href=(url.clone())>(title.clone())</a>
+                    <a class=(theme::LINK) href=(url.clone())>(title.clone())</a>
                 </td>
                 <td class=(theme::TABLE_LYRICS_CELL)>
-                    <a class=(theme::TABLE_LYRICS) href=(url.clone())>(lyrics.clone())</a>
+                    <a
+                        class=(class!(theme::TABLE_LYRICS, theme::LINK))
+                        href=(url.clone())
+                    >
+                        (lyrics.clone())
+                    </a>
                 </td>
             }
         </tr>

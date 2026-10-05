@@ -231,6 +231,30 @@ impl Song {
         html_to_markdown(&self.lyrics_html())
     }
 
+    /// The lyrics as lines of text and chords, for rendering.
+    ///
+    /// The input is [`Song::lyrics_html`], so `ammonia` has already decided
+    /// what counts as markup before a single character is read here. What
+    /// survives in the corpus — verified across all 43 songs of the 2025-03-22
+    /// export — is `<div>` per line, `<br>` for a verse break, `<sup>` for a
+    /// chord, `&nbsp;` runs for spacing, and one song that wraps a spacer in
+    /// `<span><b>`. Anything else is treated as transparent: the tag is dropped
+    /// and the text inside it kept.
+    ///
+    /// **Whitespace is preserved**, which is the difference from
+    /// [`Song::clean_lyrics`]. Chords are positioned against the syllable they
+    /// follow, so a run of non-breaking spaces is load-bearing: collapse it, and
+    /// the chords pile up at the start of the line. A blank line is an empty
+    /// vector, not a vector holding a space.
+    ///
+    /// This exists so the page can style a chord. v3 dropped sanitised HTML
+    /// straight into the template, which meant every visual decision about a
+    /// chord had to be a CSS rule matching a `<sup>` — the one place in the
+    /// rewrite where styling would have escaped the token vocabulary.
+    pub fn lyrics_lines(&self) -> Vec<LyricLine> {
+        lyric_lines_of(&self.lyrics_html())
+    }
+
     /// Convert the song into schema.org structure data markup.
     pub fn to_jsonld(&self) -> String {
         use serde_json::json;
@@ -327,6 +351,188 @@ pub struct MetaSongData {
     pub meta_og_img_alt: String,
     pub song_title: String,
     pub song_lyrics: String,
+}
+
+/// One run of a lyric line: the words, or the chord written over them.
+///
+/// The distinction is the whole point of [`Song::lyrics_lines`]: a chord is
+/// positioned against the syllable it marks, and the page can only place it if
+/// it can tell a chord from the lyric around it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LyricSpan {
+    /// Lyric text, spaced exactly as the author spaced it.
+    Text(String),
+    /// A chord label — `B`, `F#`, `Abm`.
+    Chord(String),
+}
+
+/// One line of a song: alternating text and chords, in reading order.
+///
+/// A verse break is an empty `Vec`. Keeping that distinct from a line of spaces
+/// is what lets the page give a break its own height instead of guessing.
+pub type LyricLine = Vec<LyricSpan>;
+
+/// Scanner turning the sanitised chord markup into lines of spans.
+///
+/// Hand-rolled for the same reason [`html_to_markdown`] is: the markup is tiny
+/// and regular, and the one thing it must never do is lose a character. The
+/// losslessness is asserted rather than assumed — `lyrics_lines_lose_no_text`
+/// re-extracts the text with an independent scanner and compares, over every
+/// fixture as well as the real markup below.
+fn lyric_lines_of(html: &str) -> Vec<LyricLine> {
+    let mut lines: Vec<LyricLine> = Vec::new();
+    let mut current: LyricLine = Vec::new();
+    let mut in_chord = false;
+    let bytes = html.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        match bytes[i] {
+            b'<' => match html[i..].find('>') {
+                Some(offset) => {
+                    let tag = &html[i + 1..i + offset];
+                    let closing = tag.starts_with('/');
+                    let name = tag
+                        .trim_start_matches('/')
+                        .split(|c: char| c.is_ascii_whitespace() || c == '/')
+                        .next()
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
+
+                    match (name.as_str(), closing) {
+                        ("sup", false) => in_chord = true,
+                        ("sup", true) => in_chord = false,
+                        // A block opens only if there is a line to close.
+                        // Otherwise `<div>a</div><div>b</div>` would leave a
+                        // blank between a and b.
+                        ("div" | "p" | "li", false) => end_line_soft(&mut lines, &mut current),
+                        ("div" | "p" | "li", true) | ("br", _) => {
+                            end_line(&mut lines, &mut current);
+                        }
+                        _ => {}
+                    }
+                    i += offset + 1;
+                }
+                // Unterminated tag: stop rather than lose the tail.
+                None => {
+                    push_text(&mut current, in_chord, " ");
+                    break;
+                }
+            },
+            b'&' => match decode_entity(html, i) {
+                Some((next, ch)) => {
+                    push_char(&mut current, in_chord, ch);
+                    i = next;
+                }
+                None => {
+                    push_char(&mut current, in_chord, '&');
+                    i += 1;
+                }
+            },
+            _ => {
+                // Take the whole run up to the next tag or entity at once: most
+                // of a song is one of these, and a per-character path would
+                // allocate a span per letter.
+                let start = i;
+                while i < bytes.len() && bytes[i] != b'<' && bytes[i] != b'&' {
+                    i += 1;
+                }
+                push_text(&mut current, in_chord, &html[start..i]);
+            }
+        }
+    }
+
+    end_line(&mut lines, &mut current);
+    normalize_lines(lines)
+}
+
+/// Appends text to the span it belongs to, opening a new span only when the
+/// kind changes.
+fn push_text(line: &mut LyricLine, chord: bool, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    match (line.last_mut(), chord) {
+        (Some(LyricSpan::Text(existing)), false) => existing.push_str(text),
+        (Some(LyricSpan::Chord(existing)), true) => existing.push_str(text),
+        _ => line.push(span(chord, text.to_owned())),
+    }
+}
+
+/// [`push_text`] for a single decoded character.
+fn push_char(line: &mut LyricLine, chord: bool, ch: char) {
+    match (line.last_mut(), chord) {
+        (Some(LyricSpan::Text(existing)), false) => existing.push(ch),
+        (Some(LyricSpan::Chord(existing)), true) => existing.push(ch),
+        _ => line.push(span(chord, ch.to_string())),
+    }
+}
+
+fn span(chord: bool, text: String) -> LyricSpan {
+    if chord {
+        LyricSpan::Chord(text)
+    } else {
+        LyricSpan::Text(text)
+    }
+}
+
+/// Ends the current line and keeps it.
+fn end_line(lines: &mut Vec<LyricLine>, current: &mut LyricLine) {
+    trim_line_ends(current);
+    lines.push(std::mem::take(current));
+}
+
+/// Ends the current line, keeping it only if it has content.
+fn end_line_soft(lines: &mut Vec<LyricLine>, current: &mut LyricLine) {
+    trim_line_ends(current);
+    if !current.is_empty() {
+        lines.push(std::mem::take(current));
+    }
+}
+
+/// Drops ASCII spaces at the ends of a line, and any span they empty.
+///
+/// Only ASCII spaces: a non-breaking space at the edge of a line is how the
+/// author pushed a chord into place, and trimming it would move the chord.
+fn trim_line_ends(line: &mut LyricLine) {
+    if let Some(LyricSpan::Text(text)) = line.first_mut() {
+        *text = text.trim_start_matches(' ').to_owned();
+    }
+    if let Some(LyricSpan::Text(text)) = line.last_mut() {
+        *text = text.trim_end_matches(' ').to_owned();
+    }
+    line.retain(|span| match span {
+        LyricSpan::Text(text) | LyricSpan::Chord(text) => !text.is_empty(),
+    });
+}
+
+/// Drops blank lines at the edges and collapses interior runs to one.
+///
+/// The corpus writes a verse break as `<div><br></div>`, which the scanner sees
+/// as two line ends in a row, so an un-collapsed break would render as a hole in
+/// the song. The leading edge is handled the same way because the markup often
+/// opens with a break that carries no meaning.
+fn normalize_lines(lines: Vec<LyricLine>) -> Vec<LyricLine> {
+    let mut out: Vec<LyricLine> = Vec::new();
+    let mut previous_blank = true; // so leading blank lines disappear
+
+    for line in lines {
+        if line.is_empty() {
+            if !previous_blank {
+                out.push(line);
+                previous_blank = true;
+            }
+        } else {
+            out.push(line);
+            previous_blank = false;
+        }
+    }
+
+    while out.last().is_some_and(|line| line.is_empty()) {
+        out.pop();
+    }
+
+    out
 }
 
 /// Markdown renderer for the chord markup.
@@ -446,7 +652,12 @@ fn decode_entity(html: &str, start: usize) -> Option<(usize, char)> {
 
     let name = &rest[1..end];
     let ch = match name {
-        "nbsp" => ' ',
+        // A *real* non-breaking space, not a space. It is how the corpus
+        // positions a chord: HTML collapses a run of ordinary spaces but never
+        // a run of these, so decoding this to ' ' would let the layout drop
+        // exactly the spacing the author wrote. `html_to_markdown` collapses
+        // whitespace afterwards and so is unaffected.
+        "nbsp" => '\u{a0}',
         "amp" => '&',
         "lt" => '<',
         "gt" => '>',
@@ -803,4 +1014,175 @@ mod tests {
             })
         ));
     }
+    // ---- lyrics_lines (new, for rendering) --------------------------------
+
+    /// The chord sits *between* the syllables it joins, and the line survives
+    /// as one line. This is the shape the page's positioning depends on.
+    #[test]
+    fn lyrics_lines_keeps_chords_where_the_author_put_them() {
+        let song = song_with(REAL_LYRICS);
+
+        assert_eq!(
+            song.lyrics_lines(),
+            vec![
+                vec![
+                    LyricSpan::Text("'Āhani e".to_owned()),
+                    LyricSpan::Chord("B".to_owned()),
+                    // Non-breaking spaces: the author's spacing, kept, because
+                    // the next chord is positioned by it.
+                    LyricSpan::Text("\u{a0} \u{a0} \u{a0}".to_owned()),
+                    LyricSpan::Chord("F#".to_owned()),
+                ],
+                vec![
+                    LyricSpan::Text("E rāve'a".to_owned()),
+                    LyricSpan::Chord("Abm".to_owned()),
+                ],
+                vec![
+                    LyricSpan::Text("Nō te fa".to_owned()),
+                    LyricSpan::Chord("E".to_owned()),
+                    LyricSpan::Text("'aho'i te ta".to_owned()),
+                    LyricSpan::Chord("B".to_owned()),
+                    LyricSpan::Text("u i muri".to_owned()),
+                    LyricSpan::Chord("F#".to_owned()),
+                ],
+                vec![
+                    LyricSpan::Text("Hina'a".to_owned()),
+                    LyricSpan::Chord("Eb".to_owned()),
+                    LyricSpan::Text("ro ho'i au".to_owned()),
+                ],
+            ]
+        );
+    }
+
+    /// A chord must not split the word it sits inside — the two text spans
+    /// either side of it stay separate, so the page can place the chord without
+    /// inserting a break into the lyric.
+    #[test]
+    fn a_chord_inside_a_word_leaves_the_word_in_two_runs() {
+        let song = song_with("<div>Hina'a<sup data-nosnippet=\"true\">Eb</sup>ro</div>");
+
+        assert_eq!(
+            song.lyrics_lines(),
+            vec![vec![
+                LyricSpan::Text("Hina'a".to_owned()),
+                LyricSpan::Chord("Eb".to_owned()),
+                LyricSpan::Text("ro".to_owned()),
+            ]]
+        );
+    }
+
+    /// The verse break is one empty line, however the markup spells it.
+    #[test]
+    fn lyrics_lines_gives_a_verse_break_one_blank_line() {
+        for markup in [
+            "<div>one</div><div><br></div><div>two</div>",
+            "<div>one</div><div><br></div><div><br></div><div>two</div>",
+        ] {
+            let song = song_with(markup);
+            let lines = song.lyrics_lines();
+
+            assert_eq!(lines.len(), 3, "wrong line count for {markup:?}: {lines:?}");
+            assert!(lines[1].is_empty(), "the break is not blank: {markup:?}");
+            assert_eq!(lines[0], vec![LyricSpan::Text("one".to_owned())]);
+            assert_eq!(lines[2], vec![LyricSpan::Text("two".to_owned())]);
+        }
+    }
+
+    /// ...and a break at either edge of the song is not a line at all: a sheet
+    /// that opened with a gap would look like a missing verse.
+    #[test]
+    fn lyrics_lines_drops_breaks_at_the_edges() {
+        let song = song_with("<div><br></div><div>one</div><div><br></div>");
+
+        assert_eq!(
+            song.lyrics_lines(),
+            vec![vec![LyricSpan::Text("one".to_owned())]]
+        );
+    }
+
+    /// Unknown inline markup is transparent: the span survives, the tag does
+    /// not. One song in the export wraps a spacer in `<span><b>`, and the
+    /// scanner must not drop the spaces inside it.
+    #[test]
+    fn unknown_inline_tags_are_transparent() {
+        let song = song_with("<div>a<span><b>&nbsp;&nbsp;</b></span>b</div>");
+
+        assert_eq!(
+            song.lyrics_lines(),
+            vec![vec![LyricSpan::Text("a\u{a0}\u{a0}b".to_owned())]]
+        );
+    }
+
+    /// The one property that matters more than any of the above: the scanner
+    /// loses no text.
+    ///
+    /// Checked with an independently written extractor, over the real markup and
+    /// over every fixture, because a scanner that quietly eats a syllable would
+    /// still pass every other test in this file.
+    #[test]
+    fn lyrics_lines_lose_no_text() {
+        let mut checked = vec![REAL_LYRICS];
+        checked.extend(crate::db::fixtures::SONGS.iter().map(|song| song.lyrics));
+        assert!(checked.len() > 1, "the fixtures are not being read");
+
+        for markup in checked {
+            let song = song_with(markup);
+            let expected = squash(&extract_text(&song.lyrics_html()));
+            let actual = squash(
+                &song
+                    .lyrics_lines()
+                    .iter()
+                    .flatten()
+                    .map(|span| match span {
+                        LyricSpan::Text(text) | LyricSpan::Chord(text) => text.as_str(),
+                    })
+                    .collect::<String>(),
+            );
+
+            assert_eq!(
+                actual, expected,
+                "the scanner changed the text of a song: {markup:.80}…"
+            );
+        }
+    }
+
+    /// Extracts every character of text, decoding entities, with an approach
+    /// deliberately unlike [`lyric_lines_of`]'s: it knows nothing about lines or
+    /// chords, so it cannot agree with a mistake those two make together.
+    fn extract_text(html: &str) -> String {
+        let mut out = String::new();
+        let mut i = 0;
+        while i < html.len() {
+            match html.as_bytes()[i] {
+                b'<' => match html[i..].find('>') {
+                    Some(offset) => i += offset + 1,
+                    None => break,
+                },
+                b'&' => match decode_entity(html, i) {
+                    Some((next, ch)) => {
+                        out.push(ch);
+                        i = next;
+                    }
+                    None => {
+                        out.push('&');
+                        i += 1;
+                    }
+                },
+                _ => {
+                    let ch = html[i..].chars().next().expect("a char boundary");
+                    out.push(ch);
+                    i += ch.len_utf8();
+                }
+            }
+        }
+        out
+    }
+
+    /// Everything but whitespace, so the comparison is about words rather than
+    /// about where the scanner chose to break them.
+    fn squash(text: &str) -> String {
+        text.chars().filter(|c| !c.is_whitespace()).collect()
+    }
+
+    // ---- metadata ---------------------------------------------------------
 }
