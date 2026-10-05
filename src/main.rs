@@ -14,7 +14,7 @@ async fn main() {
     let db = bootstrap_database().await;
     report(&db).await;
 
-    topcoat::start(chansondufenua::router()).await.unwrap();
+    topcoat::start(chansondufenua::router(db)).await.unwrap();
 }
 
 /// Open (and migrate) the database described by `DATABASE_URL`.
@@ -29,7 +29,11 @@ async fn bootstrap_database() -> Db {
         .unwrap_or_else(|error| panic!("cannot open database {url}: {error}"))
 }
 
-/// Prove the schema is usable at boot. The pages that read it arrive in step 5.
+/// Say what the database holds, before the first request is served.
+///
+/// Two counts on stderr rather than a health endpoint. A fresh clone serves an
+/// empty site, and `0 songs, 0 artists` on boot is the quickest way to notice
+/// that the data was never imported — much quicker than reading the empty page.
 async fn report(db: &Db) {
     let songs = db::songs(db.pool(), SongOrder::Newest, None)
         .await

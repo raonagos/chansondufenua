@@ -1,11 +1,18 @@
 //! The page shell: one layout, wrapping every page.
 //!
 //! Transcribed from v3's `app.rs` (`shell`) + `components/body/{mod,header}.rs`,
-//! with three differences, each deliberate and each explained where it happens:
+//! with five differences, each deliberate and each explained where it happens:
 //!
 //! * the menu toggle is a checkbox instead of a scripted button,
-//! * the dead `class="dark"` on `<html>` is kept, and
-//! * v3's Google Fonts request is replaced by three self-hosted families.
+//! * the dead `class="dark"` on `<html>` is kept,
+//! * v3's Google Fonts request is replaced by three self-hosted families,
+//! * the document head is decided from the request path by [`document_head`],
+//!   because Topcoat has no per-page `<head>` API, and
+//! * the slot is wrapped in an [`error_boundary`], so a page that fails with a
+//!   [`NotFoundError`] renders the site's own 404 instead of Topcoat's bare
+//!   default. That covers *raised* errors only — a URL matching no route never
+//!   reaches the layout at all, which is why `pages::not_found!("/")` also
+//!   exists; see `PLAN.md` §17.
 //!
 //! The font change is the one visible redesign in this step. v3 asked Google
 //! for *Roboto Serif* and then wrote `font-family: Roboto, Arial, serif` — a
@@ -19,21 +26,66 @@
 use topcoat::{
     Result,
     context::Cx,
-    router::{Slot, href, layout},
+    router::{Slot, StatusCode, error::NotFoundError, href, layout, request::uri},
     tailwind,
-    view::{View, class, component, view},
+    view::{View, class, component, error_boundary, view},
 };
 
+use crate::domain::song::SITE_URL;
 use crate::pages::{home, songs};
 use crate::ui::{fonts, theme};
+
+/// The document title.
+///
+/// v3's `<Title text="Chanson du Fenua"/>`: set once on the app root, and
+/// overridden only by the song page — which is why the capital F here and the
+/// lowercase one in [`crate::domain::song::Song::get_meta_data`] coexist. Step 7
+/// needs a real per-page mechanism for that; this constant is what the home page
+/// and everything else shows until then.
+const TITLE: &str = "Chanson du Fenua";
+
+/// The two head elements that vary by route.
+struct DocumentHead {
+    description: Option<&'static str>,
+    /// The preferred URL of a page reachable at more than one.
+    canonical: Option<&'static str>,
+}
+
+/// Decides the per-route half of `<head>`.
+///
+/// Topcoat 0.10 has **no per-page `<head>` API**. A view can declare a status
+/// code and response headers, and nothing else document-level; a page cannot set
+/// the `<title>` or add a `<meta>`, and the layout cannot ask it for one. So the
+/// head belongs to the layout and the per-route facts are decided here, from the
+/// path.
+///
+/// That is a smaller job than it sounds. v3 had exactly one page-specific head
+/// fact — the home page's description — plus a canonical link on `/aepa`. The
+/// song page's title/OG/Twitter tags arrive in step 7 and will need a real
+/// mechanism; until then this function is where the head lives.
+fn document_head(cx: &Cx) -> DocumentHead {
+    let path = uri(cx).path();
+
+    // `/` and `/aepa` are one page under two URLs. v3 declared `/aepa` the
+    // duplicate, and its canonical URL carries no trailing slash — that is the
+    // form the live site emits, so that is the form kept.
+    let home = matches!(path, "/" | "/aepa");
+
+    DocumentHead {
+        description: home.then_some(home::copy::DESCRIPTION),
+        canonical: (path == "/aepa").then_some(SITE_URL),
+    }
+}
 
 /// The layout every page renders inside.
 ///
 /// Registered at `/`, so it wraps the whole site. It is discovered by
 /// `topcoat::router::RouterBuilderDiscoverExt::discover` — see `crate::router`.
 #[layout("/")]
-pub async fn root_layout(slot: Slot<'_>) -> Result<impl View> {
+pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
     let stylesheet = tailwind::stylesheet!();
+    let head = document_head(cx);
+    let home_link = href!(home::home);
 
     Ok(view! {
         <!DOCTYPE html>
@@ -49,7 +101,18 @@ pub async fn root_layout(slot: Slot<'_>) -> Result<impl View> {
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
                 <meta name="theme-color" content="#0891b2" media="(prefers-color-scheme: light)"/>
                 <meta name="theme-color" content="#155e75" media="(prefers-color-scheme: dark)"/>
-                <title>"Chanson du fenua"</title>
+                <title>(TITLE)</title>
+                // `<head>` elements are rendered where they are written —
+                // Topcoat has no mechanism to hoist a page's `<meta>` up here,
+                // which is the whole reason `document_head` exists.
+                match head.description {
+                    Some(description) => <meta name="description" content=(description)/>,
+                    None => "",
+                }
+                match head.canonical {
+                    Some(canonical) => <link rel="canonical" href=(canonical)/>,
+                    None => "",
+                }
                 <link rel="shortcut icon" href="/logos/logo_b32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: light)"/>
                 <link rel="shortcut icon" href="/logos/logo_w32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: dark)"/>
                 <link rel="stylesheet" href=(stylesheet)/>
@@ -70,7 +133,30 @@ pub async fn root_layout(slot: Slot<'_>) -> Result<impl View> {
             </head>
             <body class=(theme::SHELL)>
                 header()
-                <main class=(theme::MAIN)>(slot)</main>
+                <main class=(theme::MAIN)>
+                    // A 404 from any page becomes a page. Every other error is
+                    // rethrown and answered the way Topcoat would have.
+                    error_boundary(
+                        fallback: |error| {
+                            if error.downcast_ref::<NotFoundError>().is_none() {
+                                return Err(error);
+                            }
+                            Ok(view! {
+                                (StatusCode::NOT_FOUND)
+                                <section class=(theme::NOT_FOUND)>
+                                    <h1 class=(theme::H1)>"La page n'existe pas."</h1>
+                                    <p class=(theme::LEAD)>
+                                        "Cette page n'existe pas, ou n'existe plus."
+                                    </p>
+                                    <a href=(home_link) class=(theme::BUTTON_PRIMARY)>
+                                        "Retour à l'accueil"
+                                    </a>
+                                </section>
+                            })
+                        },
+                        (slot)
+                    )
+                </main>
                 footer()
             </body>
         </html>

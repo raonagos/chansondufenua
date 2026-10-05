@@ -17,6 +17,7 @@
 pub mod db;
 pub mod domain;
 pub mod pages;
+pub mod state;
 pub mod ui;
 
 use topcoat::{
@@ -24,19 +25,26 @@ use topcoat::{
     router::{Router, RouterBuilderDiscoverExt},
 };
 
+use crate::db::Db;
+
 /// Build the application router.
 ///
 /// Every handler declares its own path (`#[page("/himene")]`, `#[layout("/")]`)
 /// and `discover()` collects them at link time, so registering a page is adding
 /// a function — there is no route table to keep in step.
 ///
+/// The database is registered as the router's *app context* rather than handed
+/// to each page: a handler reaches it through [`state::db`], so no page
+/// signature grows a parameter for it and no call site has to thread one.
+///
 /// `AssetBundle::load()` reads the `assets/` directory that
 /// `topcoat asset bundle` writes next to the binary, so the build is
 /// `cargo build && topcoat asset bundle && ./target/debug/chansondufenua`.
 /// `cargo run` alone panics here.
-pub fn router() -> Router {
+pub fn router(db: Db) -> Router {
     Router::builder()
         .discover()
         .assets(AssetBundle::load().unwrap())
+        .app_context(db)
         .build()
 }

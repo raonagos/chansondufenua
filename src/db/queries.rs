@@ -113,18 +113,32 @@ pub enum SongOrder {
 }
 
 impl SongOrder {
+    /// The ordering keys, unqualified by `ORDER BY` and without `sa.position`.
+    ///
     /// Note the `s.id` tiebreaker. Without it two songs sharing a `created_at`
     /// would interleave their credit rows (the sort would fall through to
     /// `sa.position`, which is per-song), and [`assemble`] would emit one
     /// half-song per row.
-    fn clause(self) -> &'static str {
+    ///
+    /// `sa.position` is deliberately *not* here. This ordering has to be usable
+    /// *before* the join, where the credit table is not in scope yet — see
+    /// [`songs`]. It is appended at the one call site that has run the join.
+    fn song_keys(self) -> &'static str {
         match self {
-            Self::Newest => "ORDER BY s.created_at DESC, s.id, sa.position",
-            Self::Oldest => "ORDER BY s.created_at ASC, s.id, sa.position",
-            Self::MostViewed => "ORDER BY s.view_count DESC, s.id, sa.position",
-            Self::Title => "ORDER BY s.title COLLATE NOCASE ASC, s.id, sa.position",
+            Self::Newest => "s.created_at DESC, s.id",
+            Self::Oldest => "s.created_at ASC, s.id",
+            Self::MostViewed => "s.view_count DESC, s.id",
+            Self::Title => "s.title COLLATE NOCASE ASC, s.id",
         }
     }
+}
+
+/// The sub-select that picks one *page* of songs, before any join.
+///
+/// Ids only. [`SONGS_SELECT`] decorates that page with credits afterwards, and
+/// the decoration must not be able to change which songs are on the page.
+fn page_select(keys: &str) -> String {
+    format!("SELECT s.id FROM song s WHERE s.published = 1 ORDER BY {keys} LIMIT ?1")
 }
 
 /// Fold credit rows into songs, preserving both the row order and each song's
@@ -183,13 +197,24 @@ fn finish(head: SongArtistRow, artists: Vec<Artist>) -> DbResult<Song> {
 // ---------------------------------------------------------------------------
 
 /// Every published song, with its credits, in `order`.
+///
+/// `limit` counts **songs**, not rows, and that is the whole reason this is not
+/// a bare `LIMIT`. The read joins one row per *credit*, so a song with two
+/// credited artists contributes two rows — and `LIMIT 5` over that join returns
+/// four songs for the price of five. The bug was live, not theoretical: the home
+/// page's most-viewed table rendered four rows until this was fixed, because the
+/// busiest song in the export has two credits. `page_select` picks the page of
+/// songs first; the join only decorates it.
+///
+/// `a_limited_read_counts_songs_not_credit_rows` is the regression test.
 pub async fn songs(pool: &SqlitePool, order: SongOrder, limit: Option<i64>) -> DbResult<Vec<Song>> {
+    let keys = order.song_keys();
     let sql = match limit {
         Some(_) => format!(
-            "{SONGS_SELECT} WHERE s.published = 1 {} LIMIT ?1",
-            order.clause()
+            "{SONGS_SELECT} WHERE s.id IN ({}) ORDER BY {keys}, sa.position",
+            page_select(keys)
         ),
-        None => format!("{SONGS_SELECT} WHERE s.published = 1 {}", order.clause()),
+        None => format!("{SONGS_SELECT} WHERE s.published = 1 ORDER BY {keys}, sa.position"),
     };
 
     let mut query = sqlx::query_as::<_, SongArtistRow>(&sql);
@@ -559,6 +584,42 @@ mod tests {
         let db = seeded().await;
         let limited = songs(db.pool(), SongOrder::Newest, Some(2)).await.unwrap();
         assert_eq!(limited.len(), 2);
+    }
+
+    /// `limit` counts songs, not credit rows.
+    ///
+    /// The busiest fixture ("Te here fenua") carries **two** credits, so a
+    /// `LIMIT` applied to the joined rows would spend both of them on that one
+    /// song and return a single row for `Some(2)`. That is exactly what the home
+    /// page's most-viewed table did before this was fixed: it asked for five and
+    /// rendered four.
+    #[tokio::test]
+    async fn a_limited_read_counts_songs_not_credit_rows() {
+        let db = seeded().await;
+
+        let limited = songs(db.pool(), SongOrder::MostViewed, Some(2))
+            .await
+            .unwrap();
+        assert_eq!(
+            limited.len(),
+            2,
+            "the limit spent itself on one song's credits"
+        );
+
+        // ...and the two-credit song still arrives whole, both credits in order.
+        assert_eq!(limited[0].get_artists().len(), 2);
+        let names: Vec<String> = limited[0]
+            .get_artists()
+            .iter()
+            .map(Artist::get_fullname)
+            .collect();
+        assert_eq!(names, ["Apatea Flores", "Teiho Tetoofa"]);
+
+        // A limit larger than the table is still just the table.
+        let all = songs(db.pool(), SongOrder::MostViewed, Some(99))
+            .await
+            .unwrap();
+        assert_eq!(all.len(), fixtures::SONGS.len());
     }
 
     #[tokio::test]

@@ -178,8 +178,142 @@ pub const LEAD: StaticClass =
 /// No `backdrop-blur`: a page can hold a dozen cards and a blur behind each one
 /// costs the compositor far more than the frosted chrome, which there is exactly
 /// two of.
+///
+/// **No padding.** The home page's cards and table panels want `p-8`, the song
+/// page's panel will want `p-6`, and two padding utilities in one class list are
+/// resolved by stylesheet order rather than by intent. So the surface is one
+/// token and the padding is chosen where the panel is placed — see
+/// [`CARD_ROOMY`], which is the one padding that is needed twice already.
 pub const CARD: StaticClass =
-    class!("rounded-card border border-white/10 bg-tahiti-1000/40 shadow-card p-6");
+    class!("rounded-card border border-white/10 bg-tahiti-1000/40 shadow-card");
+
+/// A [`CARD`] with the roomier padding the home page's panels want — the three
+/// cards and the two table panels are one surface at one size, so they get one
+/// name.
+///
+/// **`CARD`'s classes are repeated here, and that is not an oversight.** A
+/// [`StaticClass`] is a single string literal — `class!` can compose entries in
+/// an attribute position, where the type is inferred, but not into a `const`,
+/// which is pinned to `Class<Unescaped<PromotedStr>>`. Composition is therefore
+/// impossible for a token and the `.0`-style alternative (build the string in a
+/// `LazyLock`) would take the class out of Tailwind's reach, since Tailwind
+/// scans for *literal* text. So the surface is written twice and
+/// `the_panel_variants_keep_the_card_surface` is what makes the copy safe:
+/// lose a utility from one and the test names it.
+pub const CARD_ROOMY: StaticClass =
+    class!("rounded-card border border-white/10 bg-tahiti-1000/40 shadow-card p-8");
+
+// ---------------------------------------------------------------------------
+// Home page
+// ---------------------------------------------------------------------------
+
+/// The hero: the page title, its standfirst, and the call to action.
+pub const HERO: StaticClass = class!("text-center mb-20");
+
+/// The hero's headline.
+///
+/// Larger than [`H1`] and tinted rather than plain, because on the home page the
+/// title *is* the page — there is no content above it to compete with.
+pub const HERO_TITLE: StaticClass = class!("text-5xl font-bold dark:text-tahiti mb-6");
+
+/// The hero's standfirst. Italic: it is a subtitle, not a lede. [`LEAD`] is the
+/// token for the latter.
+pub const HERO_SUBTITLE: StaticClass = class!("text-2xl dark:text-gray-400 mb-10 italic");
+
+/// A filled, pill-shaped call to action — the hero's "Découvrir les chansons".
+pub const BUTTON_PRIMARY: StaticClass = class!(
+    "bg-tahiti-700 hover:bg-tahiti-800 dark:bg-tahiti-600 dark:hover:bg-tahiti-500 \
+     font-bold py-3 px-8 rounded-full text-lg transition-colors duration-300 shadow-lg"
+);
+
+/// The long synopsis between the hero and the tables.
+///
+/// `max-w-[800px]` rather than `max-w-prose`: v3's measure, kept, because this
+/// is a display paragraph and not body copy — see `PLAN.md` §16.
+pub const SYNOPSIS: StaticClass = class!("mx-auto max-w-[800px] leading-7 text-xl");
+
+/// The three-card row: one column on mobile, three from `md` up.
+pub const CARD_GRID: StaticClass = class!("grid md:grid-cols-3 gap-10 mb-20");
+
+/// A heading inside a panel — a card title, a table title.
+pub const PANEL_TITLE: StaticClass = class!("text-2xl font-semibold mb-4 dark:text-tahiti-400");
+
+/// The panel a home-page table sits in.
+///
+/// `md:max-w-max` is what stops the panel stretching to the full width of the
+/// page: five rows should be as wide as the rows, not as wide as the window.
+pub const TABLE_PANEL: StaticClass = class!(
+    "rounded-card border border-white/10 bg-tahiti-1000/40 shadow-card p-8 \
+     max-md:text-center md:max-w-max"
+);
+
+/// A home-page section holding one table.
+pub const TABLE_SECTION: StaticClass = class!("mb-20");
+
+/// A table row.
+///
+/// v3 made the whole row a click target (`role="button"` + `onclick`) and tinted
+/// it on hover. v4 keeps the tint — it still reads as one row responding — but
+/// the row is no longer clickable: only the two links inside it are, which is
+/// what makes the row reachable by a crawler and by a keyboard.
+pub const TABLE_ROW: StaticClass = class!("hover:text-tahiti-400 transition-colors");
+
+/// A plain cell in a home-page table.
+pub const TABLE_CELL: StaticClass = class!("p-4");
+
+/// The cell holding the lyric line.
+///
+/// `max-md:hidden` is v3's own rule, spelled there as a `row-lyrics` class: on a
+/// phone the lyric column is noise beside the title, so it is dropped and the
+/// row becomes one link.
+pub const TABLE_LYRICS_CELL: StaticClass = class!("p-4 max-md:hidden");
+
+/// The lyric line itself.
+///
+/// The **whole** chord-free lyric is in the markup — v3 did not truncate on the
+/// server either — and `truncate` is what makes it one line. The width is
+/// load-bearing: with no width, `truncate` has nothing to cut against and the
+/// cell would stretch the table instead. v3's per-breakpoint values, kept.
+pub const TABLE_LYRICS: StaticClass =
+    class!("inline-block truncate pt-[9px] max-md:w-[110px] md:w-[500px] lg:w-[800px]");
+
+/// The closing call to action at the foot of the home page.
+pub const FOOT_SECTION: StaticClass = class!("text-center");
+
+/// Its headline.
+pub const FOOT_TITLE: StaticClass = class!("text-4xl font-bold mb-8");
+
+/// The line beneath it.
+pub const FOOT_TEXT: StaticClass = class!("text-xl dark:text-gray-400 mb-10");
+
+/// The row of closing buttons.
+pub const FOOT_LINKS: StaticClass =
+    class!("flex max-md:flex-col gap-4 items-center justify-center");
+
+/// A pale, filled button — the lighter of the two closing buttons.
+pub const BUTTON_LIGHT: StaticClass = class!(
+    "bg-neutral-200 text-tahiti-600 dark:text-tahiti-800 hover:bg-tahiti-600 \
+     dark:hover:bg-tahiti-800 hover:text-neutral-200 font-bold py-3 px-8 rounded-full \
+     text-lg transition duration-300 shadow-lg"
+);
+
+/// An outlined button.
+pub const BUTTON_OUTLINE: StaticClass = class!(
+    "border-2 border-neutral-200 hover:border-tahiti-600 dark:hover:border-tahiti-800 \
+     hover:text-tahiti-600 dark:hover:text-tahiti-800 hover:bg-neutral-200 font-bold \
+     py-3 px-8 rounded-full text-lg transition duration-300"
+);
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+/// The branded not-found page's wrapper.
+///
+/// v3's fallback route rendered the bare string "La page n'existe pas." with no
+/// chrome; Topcoat's own default 404 is bare markup. This is the middle ground:
+/// the same sentence, inside the site's shell.
+pub const NOT_FOUND: StaticClass = class!("text-center py-16");
 
 #[cfg(test)]
 mod tests {
@@ -209,6 +343,27 @@ mod tests {
         H1,
         LEAD,
         CARD,
+        CARD_ROOMY,
+        HERO,
+        HERO_TITLE,
+        HERO_SUBTITLE,
+        BUTTON_PRIMARY,
+        SYNOPSIS,
+        CARD_GRID,
+        PANEL_TITLE,
+        TABLE_PANEL,
+        TABLE_SECTION,
+        TABLE_ROW,
+        TABLE_CELL,
+        TABLE_LYRICS_CELL,
+        TABLE_LYRICS,
+        FOOT_SECTION,
+        FOOT_TITLE,
+        FOOT_TEXT,
+        FOOT_LINKS,
+        BUTTON_LIGHT,
+        BUTTON_OUTLINE,
+        NOT_FOUND,
     ];
 
     /// Renders a token to the class string the layout would put in the markup.
@@ -389,6 +544,31 @@ mod tests {
                 "a token names the default face: {token:?}"
             );
         }
+    }
+
+    /// [`CARD_ROOMY`] and [`TABLE_PANEL`] repeat [`CARD`]'s surface classes
+    /// because a `StaticClass` cannot be composed from constants — see the
+    /// comment on [`CARD_ROOMY`]. This is the check that makes the repetition
+    /// safe: drop a utility from one of them and this fails, rather than the
+    /// panel quietly losing its border on the live site.
+    #[test]
+    fn the_panel_variants_keep_the_card_surface() {
+        let surface: BTreeSet<&str> = classes(&CARD).into_iter().collect();
+        assert!(surface.contains(&"rounded-card"));
+        assert!(surface.contains(&"shadow-card"));
+
+        for variant in [CARD_ROOMY, TABLE_PANEL] {
+            let names: BTreeSet<&str> = classes(&variant).into_iter().collect();
+            let missing: Vec<&&str> = surface.difference(&names).collect();
+            assert!(missing.is_empty(), "a panel variant lost {missing:?}");
+            // ... and every variant is the *roomy* one; none of them is a bare
+            // CARD, which would render with its content touching the border.
+            assert!(names.contains(&"p-8"), "a panel variant has no padding");
+        }
+
+        let table = classes(&TABLE_PANEL);
+        assert!(table.contains(&"max-md:text-center"));
+        assert!(table.contains(&"md:max-w-max"));
     }
 
     /// The same invariant as `every_colour_used_by_a_token_exists`, for depth.

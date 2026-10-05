@@ -227,8 +227,8 @@ Every step must build and (where applicable) pass tests **before** its commit.
 | 2 ✅ | `add: domain entities and rules` | `src/domain/{song,artist}.rs` ported (`clean_lyrics`, `to_jsonld`, `get_meta_data`, + markdown render) with unit tests | `cargo test` green |
 | 3a ✅ | `add: sqlite layer + schema` | `migrations/0001_init.sql`, `src/db/*` (pool, WAL, queries, create_song ported), `src/db/fixtures.rs` — **four real songs**, not invented ones; `src/lib.rs` added so `tests/` can drive a file-backed database | 52 tests green (46 lib + 6 file-backed), clippy clean, binary boots and creates the schema |
 | 3b ✅ | `add: surreal export importer (step 3b)` | `src/db/import.rs` (SurrealQL parser + transactional load) + `examples/import.rs` CLI | importer written and **proven against the real dump** (34 artists / 43 songs / 42 credits, byte-for-byte round-trip, order matches live); *running* it on real data is held for the v4 release — `11226ca` |
-| 4 | `add: app shell, layout and design tokens` | `src/ui/*` (layout, header/nav, footer, `class!` tokens) | pages render inside the shell; print variants present |
-| 5 | `add: home page` | `/` and `/aepa` (hero, cards, latest + most-viewed tables) | parity with `HomePage` |
+| 4 ✅ | `add: app shell, layout and design tokens` | `src/ui/*` (layout, header/nav, footer, `class!` tokens) | pages render inside the shell; print variants present |
+| 5 ✅ | `add: home page` | `/` and `/aepa` (hero, cards, latest + most-viewed tables) | parity with `HomePage` |
 | 6 | `add: songs index page` | `/himene` table | parity with `AllSongPage` |
 | 7 | `add: song page + metadata` | `/himene/{id}` + `<title>`, description, JSON-LD, OG/Twitter meta, `view_count` increment | parity with `SongPage` |
 | 8 | `add: i18n module and fr/ty catalogs` | `src/i18n.rs` + `hreflang`/`lang`/`og:locale`, labels wired | switching locale changes chrome text |
@@ -856,3 +856,127 @@ Options, pending a decision:
 3. **Switch framework to Dioxus** to get Rust/UI directly. This reintroduces the
    client runtime and the hydration the rewrite exists to remove, so it trades
    away the agent-readiness goal.
+
+---
+
+## 17. Appendix — verified in step 5 (2026-10-05)
+
+The home page: `/` and `/aepa`, transcribed from v3's `HomePage`
+(`app/src/pages/index.rs`). Hero, three cards, synopsis, the two song tables, the
+closing call to action — v3's copy, byte for byte.
+
+### One bug found, and it was in step 3a
+
+`songs(pool, order, Some(n))` applied `LIMIT n` to the **song ⟕ artist join**, not
+to the songs. A song with two credits spends two rows, so `LIMIT 5` returned
+**four** songs. It was visible the moment the page rendered: "Les plus vues" asked
+for five and listed four — the busiest song in the export carries two credits.
+
+Fixed in `db/queries.rs`: `page_select` picks the page of *ids* first and the join
+only decorates it. `SongOrder::clause` became `SongOrder::song_keys` — a
+*song-only* ordering, because the keys have to be valid before the join exists.
+`a_limited_read_counts_songs_not_credit_rows` pins it: `Some(2)` used to return one
+song, and the fixtures' two-credit song is now asserted to arrive whole, in order.
+
+Nothing in steps 0–4 consumed a limit, which is why 82 green tests did not notice.
+
+### The `<head>` problem
+
+Topcoat 0.10 has **no per-page `<head>` API**. A view can declare a status code and
+response headers and nothing else document-level; a page cannot set the `<title>`,
+and a layout cannot ask a page for one.
+
+What v3 actually needed was small: the home page's `<meta name="description">`, and
+a `<link rel="canonical">` on `/aepa`. So the head is the layout's, and
+`document_head(cx)` decides the per-route half from `uri(cx).path()`.
+
+Three things worth knowing:
+
+* **The title is the site title.** v3's `<Title text="Chanson du Fenua"/>` sits on
+  the app root and is overridden only by the song page, so the capital F is v3's,
+  not a typo — `Song::get_meta_data` writes the lowercase one. Step 7 needs a real
+  per-page mechanism; this constant is what every page shows until then.
+* **`/` carries no canonical and `/aepa` does**, with no trailing slash — exactly
+  as the live site emits it.
+* **The description is one `const`** (`pages::home::copy::DESCRIPTION`), shared by
+  the page and the head, and `the_description_is_the_copy_it_claims_to_be` asserts
+  it equals synopsis + first card + tagline. The page and the meta tag cannot drift.
+
+### The 404
+
+§15 left this gap, with the note "step 5 should add a branded `error_boundary` in
+the layout". That is half the story, and the other half is the interesting one:
+
+* An `error_boundary` in the layout catches errors raised **by a page**. It does
+  **not** catch a URL that matches no route — nothing else runs for a URL nothing
+  was registered for: no layout, no boundary, no page. The response is Topcoat's
+  bare nine bytes, `not found`.
+* A **pathless layer** would wrap every request, but it returns a `Response`, so it
+  would have to re-render the whole document by hand.
+
+The intended mechanism is `not_found!("/")` (`src/pages/mod.rs`), which registers a
+catch-all page that does nothing but fail with a `NotFoundError` — and an error
+raised *by a handler* does travel back through the layout, where the boundary
+catches it and the status stays 404. Both halves are needed; neither is enough on
+its own.
+
+`GET /himene/nope` now answers 404 with the header, the footer, "La page n'existe
+pas." and a link home.
+
+### Deliberate differences from v3
+
+1. **Rows served, not streamed.** v3 fetched each table from the browser inside
+   `<Suspense>`, so the first byte held two empty `<table>` elements. The live page
+   still shows this: its two `<tbody>`s sit **after `</body>`** in the wire format.
+   Here both queries run before the page renders.
+2. **Rows are links, not scripts.** v3 put `onclick="window.location=…"` plus
+   `role="button"` and `tabindex="0"` on every `<tr>`, *and* correct anchors inside
+   it. The scripts are gone: `onclick`, `role="button"` and `tabindex` appear zero
+   times in the rendered page.
+3. **The surface is the v4 panel.** The one visible change. v3's cards and table
+   panels were `bg-neutral-200/10` under a `backdrop-blur-md`; v4 uses `theme::CARD`
+   — the same dark wash, hairline and shadow as the header and footer. This follows
+   the depth direction chosen in 4b, and it is reversible in one token if it is the
+   wrong call.
+4. **`CARD` lost its padding.** Home panels want `p-8`, the song page's panel wants
+   `p-6`, and two padding utilities in one class list resolve by stylesheet order
+   rather than by intent. `CARD_ROOMY` is the `p-8` variant, and
+   `the_panel_variants_keep_the_card_surface` checks the repeated surface classes —
+   a `StaticClass` **cannot** be composed from constants, because `class!` composes
+   only in attribute position, where the type is inferred.
+
+### Judgement calls
+
+1. **"C'est parti !" still points at `/himene/api`** — v3's target; the create-song
+   page arrives in step 9. Until then it is a branded 404 rather than a blank one.
+   Repointing it at `/himene` would be a behaviour change v3 did not make.
+2. **A row keeps its hover tint** but is no longer clickable. It still reads as one
+   row responding; only the links inside it are targets.
+3. **The synopsis keeps `max-w-[800px]`** rather than `max-w-prose`: it is a display
+   paragraph, not body copy.
+4. **The tables keep v3's column order** — lyrics first in "Les dernières ajouts",
+   title first in "Les plus vues". Asymmetric, and v3's.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **83 tests green**
+(77 lib + 6 file-backed), up from 70.
+
+Live, via `.run/step5.sh` — the real export imported (43 songs / 34 artists), the
+binary started, the HTML read back: **29/29 checks passed**, covering the hero,
+cards, synopsis, both tables, both `<head>` variants, the 404, and the absence of
+`onclick` / `role="button"` / `tabindex` / streaming placeholders.
+
+**Parity against the live site** (`https://www.chansondufenua.pf`, fetched
+2026-10-05), comparing row ids:
+
+| table | ours | live | agreement |
+|---|---|---|---|
+| Les dernières ajouts | `7114wvk9, gosqh0y5, …` | `8nntgjk4, a9v3692, 0zgqae96, 7114wvk9, gosqh0y5` | our first two are live's last two, in order |
+| Les plus vues | `fb9yubmi, r2a95dk6, b35dvri7, cghcaesq, 6qq0qmv` | `fb9yubmi, r2a95dk6, b35dvri7, 6qq0qmv, cghcaesq` | 3 of 5 in the same position, all 5 shared |
+
+Both differences are the two already-known ones: the dump predates **three songs**
+the live site has since added (so live's newest table starts three rows earlier),
+and **view counts have moved** since 22 March 2025 (which is why two songs trade
+places 4 and 5 in the most-viewed table). Both close at release, when the export is
+refreshed.
