@@ -35,6 +35,20 @@ serde_json = "1.0.151"
 ammonia = "4.2.1"
 regex-lite = "0.1.9"
 thiserror = "2.0.21"
+# The social cards (`src/routes/og.rs`). `PLAN.md` §7 chose pure-Rust rendering
+# over headless Chromium, so `fontdue` rasterises the glyphs and `png` encodes
+# the canvas — neither pulls a browser into the deployment.
+#
+# `epaint_default_fonts` is a data-only crate: the four faces an egui app falls
+# back to, exposed as `&'static [u8]`, and it is here because the site's own
+# faces are served as `woff2`, which no rasteriser reads. Only its `UBUNTU_LIGHT`
+# is used. See the module docs for why a build-time download was rejected.
+fontdue = "0.9.4"
+png = "0.18.1"
+epaint_default_fonts = "0.36.2"
+# `topcoat::router::Body` is built from `Bytes`, not from `Vec<u8>`, and an
+# image is not a `String`. Already in the tree under the HTTP stack.
+bytes = "1"
 
 # `tailwind` on the build dependency only: `BuildConfig::render()` runs in
 # build.rs to scan the sources and emit the stylesheet as an asset.

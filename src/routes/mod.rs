@@ -17,5 +17,6 @@
 pub mod api;
 pub mod llms;
 pub mod negotiation;
+pub mod og;
 pub mod robots;
 pub mod sitemap;

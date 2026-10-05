@@ -1597,3 +1597,135 @@ and none of the machine-readable ones does; a Markdown request is answered
 a weighted-HTML request and a `q=0` request all get the unchanged page; and a
 rejected submission still reaches the form and gets its error panel back. The
 stylesheet still carries every token the site depends on — `22468 B`.
+
+---
+
+## 23. Appendix — verified in step 11 (2026-10-05)
+
+`add: og/twitter image route`. §7 asked for a decision at this step — pure-Rust
+rendering, pre-generated static cards, or headless Chromium — and recommended
+the first. The first it is: `fontdue` rasterises the glyphs and `png` encodes
+the canvas, both pure Rust. **The deployment has no browser in it**, which is
+the whole point: v3 launched Chromium per card (`main:server/src/image.rs`), and
+"simple" was the reason for this rewrite.
+
+**The URLs are v3's**: `/drive/genog/{timestamp}/himene/{id}` and
+`/drive/gentw/{timestamp}/himene/{id}`. Nothing in the layout changed, because
+step 7's meta layer already built `og:image` and `twitter:image` from them — the
+step's job was to make those two URLs resolve, and `.run/step11.sh` reads them
+out of the served `<head>` rather than spelling them, so a drift between the meta
+tags and the routes is a 404 rather than two files agreeing with each other.
+`og:image:width` (1200), `og:image:height` (630) and `og:image:type`
+(`image/png`) were already written and are now true; the Twitter pair is
+1200×628, as v3 had it.
+
+### What the card is, and what it deliberately is not
+
+White, 8-bit greyscale, the lyric in black, centred — v3's card, which was a
+Chromium screenshot of a `<div>` holding the sanitised lyric with the chords
+hidden by `sup { display: none }`. Here the chords are dropped before anything
+measures or draws, through `Song::lyrics_lines`, the same split the sheet uses.
+
+**It carries no title, no artist line, no site mark.** v3 drew none of them and
+the cards in the wild look like that, so neither does this. Whether a card should
+name the song is a product question, not a rewrite decision, and it is left
+standing as one — a card is one line of code away from gaining a heading.
+
+### Four differences from v3
+
+1. **The type fits the lyric.** v3 pinned `2rem` and let `overflow: hidden` crop,
+   so a long song lost its middle. The largest size between 40 px and 14 px that
+   fits both the card's height *and* its widest line is chosen; a song too long
+   even for the floor is still centred and still cropped, the way v3 cropped it.
+   The width constraint has no v3 counterpart because a browser wraps and this
+   does not: without it a single over-long line would run off the card.
+2. **A stale version is a 404, not a 500.** The timestamp in the path is the
+   song's `updated_at` in microseconds, so editing a song moves its card to a URL
+   no cache has seen. v3 answered a mismatch with a 500 — a `map_err` on any
+   failure at all. A 500 tells a crawler the server is broken; a 404 says the
+   version asked for does not exist, which is what is true.
+3. **The card is cacheable for a year** — `public, max-age=31536000, immutable`.
+   The URL contains the version, so the bytes under it cannot go stale. v3 had a
+   CDN in front and set no header of its own.
+4. **The image is greyscale and small.** v3's screenshot was RGBA; a two-colour
+   card is one byte a pixel. Measured: **12 710 B** for one song, **17 130 B**
+   for a longer one, against a Chromium launch each time.
+
+One consequence worth writing down rather than discovering later: a card route's
+404 is Topcoat's bare `text/plain` 404 (9 B), **not** the site's branded HTML one.
+The layout's `error_boundary` wraps pages, and `#[route]` is not a page — the same
+reason `robots.txt` and the sitemaps are routes. Nothing that fetches an
+`og:image` is a reader, so this is left alone.
+
+### The font, which was the real decision
+
+The site's three faces are Fontsource `woff2`, which no pure-Rust rasteriser
+reads, and every route to a `.ttf` was closed: the system's DejaVu is behind the
+shell's path policy, and fetching a font at *build* time would put a URL that can
+disappear into the build. So the font comes from `epaint_default_fonts` — a
+data-only crate (four fallback faces as `&'static [u8]`) — and only its
+`UBUNTU_LIGHT` is used.
+
+What it covers was measured, not assumed, and the answer decides whether any
+substitution is ever reached:
+
+* **Latin Extended-A is covered.** All five macron vowels and their capitals
+  (`ā ē ī ō ū Ā Ē Ī Ō Ū`) have glyphs of their own, as do `é è ê â î ô û ï ë ü ö ä
+  à ù ç ñ`.
+* **`U+02BB`, the ʻokina, is not.** It is drawn as an apostrophe. `U+02BC` and
+  both curly quotes *are* covered.
+* **The real corpus contains no `U+02BB` at all** — checked against the 22 March
+  dump, which has zero occurrences of `U+02BB`, `U+02BC` or `U+2018`. So no
+  character of any of the 43 songs is substituted: the ʻokina fallback exists for
+  text a visitor writes later, not for the corpus in the database. A unit test
+  pins the stronger version of the claim — every character of every fixture can
+  be drawn, as itself or as its relative.
+
+### Three traps this step paid for
+
+1. **A doc comment emitted a dead rule for the third step running.** Not here:
+   this step adds no markup, so the sweep was expected to report the same three
+   ambient rules step 10 left (`invisible`, `lowercase`, `static`) — and it does.
+2. **The dead-rule sweep needs step 10's whole body set, not just the pages.**
+   The first draft fetched the pages, the song, the stylesheet and the cards, and
+   duly reported three *new* dead rules — `max-w-prose`, `py-16`, `text-pretty`.
+   They are not new: they live in `theme.rs` tokens that render only inside the
+   404 panel, and `fixed` is a word in `llms.txt`. A sweep whose body set is
+   smaller than the last step's blames the step for rules that were already
+   ambient. The script now fetches the 404, `llms.txt`, `robots.txt`, both
+   sitemaps and a Markdown variant, so its pool is step 10's.
+3. **A PNG's rows arrive filtered, and counting "bytes that are not 255" on them
+   counts residuals.** The first live run reported 754 507 of 756 000 pixels as
+   ink on a card that is almost entirely paper. The check now unfilters
+   (Sub/Up/Average/Paeth) before it measures anything — which is what makes the
+   ink count, the "paper, not ink" ratio and the centring check mean something.
+   A blank card of the right size would pass every other check in the script.
+
+Two smaller ones: `png`'s decoder wants `BufRead + Seek`, so the test decodes
+from a `std::io::Cursor` and not from a slice; and `IntoResponse` for the
+(headers, body) pair already returns a `Result`, so `Ok(…)` around it does not
+compile.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **132 tests green**
+(126 lib + 6 file-backed), six of them new here: the meta URL names the route,
+every corpus character can be drawn, the chords are not on the card, a longer
+lyric is drawn smaller and never below the floor, the card has ink on white
+paper, and each card is a PNG of the size the page claims.
+
+Against the real 22 March dump, imported into a scratch database and served
+(`.run/step11.sh`): **31/31 card and page checks, 15/15 stylesheet checks**. In
+particular — both meta URLs are absolute on the canonical host and carry the
+song's own version; both routes answer `200 image/png` with the declared cache
+header; the Open Graph card decodes to 1200×630 and the Twitter card to 1200×628,
+8-bit greyscale both; each has ink on it (≈11 700 px) and far more paper, with the
+ink centred; two different songs get different cards; a stale version, an id that
+names nothing and a timestamp that is not a number are all 404; and the pages —
+home, index, editor, a rejected submission (400 with its error panel) and a song
+sheet — are unchanged.
+
+The stylesheet is **byte-identical to the one step 10 fetched** (22442 B). §22
+records 22 468 B: that number came from an earlier build of the same step, and
+since the served hash did not change, the difference is in the note and not in
+the output.
