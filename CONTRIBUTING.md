@@ -13,16 +13,23 @@ Thank you for considering contributing to **Chanson du fenua** ! We welcome cont
 
 1. Clone this repository : `gh repo clone raonagos/chansondufenua`.
 2. Navigate to the project directory: `cd chansondufenua`.
-3. Install a chromium engine.
-4. Install the dependencies: `cargo-leptos build`.
+3. Build the application: `cargo build`.
 
 ## Usage
 
-1. Make sure you have [rust](https://www.rust-lang.org/learn/get-started), [cargo-leptos](https://github.com/leptos-rs/cargo-leptos?tab=readme-ov-file#getting-started), `wasm32-unknown-unknown` target and chromium engine installed on your machine.
-2. Fill the [.env](env.example).
-3. Run your favorite database provider (*[surrealdb](https://surrealdb.com/install) was implemented*).
-4. Run the application with the following command: `cargo-leptos serve`.
-5. Open your browser and go to the URL: `http://localhost:3000`.
+1. Make sure you have [rust](https://www.rust-lang.org/learn/get-started) installed. That is the whole toolchain — there is no second target to install, no Node, and no database server to run.
+2. Read [env.example](./env.example) for the two variables the binary knows (`DATABASE_URL`, `HOST`, `PORT`). Nothing loads a `.env` file for you; export them, or put them on the command line.
+3. Bundle the assets and start the application:
+
+```bash
+cargo build && topcoat asset bundle && ./target/debug/chansondufenua
+```
+
+`topcoat asset bundle` is not optional: it writes `target/debug/assets/`, where the binary finds the stylesheet, the fonts and the logos. `cargo run` alone panics looking for it. Install the CLI once with `cargo install topcoat-cli`.
+
+The database is a SQLite file. It does not have to exist — the first boot creates `data/chansondufenua.db`, applies [migrations/](./migrations), and serves an empty songbook until you add something.
+
+4. Open your browser and go to the URL: `http://localhost:3000`.
 
 ## Contribute
 
@@ -61,13 +68,15 @@ gh pr create
 
 ## Notes
 
-The project aims to adopt a hexagonal architecture by separating interchangeable parts into distinct layers. Using Cargo's workspace feature, we define these layers within the workspace and strive to minimize interdependencies among them. The primary layers are :
+The project is **one crate** — a library target (so the integration tests in [tests/](./tests) can drive the real database code) and a binary target, not a workspace. Inside it, the code is split by responsibility:
 
-- api : manages the API endpoints and communication
-- core : provides essential utilities and services used across the application
-- domain : contains the core business logic and rules
-- database : handles database interactions and data persistence.
+- `domain` : `Song`, `Artist` and the rules around them. It knows nothing about SQLite or HTTP, which is what keeps the rest of the modules swappable.
+- `db` : the connection pool, the migrations, and every SQL statement the application runs.
+- `pages` : one module per route — the home page, the song list, a song sheet, the create-song form.
+- `ui` : the shell, the chrome, and the design tokens the pages compose.
+- `routes` : the things that are not pages — `robots.txt`, the sitemaps, `llms.txt`, the read-only JSON API, the social cards.
+- `i18n` : the French and Tahitian catalogs, checked at compile time.
 
-Additionally, there are sub-layers like `server`, `web`, and `app`, which are more tightly integrated with the `core` layer. These components work together to deliver the application's functionality, while the other layers can evolve more independently due to their reduced dependency on the core. To illustrate how the project architecture is made, there is the [ARCHITECTURE](./ARCHITECTURE.xml) file, which provides a visual representation of these layers and their interactions.
+[ARCHITECTURE.xml](./ARCHITECTURE.xml) draws how these fit together.
 
-We follow specific design patterns and practices to minimize interdependencies, ensuring that each layer remains focused on its responsibilities. This approach allows for greater flexibility and maintainability as the project evolves.
+There is **no stylesheet in the tree**. The palette and the type faces live in `src/ui/palette.rs`, and `build.rs` renders them into Tailwind's `@theme` block at build time, so a token is changed in Rust and nowhere else.
