@@ -77,6 +77,21 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/ui/palette.rs");
 
+    // ...and the whole source tree, because Tailwind's scan reads it.
+    //
+    // This line is load-bearing and its absence was a real defect. Cargo reruns
+    // a build script when any file in the package changes **only if the script
+    // prints no `rerun-if-changed` at all** — printing one replaces that default
+    // with the list. So for two steps the stylesheet was rendered from the
+    // tokens of the moment `palette.rs` last changed, and every class added
+    // afterwards in `theme.rs` or `pages/` was silently absent from it: the
+    // markup carried `truncate` and `max-md:hidden`, the CSS carried neither, and
+    // nothing failed — the page simply rendered wrong on a phone.
+    //
+    // Cargo scans a directory recursively, so this covers every `.rs` file the
+    // scan can read.
+    println!("cargo:rerun-if-changed=src");
+
     topcoat::tailwind::BuildConfig::new()
         .input(&input)
         .render()
