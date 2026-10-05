@@ -8,6 +8,14 @@ Chanson du *fenua* is an application that allows you to sing and play songs with
 - Learn to sing and play songs by following the musical chords.
 - Explore different music genres, from traditional chants to popular songs.
 
+## Getting started
+
+```bash
+cargo build && topcoat asset bundle && ./target/debug/chansondufenua
+```
+
+The site is one server-rendered binary with an embedded SQLite database; the [contribution guide](./CONTRIBUTING.md) covers the toolchain, the three variables, and why that middle command is not optional.
+
 ## Contributing
 
 Contributions to the Chanson du *fenua* application are welcome ! If you want to add new features, fix bugs, or improve the documentation, feel free to submit a pull request. Follow the [contribution guide](./CONTRIBUTING.md) to contribute and also the [notes](./CONTRIBUTING.md#notes).
@@ -20,16 +28,34 @@ But why stop at just lyrics ? Many of us are also eager to learn or improve our 
 
 Chanson du *fenua* serves as your go-to resource for both singing and playing music. Whether you're a seasoned singer or just starting your musical journey, this site is here to help you enjoy the rich musical culture of Polynesia and beyond.
 
-### Why Rust and wasm ?
+### Why Rust ?
 
-The first two versions of this project were built using PHP. While they functioned well, there were noticeable inefficiencies in memory usage and data storage. Instead of scaling up the server's physical capacity, we decided to optimize resource usage by switching to Rust and WASM. This transition allowed us to maintain performance while being more resource-efficient.
+The first two versions of this project were built using PHP. While they functioned well, there were noticeable inefficiencies in memory usage and data storage. Instead of scaling up the server's physical capacity, we decided to optimize resource usage by switching to Rust. This transition allowed us to maintain performance while being more resource-efficient.
 
 - **Performance** : Let's face it, Rust is blazing fast. Everyone knows it, and we wanted a piece of that action on the server side.
 - **Eco-Friendly** : Rust is greener than a salad on Earth Day (or thousand?). It's less hungry for memory and energy, making it the eco-warrior of programming languages as C/C++.
 - **Type Safety** : Rust's type system is like a strict teacher who makes sure you write correct code. No more sloppy mistakes !
 - **Compiler** : Cargo...cargo !
-- **Multi Platform** : Thanks to WebAssembly (WASM), our app can run anywhere, and browsers are becoming its best friends.
+- **One binary** : Pages, stylesheet, fonts, logos and the database engine are compiled into a single executable. There is no client-side runtime and no separate database server to install — see the [contribution guide](./CONTRIBUTING.md) for the three commands that build and run it.
 - **Fun** : Rust is just plain fun to code in.
+
+### Agent readiness
+
+The web is read by more than browsers now, and the site is built to be legible to the ones that do not run JavaScript. The clearest example is the song list. Version 3 rendered each row as a click handler — the link had no destination:
+
+```html
+<tr class="tab-row" role="button" tabindex="0" onclick="window.location='/himene/7114wvk91gffr2bj6wza'">
+  <td class="tab-cell"><a href class="tab-link">Āhani e</a></td>
+```
+
+The 3.x table was also filled in by the browser, so a client without a JavaScript engine read *"Chargement…"* and no songs at all. Now the same page arrives complete, with real destinations:
+
+```html
+<tr>
+  <td><a href="/himene/7114wvk91gffr2bj6wza">Āhani e</a></td>
+```
+
+Every song is followable, keyboard-reachable, middle-clickable and copyable. Alongside that, the site serves `robots.txt`, two XML sitemaps, an `llms.txt`, RFC 8288 `Link` headers, a Markdown version of any song when asked (`Accept: text/markdown`), and a small read-only JSON API — so a song can be read as a page, as Markdown, or as JSON, and every form is discoverable from the others.
 
 ## License
 

@@ -5,6 +5,7 @@
 //! no stylesheet of rules, no `@apply`, no `.css` file anywhere in the tree, and
 //! no build step beyond Tailwind's own.
 
+pub mod assets;
 pub mod fonts;
 pub mod layout;
 pub mod palette;

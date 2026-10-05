@@ -3,14 +3,14 @@
 //! v3 kept a `public/robots.txt` and let its web server hand the file out. There
 //! is no file-serving layer in v4 — the binary is the whole deployment — so the
 //! policy is built here and served from a route, which also means it is the
-//! first place the text can be *asserted* rather than proof-read.
+//! first place the text can be *asserted* rather than proof-read. The old file
+//! is gone (step 12); this route is the only copy.
 //!
-//! Three changes from the copy still in the tree:
+//! Three changes from that copy:
 //!
 //! * The two `sitemap.xml.br` / `sitemap.xml.gz` lines are gone. They named
 //!   pre-compressed copies of the sitemap that nothing has ever produced; the
-//!   live site had already stopped advertising them and the copy in `public/`
-//!   had not.
+//!   live site had already stopped advertising them and the file had not.
 //! * `Disallow: /pkg` is gone. `/pkg` was v3's WebAssembly bundle — the path
 //!   does not exist in v4, and a rule about nothing is worse than no rule.
 //! * `Content-Signal` and the two named AI crawlers are new; they are the policy

@@ -1,7 +1,7 @@
 //! The page shell: one layout, wrapping every page.
 //!
 //! Transcribed from v3's `app.rs` (`shell`) + `components/body/{mod,header}.rs`,
-//! with six differences, each deliberate and each explained where it happens:
+//! with seven differences, each deliberate and each explained where it happens:
 //!
 //! * the menu toggle is a checkbox instead of a scripted button,
 //! * v3's Google Fonts request is replaced by three self-hosted families,
@@ -15,7 +15,11 @@
 //!   exists; see `PLAN.md` §17, and
 //! * the document declares which language it is in, and names the other one,
 //!   because the shell is where the chrome's words live. `crate::i18n` decides
-//!   the language; this file only asks for the strings.
+//!   the language; this file only asks for the strings, and
+//! * the three images the browser fetches are embedded in the binary and served
+//!   from content-hashed URLs, rather than handed out of a static directory the
+//!   way v3's web server did it. v3's own files, under a URL that cannot go
+//!   stale — see [`crate::ui::assets`].
 //!
 //! The font change is the one visible redesign in step 4. v3 asked Google for
 //! *Roboto Serif* and then wrote `font-family: Roboto, Arial, serif` — a
@@ -36,7 +40,7 @@ use crate::domain::song::{SITE_URL, Song};
 use crate::i18n::{self, Key, Lang};
 use crate::pages::{home, songs};
 use crate::state;
-use crate::ui::{fonts, theme};
+use crate::ui::{assets, fonts, theme};
 
 /// The document title, for every page that is not a song.
 ///
@@ -288,8 +292,8 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     },
                     None => "",
                 }
-                <link rel="shortcut icon" href="/logos/logo_b32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: light)"/>
-                <link rel="shortcut icon" href="/logos/logo_w32.ico" r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: dark)"/>
+                <link rel="shortcut icon" href=(assets::ICON_LIGHT) r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: light)"/>
+                <link rel="shortcut icon" href=(assets::ICON_DARK) r#type="image/x-icon" sizes="32x32" media="(prefers-color-scheme: dark)"/>
                 <link rel="stylesheet" href=(stylesheet)/>
                 // The `@font-face` rules, served from this binary at
                 // `/_topcoat/fonts/…`.
@@ -367,7 +371,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                     <a href=(home_link) class=(class!(theme::FOCUS))>
                         <img
                             class=(theme::LOGO)
-                            src="/logos/logo_w144.webp"
+                            src=(assets::LOGO)
                             width="48"
                             height="48"
                             alt="logo chanson du fenua"
