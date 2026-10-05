@@ -182,11 +182,7 @@ impl Song {
     /// attributes unless they are named. Dropping it would silently change how
     /// the site appears in Google.
     pub fn lyrics_html(&self) -> String {
-        let mut builder = ammonia::Builder::default();
-        let mut generic_attributes = std::collections::HashSet::new();
-        generic_attributes.insert("data-nosnippet");
-        builder.generic_attributes(generic_attributes);
-        builder.clean(&self.lyrics).to_string()
+        sanitise_lyrics(&self.lyrics)
     }
 
     /// Retrieves the `lyrics` of the song.
@@ -351,6 +347,26 @@ pub struct MetaSongData {
     pub meta_og_img_alt: String,
     pub song_title: String,
     pub song_lyrics: String,
+}
+
+/// The sanitised HTML of a raw `lyrics` value.
+///
+/// The *only* difference from [`ammonia::clean`]'s defaults is that
+/// `data-nosnippet` is kept on `<sup>` — v3 emits it on every chord so the
+/// chords stay out of search snippets, and ammonia strips all `data-*`
+/// attributes unless they are named. Dropping it would silently change how the
+/// site appears in Google.
+///
+/// Free-standing rather than a method, for the create-song form: a submission
+/// the domain rejected is handed straight back to the browser, and the editor
+/// is seeded from this rather than from the field the browser posted — that
+/// value is exactly as untrusted on the way back as it was on the way in.
+pub fn sanitise_lyrics(lyrics: &str) -> String {
+    let mut builder = ammonia::Builder::default();
+    let mut generic_attributes = std::collections::HashSet::new();
+    generic_attributes.insert("data-nosnippet");
+    builder.generic_attributes(generic_attributes);
+    builder.clean(lyrics).to_string()
 }
 
 /// One run of a lyric line: the words, or the chord written over them.

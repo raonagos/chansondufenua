@@ -135,7 +135,7 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
         return song_head(&song, lang);
     }
 
-    site_head(path)
+    site_head(path, lang)
 }
 
 /// The `<head>` of a song page, from the song's own metadata.
@@ -156,14 +156,24 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
 }
 
 /// The `<head>` of everything that is not a song.
-fn site_head(path: &str) -> DocumentHead {
+fn site_head(path: &str, lang: Lang) -> DocumentHead {
     // `/` and `/aepa` are one page under two URLs. v3 declared `/aepa` the
     // duplicate, and its canonical URL carries no trailing slash — that is the
     // form the live site emits, so that is the form kept.
     let home = matches!(path, "/" | "/aepa");
 
+    // The create-song page is the one non-song route whose title is not the
+    // site's name. It says what it is for, which is what a `<title>` is for, and
+    // the layout is the only place that can say it: Topcoat has no per-page head
+    // API — see the module docs.
+    let title = if path == crate::pages::editor::PATH {
+        format!("{} | {TITLE}", i18n::text(lang, Key::AddLyrics))
+    } else {
+        TITLE.to_owned()
+    };
+
     DocumentHead {
-        title: TITLE.to_owned(),
+        title,
         description: home.then(|| home::copy::DESCRIPTION.to_owned()),
         canonical: (path == "/aepa").then(|| SITE_URL.to_owned()),
         social: None,

@@ -12,6 +12,7 @@
 //! handler declared; re-exporting the function would shadow its module and make
 //! that path ambiguous.
 
+pub mod editor;
 pub mod home;
 pub mod song;
 pub mod songs;

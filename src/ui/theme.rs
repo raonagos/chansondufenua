@@ -508,6 +508,130 @@ pub const CHORD: StaticClass =
     class!("absolute top-1 -ml-2 font-mono text-[0.8rem] leading-none text-tahiti-300");
 
 // ---------------------------------------------------------------------------
+// Create-song form
+// ---------------------------------------------------------------------------
+
+/// The panel the create-song form sits in.
+///
+/// [`CARD_ROOMY`]'s surface again, written out for the reason that token gives:
+/// a [`StaticClass`] cannot be composed from constants. The bottom margin is
+/// v3's `mb-4` on the same element.
+pub const FORM_PANEL: StaticClass =
+    class!("rounded-card border border-ink-700 bg-ink-900 shadow-card p-8 mb-4");
+
+/// One labelled field: the space under every label-and-control pair.
+pub const FORM_FIELD: StaticClass = class!("mb-4");
+
+/// A form label.
+///
+/// Small and muted against the page title, because a form is read as a list of
+/// captions rather than as prose.
+pub const FORM_LABEL: StaticClass = class!("mb-2 block text-sm font-semibold text-mist-300");
+
+/// A text input in the form.
+///
+/// The panel is `ink-900`, so a field is *darker* than its panel — the reverse
+/// of the usual "input is lighter" convention, and the right way round on a
+/// design where the panel is already a step up from the page. No focus rule
+/// here: every call site composes [`FOCUS`], which is one ring definition for
+/// the whole site.
+pub const FORM_INPUT: StaticClass = class!(
+    "w-full appearance-none rounded-md border border-ink-600 bg-ink-950 px-3 py-2 \
+     text-mist-100 shadow-sm placeholder:text-mist-500"
+);
+
+/// The chip row under the artist field — hidden entirely while it is empty.
+///
+/// `empty:hidden` is what keeps an empty row from leaving a rounded strip of
+/// panel under the input: with no children the list takes no space at all.
+pub const FORM_CHIPS: StaticClass =
+    class!("mt-2 flex max-w-max flex-wrap gap-2 rounded-md bg-ink-950 p-2 empty:hidden");
+
+/// One picked artist.
+pub const FORM_CHIP: StaticClass = class!(
+    "flex max-w-max items-center rounded-sm border border-ink-600 px-4 py-2 \
+     text-mist-100"
+);
+
+/// The chip's remove button.
+///
+/// A real `<button>`, not v3's `role="button"` on the `<li>`: the chip is a
+/// label, and the one thing it does — take the artist off the list — is the
+/// thing that should be focusable.
+pub const FORM_CHIP_DELETE: StaticClass =
+    class!("cursor-pointer text-red-400 transition-colors hover:text-red-300");
+
+/// The row of chord buttons above the editor.
+pub const FORM_CHORD_ROW: StaticClass = class!("mb-2 flex flex-wrap-reverse");
+
+/// A chord button.
+///
+/// v3's fill, kept: the chord row is the one place in the form where the accent
+/// is a surface, because pressing a chord is the form's primary repeated action.
+pub const FORM_CHORD_BUTTON: StaticClass = class!(
+    "cursor-pointer bg-tahiti-700 px-4 py-2 font-semibold text-mist-100 \
+     transition-colors hover:bg-tahiti-900"
+);
+
+/// The label wrapping one modifier checkbox (`m`, `b`, `#`).
+pub const FORM_CHBX_LABEL: StaticClass = class!(
+    "flex cursor-pointer items-center gap-2 bg-tahiti-700 px-2 font-semibold text-mist-100 \
+     transition-colors hover:bg-tahiti-900"
+);
+
+/// The custom-chord field and its insert button, kept together on one line.
+pub const FORM_CUSTOM: StaticClass = class!("flex md:ml-2");
+
+/// The custom-chord text input — narrow, because a chord is two or three
+/// characters and a full-width field would read as another lyric box.
+pub const FORM_CUSTOM_INPUT: StaticClass = class!(
+    "max-w-[17ch] appearance-none rounded-sm border border-ink-600 bg-ink-950 px-3 py-2 \
+     text-mist-100 shadow-sm placeholder:text-mist-500"
+);
+
+/// The button that inserts a custom chord.
+pub const FORM_CUSTOM_BUTTON: StaticClass =
+    class!("cursor-pointer bg-tahiti-700 px-2 text-mist-100 transition-colors hover:bg-tahiti-900");
+
+/// The lyric editor: a `contenteditable` surface.
+///
+/// `min-h` rather than `h`: a lyric is longer than the box, and the box should
+/// grow with it instead of scrolling inside itself. Doubled leading for the same
+/// reason the sheet has it — the chords are drawn above their line.
+///
+/// The two arbitrary variants style the chords the editor inserts. They are
+/// **in flow**, unlike [`CHORD`] on the song page, and that is deliberate: a
+/// chord absolutely positioned over a line is right for singing from and wrong
+/// for editing — the caret would sit somewhere other than where the text
+/// appears. The editor tints and monospaces a chord so it reads as markup rather
+/// than as a syllable; the sheet is where it becomes a chord above the word.
+pub const FORM_EDITOR: StaticClass = class!(
+    "min-h-[200px] rounded-md border border-ink-600 bg-ink-950 p-4 text-lg leading-loose \
+     text-mist-100 [&_sup]:font-mono [&_sup]:text-tahiti-300"
+);
+
+/// The form's submit row.
+pub const FORM_SUBMIT: StaticClass = class!("flex items-center justify-between");
+
+/// The save button.
+///
+/// The accent fill, one step larger than [`BUTTON_SMALL`]: this is the one
+/// action the page exists for.
+pub const FORM_SUBMITTER: StaticClass = class!(
+    "cursor-pointer rounded-full bg-tahiti-500 px-8 py-3 text-lg font-semibold text-ink-950 \
+     shadow-lg transition-colors hover:bg-tahiti-300"
+);
+
+/// What the form says when the domain rejected the submission.
+///
+/// Above the form and not beside a field: [`Song::validate`] reports the first
+/// rule that failed, and the message it carries is written for a log line
+/// (`expected 100..=6000 characters, got 42`) rather than for a visitor. The
+/// page names the two fields a person can actually fix instead.
+pub const FORM_ERROR: StaticClass =
+    class!("mb-4 rounded-md border border-red-400 bg-ink-950 p-4 text-red-300");
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -584,6 +708,23 @@ mod tests {
         LYRIC_LINE,
         LYRIC_GAP,
         CHORD,
+        FORM_PANEL,
+        FORM_FIELD,
+        FORM_LABEL,
+        FORM_INPUT,
+        FORM_CHIPS,
+        FORM_CHIP,
+        FORM_CHIP_DELETE,
+        FORM_CHORD_ROW,
+        FORM_CHORD_BUTTON,
+        FORM_CHBX_LABEL,
+        FORM_CUSTOM,
+        FORM_CUSTOM_INPUT,
+        FORM_CUSTOM_BUTTON,
+        FORM_EDITOR,
+        FORM_SUBMIT,
+        FORM_SUBMITTER,
+        FORM_ERROR,
     ];
 
     /// Renders a token to the class string the layout would put in the markup.

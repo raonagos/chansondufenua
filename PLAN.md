@@ -1324,3 +1324,156 @@ cluster is complete and correctly formed on `/`, `/himene`, a song and the 404;
 `og:locale` swaps with the language; and the lyric block is byte-identical in the
 two languages, which is the check that says the step stopped where it said it
 would.
+
+## 21. Appendix — verified in step 9 (2026-10-05)
+
+The create-song page is `src/pages/editor.rs`: one route, `/himene/api`, with two
+methods. The URL is v3's because it is in the wild — the home page's closing
+button and every song sheet link to it — and until this step those links landed
+on the branded 404. They now land on the form.
+
+### One route, two methods — no second protocol
+
+v3 was a Leptos page plus a `#[server]` function: the form posted to a
+serialization endpoint that returned a `Song` and set `Location` for the browser
+to follow. Here the page answers its own `POST`. The shapes are the same
+Post/Redirect/Get; what goes away is the extra endpoint.
+
+- **303, not v3's 302.** Both are followed with a `GET` by every browser that
+  matters; 303 is the code that says so, and the point of the redirect is that
+  the form must not be re-posted.
+- **A rejected submission is a 400 with the form filled back in.** v3 returned a
+  bare error and lost the whole lyric. The bounds are the domain's — the page
+  does not restate them — and the message is deliberately *not* shown: it is
+  written for a log line (`expected 100..=6000 characters, got 42`), so the page
+  names the two fields a person can fix instead.
+- `#[page([GET, POST] "/himene/api")]` — **no comma** between the method list and
+  the path. The documented `#[page([GET, POST], "/…")]` spelling does not compile
+  in 0.10: the parser reads the methods and then peeks for the path literal, and a
+  comma is neither production.
+
+The body is read only for a `POST`, because `Form` on a `GET` reads the query
+string — and `/himene/api?lang=ty`, which step 8 made every page able to serve, is
+a query string that is not a song.
+
+### The artist field, and why it is one field
+
+v3 kept a hidden input for the value and a visible one for typing, so it could
+require the script to move names across. A submission from a browser with the
+script switched off therefore carried no artists at all, and the chips were the
+only way to remove one. Here the field the browser posts is the field a person
+types in (`name="artists"`, comma-separated — the same split `db::create_song`
+already uses), and the chips are a *view* of its value: pressing one takes that
+name back out of the string. Without the script there are no chips and the field
+still submits.
+
+The `<datalist>` is the whole artist table, not the top ten. An artist who is not
+in the list is not in it for a reason, and a truncated one invites a near-duplicate
+name. `db::search_artists` exists for a client that queries as the author types;
+there is no such client, so it is not called.
+
+### The chord tools, in the page
+
+v3's were Rust compiled to WebAssembly and hydrated over the server's markup; the
+rewrite has no client build step (§2.1), so the same behaviour is roughly fifty
+lines of vanilla script, unescaped into the page like the JSON-LD block. Nothing
+about the site depends on it running — it is the editor, and an editor needs a
+browser.
+
+The naming rule is v3's, character for character: flat *else* sharp, then minor —
+so `b` + `#` both ticked is `Cbm`, exactly as v3 composed it. The three modifier
+checkboxes are v3's order and letters (`m`, `#`, `b`).
+
+Three deliberate differences in the editor itself, all in the module docs:
+
+- **The chord is in flow, not absolutely positioned.** v3 drew editor chords above
+  their syllable, the same way the sheet does, which meant the caret and the chord
+  were never quite in the same place. A chord is still tinted and monospaced so it
+  reads as markup; the geometry is left alone. The *sheet* still draws it above
+  the word.
+- **The caret may enter a chord.** v3 swallowed `keydown` while the caret sat
+  inside a `<sup>`, and read Backspace there as "remove the chord". Here a chord is
+  a node like any other: a click puts the caret in it, a keystroke extends its
+  text, and backspacing past one removes it — which is the browser's own
+  behaviour. v3 swallowed the whole event, not only the key it meant to.
+- **`data-god` is gone.** v3 tagged a custom chord with it; no stylesheet reads it.
+
+The field names are the page's own (`title`, `artists`, `lyrics`), not v3's
+serialization names (`data[title]`, …), because there is no server function left
+for them to address. The empty `disabled` submit button v3 carried exists only to
+make `ActionForm` behave and is not reproduced.
+
+### The title, and the layout's one branch
+
+Topcoat 0.10 has no per-page `<head>` API — recorded in step 7 and unchanged
+here — so the only place a non-song route can name itself is the `#[layout]`. The
+create-song page is the first route that needs to: it says `Ajouter des paroles |
+Chanson du Fenua` rather than the site's name. The layout recognises it by
+`crate::pages::editor::PATH`, a constant that restates what the `#[page]`
+attribute declares (the macro takes a literal path), and that is what the form's
+`action` and the layout's rule both read, so there is one spelling of the URL.
+
+### `sanitise_lyrics`, extracted
+
+`Song::lyrics_html` was the ammonia builder inline; it is now a free function,
+`sanitise_lyrics`, and the method calls it. The reason is the rejected submission:
+a form handed back with the author's work in it seeds the hidden lyric field from
+the *sanitised* submission, because a value on its way back to the browser is no
+more trustworthy than it was on the way in. Its test asserts `<script>` and
+`onclick` do not survive that round trip while `data-nosnippet` does.
+
+### The page stores what was written; the renderer is the choke point
+
+Worth stating plainly, because the step's verification turns on it: the `song`
+column holds what the author submitted, markup and all, and `Song::lyrics_html`
+is the only route from that column to a template (§2.6). So a submission carrying
+a `<script>` is **accepted** — and the proof is not the request but the sheet it
+produces. `.run/step9.sh` posts one, follows the 303, and asserts on the served
+sheet that `<script>` and `onclick` are nowhere in it and the chord and its
+surrounding text are.
+
+This replaces the first draft of that check, which expected a 400 and read the
+form back. It was a wrong expectation, not a found bug: the submission is
+well-formed, is stored as written, and is inert where it matters.
+
+### Two traps, both about Tailwind's output rather than its input
+
+1. **The served selector escapes more than the colon.** `[&_sup]:font-mono`
+   reaches the stylesheet as `.\[\&_sup\]\:font-mono sup`, and `min-h-[200px]` as
+   `.min-h-\[200px\]`. The first draft of the stylesheet assertions escaped only
+   the `:` — the form Tailwind uses for a plain utility — so four new rules read
+   as missing when they were present. A needle that escapes less than Tailwind
+   does finds nothing.
+2. **A dead-rule detector must undo `&amp;` first.** The served markup carries
+   `[&amp;_sup]:font-mono`, because an attribute value escapes `&`; the stylesheet
+   carries `[&_sup]`. Compared raw, a class the page *does* use reads as a rule
+   Tailwind emitted for nothing. And one word in a doc comment did emit a real
+   dead rule: `entity-escaping its contents` compiled `.contents`. Reworded, and
+   the check now guards it — dead rules stand at four (`fixed`, `invisible`,
+   `lowercase`, `static`) rather than six. The two that left the list did not
+   leave the stylesheet: `collapse` and `filter` are words in the editor's own
+   JavaScript, which is served inside the page, so the detector now finds them
+   among the markup as well. That is the heuristic being textual, not the rules
+   being used.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **108 tests green**
+(102 lib + 6 file-backed), five of them new in `editor.rs`: every field of the
+form parses when absent, the credit field splits the way the database does, a
+rejected submission keeps its lyric, a valid one becomes a song whose chords
+survive the round trip, and a rejected one is the domain's error rather than a
+database fault.
+
+Against the real 22 March dump, imported into a scratch database and served
+(`.run/step9.sh`): **54/54 HTML checks and 24/24 stylesheet checks**. In
+particular — `/himene/api` is 200 and carries its own title; the seven natural
+chord buttons, the three modifiers and the custom field are all there; the
+artist list holds all 34 names; the page is French by default and `?lang=ty`
+translates the heading, the lyric label and the save button; a valid `POST`
+answers 303 to `/himene/{id}`, the created sheet carries the chord with
+`data-nosnippet` intact and both credits, the new song appears on the index, and
+the index still lists all 44; a rejection answers 400 with the title *and* the
+lyric still in the form; and the sheet built from a submission carrying a
+`<script>` contains neither the script nor its handler. The stylesheet still
+carries every token the form introduced — `22442 B`.

@@ -10,4 +10,4 @@ pub mod song;
 
 pub use artist::Artist;
 pub use error::{AppError, AppResult};
-pub use song::{MetaSongData, Song};
+pub use song::{MetaSongData, Song, sanitise_lyrics};

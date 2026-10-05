@@ -147,11 +147,21 @@ pub enum Key {
     HomeDiscover,
     /// The home page's closing button.
     HomeStart,
+    /// The label of the create-song form's lyric field.
+    FieldLyrics,
+    /// The create-song form's submit button.
+    Save,
+    /// What the create-song form says when the domain rejected the song.
+    SaveError,
+    /// The create-song form's chip delete button, read aloud.
+    RemoveArtist,
+    /// The create-song form's custom-chord insert button, read aloud.
+    AddChord,
 }
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 12] = [
+    pub const ALL: [Key; 17] = [
         Key::NavHome,
         Key::NavSongs,
         Key::NotFoundTitle,
@@ -164,6 +174,11 @@ impl Key {
         Key::IndexEmpty,
         Key::HomeDiscover,
         Key::HomeStart,
+        Key::FieldLyrics,
+        Key::Save,
+        Key::SaveError,
+        Key::RemoveArtist,
+        Key::AddChord,
     ];
 
     /// The French words. v3's, byte for byte.
@@ -181,6 +196,13 @@ impl Key {
             Key::IndexEmpty => "Pas de chanson",
             Key::HomeDiscover => "Découvrir les chansons",
             Key::HomeStart => "C'est parti !",
+            Key::FieldLyrics => "Paroles",
+            Key::Save => "Enregistrer",
+            Key::SaveError => {
+                "La chanson n'a pas été enregistrée. Vérifiez le titre et les paroles."
+            }
+            Key::RemoveArtist => "Retirer cet artiste",
+            Key::AddChord => "Ajouter cet accord",
         }
     }
 
@@ -200,6 +222,11 @@ impl Key {
             Key::IndexEmpty => "'Aita hīmene",
             Key::HomeDiscover => "'Ite i te mau hīmene",
             Key::HomeStart => "Haere tātou!",
+            Key::FieldLyrics => "Parau hīmene",
+            Key::Save => "Tāpiri",
+            Key::SaveError => "'Aita te hīmene i tāpiri. Hi'opoa i te i'oa e te parau hīmene.",
+            Key::RemoveArtist => "Rave i teie ta'ata hīmene",
+            Key::AddChord => "Tāpiri i teie accord",
         }
     }
 }
