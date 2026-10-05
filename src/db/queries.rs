@@ -236,6 +236,39 @@ pub async fn song(pool: &SqlitePool, id: &str) -> DbResult<Option<Song>> {
     Ok(assemble(rows)?.into_iter().next())
 }
 
+/// How much the public catalogue holds.
+///
+/// Two numbers and no rows. `/api/health` reports them, and the point of the
+/// probe is that it reads the database — a process that answers while its
+/// database is unreachable is exactly the failure a health check exists to
+/// catch — without putting 43 lyrics in memory to say "43".
+///
+/// Songs are counted the way the site serves them: drafts are not part of the
+/// catalogue, so they are not part of its size.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Counts {
+    pub songs: u32,
+    pub artists: u32,
+}
+
+/// One round trip for both counts.
+///
+/// Sub-selects rather than two queries: they cannot disagree about the moment
+/// they describe, which two sequential reads can, and they are one statement for
+/// SQLite to plan.
+pub async fn counts(pool: &SqlitePool) -> DbResult<Counts> {
+    let (songs, artists): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM song WHERE published = 1), (SELECT COUNT(*) FROM artist)",
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(Counts {
+        songs: songs.max(0) as u32,
+        artists: artists.max(0) as u32,
+    })
+}
+
 /// Every artist, alphabetically, case-insensitively.
 pub async fn artists(pool: &SqlitePool) -> DbResult<Vec<Artist>> {
     let rows = sqlx::query_as::<_, ArtistRow>(

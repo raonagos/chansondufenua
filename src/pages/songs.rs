@@ -57,6 +57,13 @@ use crate::ui::theme;
 ///
 /// The ordering is v3's `ORDER BY created_at DESC` — the same
 /// [`SongOrder::Newest`] the home page's "Les dernières ajouts" asks for.
+///
+/// The path is a constant as well as an attribute, because two other modules
+/// name it: `robots.txt`'s `Link` headers (`routes/negotiation.rs`) and the
+/// fixed-pages sitemap. `#[page]` cannot take a constant — it is a macro over a
+/// literal path — so the constant restates it, as `pages::editor::PATH` does.
+pub const PATH: &str = "/himene";
+
 #[page("/himene")]
 pub async fn songs(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);

@@ -18,6 +18,7 @@ pub mod db;
 pub mod domain;
 pub mod i18n;
 pub mod pages;
+pub mod routes;
 pub mod state;
 pub mod ui;
 
@@ -28,6 +29,7 @@ use topcoat::{
 };
 
 use crate::db::Db;
+use crate::routes::negotiation;
 
 /// Build the application router.
 ///
@@ -48,11 +50,21 @@ use crate::db::Db;
 /// [`i18n::resolve`] reads a remembered language choice from, and what writes
 /// one back when a visitor asks for a language by name — without the layer,
 /// `cookies(cx)` panics rather than quietly returning nothing.
+///
+/// `.layer(...)` registers the one layer the site has, and it is registered by
+/// hand rather than discovered. `#[layer]` always carries a path; this one is
+/// *pathless* on purpose, because it has to see a request before the router has
+/// matched it — it is what answers `Accept: text/markdown` with a Markdown
+/// document instead of the page, and what puts the `Link` headers on the HTML
+/// responses it passes through. See [`routes::negotiation`]. It is registered
+/// rather than left out because a site that advertises a Markdown form has to
+/// serve one.
 pub fn router(db: Db) -> Router {
     Router::builder()
         .discover()
         .cookies()
         .assets(AssetBundle::load().unwrap())
         .app_context(db)
+        .layer(negotiation::Negotiation)
         .build()
 }

@@ -1477,3 +1477,123 @@ the index still lists all 44; a rejection answers 400 with the title *and* the
 lyric still in the form; and the sheet built from a submission carrying a
 `<script>` contains neither the script nor its handler. The stylesheet still
 carries every token the form introduced — `22442 B`.
+
+## 22. Appendix — verified in step 10 (2026-10-05)
+
+The machine-readable half of the site is `src/routes/`: `robots.rs`,
+`sitemap.rs`, `llms.rs`, `api.rs` and `negotiation.rs`. Nothing in it renders a
+view, and every route in it is declared with `#[route]` rather than `#[page]` —
+which is why the module exists at all. A `#[page]` is wrapped by every layout
+whose path is a prefix of its own, and the site's layout sits at `/`, so a page
+is always an HTML document carrying the site's chrome. An XML sitemap, a JSON
+body and a Markdown document are not.
+
+### The one layer, and why it is registered by hand
+
+`Accept: text/markdown` cannot be a route: one URL has two representations, and
+a route is one of them. `Negotiation` is a pathless `Layer` — `#[layer]` always
+carries a path, so it is registered by hand in `crate::router` — and it does the
+two things that have to happen outside routing. A `GET` for `/himene/{id}` that
+prefers Markdown is answered by the layer and never reaches the pages; every
+HTML response that passes through it collects the `Link` headers. Both halves
+live in one file on purpose, because a header promising a `text/markdown`
+variant that nothing serves would be worse than no header.
+
+The negotiation is decided from the request's own headers and path first, so no
+request that is not a Markdown song read opens the pool. `text/markdown;q=0` is
+the specification's "explicitly not acceptable" and is treated as absent; a
+missing or malformed `q` is the default rather than zero, which is what
+`Accept-Language` already does in `i18n`. `.run/step10.sh` asks for Markdown
+five ways — alone, weighted below HTML, weighted above it, `q=0`, and `*/*` —
+and asks a path that names no song, which must stay the site's HTML 404: the
+layer falls through rather than inventing an error of its own.
+
+**The `Link` values are absolute.** The first live run served
+`</sitemap.xml>; rel="sitemap"` — a relative reference, which RFC 8288 permits
+and which resolves correctly from the page it arrived on. A `Link` header is
+exactly the thing that gets quoted away from its response, though, and
+`robots.txt`, `llms.txt` and every `<loc>` already spell their URLs from
+`SITE_URL`. They are built the same way now, and the script asserts the absolute
+form.
+
+### Deliberate differences from v3
+
+- **`robots.txt` is a route, not a file.** The two `sitemap.xml.br` / `.gz`
+  directives are gone: nothing ever produced those files. `Disallow: /pkg` is
+  gone with `/pkg` itself. `Disallow: /himene/api` is kept — that is the one
+  writable route — and the `Sitemap:` lines are built from `SITE_URL`.
+- **Both sitemaps are routes.** v3 wrote them out at deploy time; a song added
+  through the form is now in one on the next request. The fixed-pages sitemap's
+  `lastmod` is the newest song's `updated_at` rather than v3's hand-written
+  `2024-08-21`, which was never touched again; a site with no songs carries no
+  `lastmod` at all rather than a fabricated one.
+- **The home `<loc>` carries no trailing slash.** v3 wrote
+  `https://www.chansondufenua.pf/`; this writes `SITE_URL`, which is the
+  spelling the site's own `/aepa` canonical already uses. The two are the same
+  resource.
+- **`<priority>1</priority>`, not `1.0`.** Topcoat writes the priority as an
+  `f32`. Every sitemap reader parses the two identically, and the script asserts
+  the number rather than the formatting.
+- **`Link` headers, `llms.txt` and the JSON API are new.** v3 had none of them.
+
+### Two judgement calls the maintainer may want to revisit
+
+- **Two sitemaps, not a `<sitemapindex>`.** `PLAN.md` §6 calls it "the sitemap
+  index" and names the two documents it means. An index would have to live at
+  one of the two URLs and push the other somewhere new, which is not worth it
+  for two files, and both URLs are already advertised — in v3's copy and on the
+  live site.
+- **The `Content-Signal` policy is alice's reading, not a decision.** §6 says
+  the maintainer chooses it; the values shipped are `search=yes, ai-input=yes,
+  ai-train=no`, with `CCBot` and `Google-Extended` disallowed for the engines
+  that offer no other way to say the third. They are written in one constant at
+  the top of `robots.rs`, and flipping one is a one-word edit.
+
+Shape decisions inside the API: the catalogue leaves the lyrics out (43 lyrics
+is most of a megabyte; the single-song read carries them) and artists are names
+rather than ids, because there is no artist resource to dereference. A missing
+song is a JSON 404 — a caller that asked for JSON should not have to parse a
+document to find out it was wrong. `/api/health` counts the published songs
+rather than loading them, and reads the database at all because "the process
+answered" is not the interesting question.
+
+### Two traps, both about Tailwind's output again
+
+1. **A doc comment emitted a real dead rule.** `the credits as an italic line`
+   compiled `.italic` into the stylesheet. Reworded to "on their own line in
+   emphasis". This is the same trap step 9 paid for, in the same file shape:
+   Tailwind reads `src/` as text, so prose about a class is a class.
+2. **The dead-rule detector needs every page, or a used rule reads dead.** The
+   error panel's `border-red-400` only renders on a rejected submission, so a
+   page set that fetched `/himene/api` but never posted to it reported a live
+   rule as one Tailwind emitted for nothing. The script now sends the rejected
+   `POST` too — which is also the check that the layer passes the site's one
+   writable route through untouched.
+
+Dead rules stand at three (`invisible`, `lowercase`, `static`), one fewer than
+step 9's four, and for the same so-what reason as before: `fixed` is now a word
+*in the served markup* — `llms.txt` says "the site's fixed pages" — so the
+textual detector finds it among the pages instead. No rule left the stylesheet.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **126 tests green**
+(120 lib + 6 file-backed), eighteen of them new here: the negotiation case by
+case, the path reader, the three `Link` sets, the Markdown document, the
+catalogue's shape, the counts, the draft rule, and the two sitemap invariants.
+
+Against the real 22 March dump, imported into a scratch database and served
+(`.run/step10.sh`): **86/86 HTML checks and 24/24 stylesheet checks**. In
+particular — `robots.txt` is `text/plain` and states both sitemaps, the
+`Content-Signal` line and both named crawlers; `/sitemap.xml` lists exactly the
+home page and the index; `/himene/sitemap.xml` lists the same 43 ids the index
+links to, and no others; `llms.txt` links to every entry point the crate
+registers; `/api/songs` counts what it lists and leaves the lyric out;
+`/api/songs/{id}` adds the lyric as Markdown with the chords inline and its URL
+is the sheet's own; `/api/songs/inexistant` is a JSON 404; `/api/health` reports
+`ok`, the version and the counts; every HTML document carries its `Link` headers
+and none of the machine-readable ones does; a Markdown request is answered
+`text/markdown` with `Vary: Accept` and a flipped `alternate`, while a browser,
+a weighted-HTML request and a `q=0` request all get the unchanged page; and a
+rejected submission still reaches the form and gets its error panel back. The
+stylesheet still carries every token the site depends on — `22468 B`.
