@@ -35,6 +35,7 @@ use topcoat::{
 
 use crate::db;
 use crate::domain::song::{LyricLine, LyricSpan, Song};
+use crate::i18n::{self, Key};
 use crate::state;
 use crate::ui::theme;
 
@@ -45,9 +46,6 @@ use crate::ui::theme;
 // point of declaring it at all: the URL shape lives in one place, in the
 // `#[page]` attribute below, and no other module spells it out.
 path_param!(pub id);
-
-/// The sheet's call to action — v3's words.
-const ADD_LYRICS: &str = "Ajouter des paroles";
 
 /// `/himene/{id}` — one song, with its chords.
 ///
@@ -83,7 +81,8 @@ pub async fn song(cx: &Cx) -> Result<impl View> {
 /// A `#[component]` rather than a plain helper, because `view!` needs the
 /// request context and only a component or a page binds one.
 #[component]
-pub async fn sheet_body(sheet: Song) -> Result<impl View> {
+pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
     let title = sheet.get_title();
     let artists = sheet
         .get_artists()
@@ -108,7 +107,7 @@ pub async fn sheet_body(sheet: Song) -> Result<impl View> {
                     href="/himene/api"
                     class=(class!(theme::BUTTON_SMALL, theme::FOCUS))
                 >
-                    (ADD_LYRICS)
+                    (i18n::text(lang, Key::AddLyrics))
                 </a>
             </header>
 

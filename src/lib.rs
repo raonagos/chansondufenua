@@ -16,12 +16,14 @@
 
 pub mod db;
 pub mod domain;
+pub mod i18n;
 pub mod pages;
 pub mod state;
 pub mod ui;
 
 use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
+    cookie::RouterBuilderCookieExt,
     router::{Router, RouterBuilderDiscoverExt},
 };
 
@@ -41,9 +43,15 @@ use crate::db::Db;
 /// `topcoat asset bundle` writes next to the binary, so the build is
 /// `cargo build && topcoat asset bundle && ./target/debug/chansondufenua`.
 /// `cargo run` alone panics here.
+///
+/// `.cookies()` registers the request-scoped cookie jar. It is what
+/// [`i18n::resolve`] reads a remembered language choice from, and what writes
+/// one back when a visitor asks for a language by name — without the layer,
+/// `cookies(cx)` panics rather than quietly returning nothing.
 pub fn router(db: Db) -> Router {
     Router::builder()
         .discover()
+        .cookies()
         .assets(AssetBundle::load().unwrap())
         .app_context(db)
         .build()

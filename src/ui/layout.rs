@@ -1,18 +1,21 @@
 //! The page shell: one layout, wrapping every page.
 //!
 //! Transcribed from v3's `app.rs` (`shell`) + `components/body/{mod,header}.rs`,
-//! with five differences, each deliberate and each explained where it happens:
+//! with six differences, each deliberate and each explained where it happens:
 //!
 //! * the menu toggle is a checkbox instead of a scripted button,
 //! * v3's Google Fonts request is replaced by three self-hosted families,
 //! * the document is dark-only, and says so,
 //! * the document head is decided from the request path by [`document_head`],
-//!   because Topcoat has no per-page `<head>` API, and
+//!   because Topcoat has no per-page `<head>` API,
 //! * the slot is wrapped in an [`error_boundary`], so a page that fails with a
 //!   [`NotFoundError`] renders the site's own 404 instead of Topcoat's bare
 //!   default. That covers *raised* errors only — a URL matching no route never
 //!   reaches the layout at all, which is why `pages::not_found!("/")` also
-//!   exists; see `PLAN.md` §17.
+//!   exists; see `PLAN.md` §17, and
+//! * the document declares which language it is in, and names the other one,
+//!   because the shell is where the chrome's words live. `crate::i18n` decides
+//!   the language; this file only asks for the strings.
 //!
 //! The font change is the one visible redesign in step 4. v3 asked Google for
 //! *Roboto Serif* and then wrote `font-family: Roboto, Arial, serif` — a
@@ -30,6 +33,7 @@ use topcoat::{
 
 use crate::db;
 use crate::domain::song::{SITE_URL, Song};
+use crate::i18n::{self, Key, Lang};
 use crate::pages::{home, songs};
 use crate::state;
 use crate::ui::{fonts, theme};
@@ -38,7 +42,7 @@ use crate::ui::{fonts, theme};
 ///
 /// v3's `<Title text="Chanson du Fenua"/>`: set once on the app root. The
 /// capital F is v3's, not a typo — the song page writes the lowercase one, and
-/// both are in the wild.
+/// both are in the wild. It is the site's name, so it is not translated.
 const TITLE: &str = "Chanson du Fenua";
 
 /// Everything the layout needs to write `<head>`.
@@ -67,6 +71,15 @@ struct SocialCards {
     twitter_title: String,
     twitter_description: String,
     twitter_image: String,
+    /// `og:locale` and its alternate, for the language the page is served in.
+    ///
+    /// v3 wrote `ty_PF` and `fr_FR` as constants, Tahitian first. Step 8 makes
+    /// them follow the resolved language instead: a card for a page served in
+    /// French should say so, which is what `og:locale` is for. The default page
+    /// therefore carries `fr_FR` where v3 carried `ty_PF`; `?lang=ty` restores
+    /// v3's pair exactly.
+    locale: &'static str,
+    locale_alternate: &'static str,
 }
 
 impl SocialCards {
@@ -76,7 +89,7 @@ impl SocialCards {
     /// fields that differ from their Open Graph twins are kept distinct rather
     /// than aliased, because the image URLs genuinely differ (`/drive/gentw/`
     /// against `/drive/genog/`) and the card is a wider crop.
-    fn for_song(meta: &crate::domain::song::MetaSongData) -> Self {
+    fn for_song(meta: &crate::domain::song::MetaSongData, lang: Lang) -> Self {
         Self {
             og_title: meta.page_title.clone(),
             og_description: meta.meta_og_description.clone(),
@@ -86,6 +99,8 @@ impl SocialCards {
             twitter_title: meta.page_title.clone(),
             twitter_description: meta.meta_og_description.clone(),
             twitter_image: meta.meta_img_url_tw.clone(),
+            locale: lang.og_locale(),
+            locale_alternate: lang.other().og_locale(),
         }
     }
 }
@@ -108,7 +123,7 @@ impl SocialCards {
 /// A path this function cannot resolve — a song that does not exist, an
 /// unpublished one, a path below `/himene/` with more segments — falls back to
 /// the site head. The page itself is what turns those into a 404.
-async fn document_head(cx: &Cx) -> DocumentHead {
+async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
     let path = uri(cx).path();
 
     if let Some(id) = path.strip_prefix("/himene/")
@@ -117,14 +132,14 @@ async fn document_head(cx: &Cx) -> DocumentHead {
         && let Ok(Some(song)) = db::song(state::db(cx).pool(), id).await
         && song.is_published()
     {
-        return song_head(&song);
+        return song_head(&song, lang);
     }
 
     site_head(path)
 }
 
 /// The `<head>` of a song page, from the song's own metadata.
-fn song_head(song: &Song) -> DocumentHead {
+fn song_head(song: &Song, lang: Lang) -> DocumentHead {
     let meta = song.get_meta_data();
 
     DocumentHead {
@@ -132,10 +147,11 @@ fn song_head(song: &Song) -> DocumentHead {
         description: Some(meta.meta_description.clone()),
         // The song's canonical URL and its `og:url` are the same thing, which is
         // what v3 emitted — and what the identity rule in `fixing-metadata`
-        // asks for.
+        // asks for. It carries no language parameter: the canonical URL is the
+        // page, and the language is a variant of it.
         canonical: Some(meta.meta_og_url.clone()),
         jsonld: Some(meta.meta_jsonld.clone()),
-        social: Some(SocialCards::for_song(&meta)),
+        social: Some(SocialCards::for_song(&meta, lang)),
     }
 }
 
@@ -162,8 +178,10 @@ fn site_head(path: &str) -> DocumentHead {
 #[layout("/")]
 pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
     let stylesheet = tailwind::stylesheet!();
-    let head = document_head(cx).await;
+    let lang = i18n::resolve(cx);
+    let head = document_head(cx, lang).await;
     let home_link = href!(home::home);
+    let path = i18n::path(cx);
 
     Ok(view! {
         <!DOCTYPE html>
@@ -176,7 +194,11 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
         // writes a base rule alongside the `@theme` block. A dark document that
         // did not declare its scheme gets light native scrollbars and form
         // controls, which reads as a rendering fault.
-        <html lang="fr" class="dark">
+        //
+        // `lang` is the request's language, not a constant: it is what tells a
+        // screen reader and a search engine which of the site's two languages
+        // this response is written in. See `crate::i18n`.
+        <html lang=(lang.code()) class="dark">
             <head>
                 <meta charset="utf-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -193,6 +215,25 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     Some(canonical) => <link rel="canonical" href=(canonical)/>,
                     None => "",
                 }
+                // The language alternates. Every URL on this site exists in
+                // both languages, and the parameter is the only difference:
+                // so each page names all of them, itself included, which is
+                // what a `hreflang` cluster is and what tells a search engine
+                // that the two URLs are one page rather than duplicates
+                // competing for the same query.
+                //
+                // The URLs are origin-qualified because a search engine reads
+                // them out of context, and `x-default` points at the page with
+                // no parameter — the form a reader who has expressed no
+                // preference should land on.
+                for alternate in Lang::ALL {
+                    <link
+                        rel="alternate"
+                        hreflang=(alternate.code())
+                        href=(format!("{SITE_URL}{path}?lang={}", alternate.code()))
+                    />
+                }
+                <link rel="alternate" hreflang="x-default" href=(format!("{SITE_URL}{path}"))/>
                 // The social tags, only on a song page. v3 declared them on the
                 // song route, so the home page has never carried them.
                 match head.social {
@@ -200,8 +241,8 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         <meta property="fb:app_id" content="383599779228826"/>
                         <meta property="fb:pages" content="109134754150923"/>
                         <meta property="og:type" content="website"/>
-                        <meta property="og:locale" content="ty_PF"/>
-                        <meta property="og:locale:alternate" content="fr_FR"/>
+                        <meta property="og:locale" content=(cards.locale)/>
+                        <meta property="og:locale:alternate" content=(cards.locale_alternate)/>
                         <meta property="og:title" content=(cards.og_title)/>
                         <meta property="og:description" content=(cards.og_description)/>
                         <meta property="og:url" content=(cards.og_url)/>
@@ -268,12 +309,14 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                             Ok(view! {
                                 (StatusCode::NOT_FOUND)
                                 <section class=(theme::NOT_FOUND)>
-                                    <h1 class=(theme::H1)>"La page n'existe pas."</h1>
+                                    <h1 class=(theme::H1)>
+                                        (i18n::text(lang, Key::NotFoundTitle))
+                                    </h1>
                                     <p class=(theme::LEAD)>
-                                        "Cette page n'existe pas, ou n'existe plus."
+                                        (i18n::text(lang, Key::NotFoundBody))
                                     </p>
                                     <a href=(home_link) class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))>
-                                        "Retour à l'accueil"
+                                        (i18n::text(lang, Key::NotFoundCta))
                                     </a>
                                 </section>
                             })
@@ -294,6 +337,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
 /// why v3's scripted hamburger was replaced rather than ported.
 #[component]
 pub async fn header(cx: &Cx) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
     let home_link = href!(home::home);
     let aepa_link = href!(home::aepa);
     let songs_link = href!(songs::songs);
@@ -340,7 +384,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                             theme::NAV_LINK_CURRENT if on_accueil,
                         ))
                     >
-                        "Accueil"
+                        (i18n::text(lang, Key::NavHome))
                     </a>
                     <a
                         href=(songs_link)
@@ -351,7 +395,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                             theme::NAV_LINK_CURRENT if on_songs,
                         ))
                     >
-                        "Chanson"
+                        (i18n::text(lang, Key::NavSongs))
                     </a>
                 </nav>
             </div>

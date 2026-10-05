@@ -230,8 +230,8 @@ Every step must build and (where applicable) pass tests **before** its commit.
 | 4 ✅ | `add: app shell, layout and design tokens` | `src/ui/*` (layout, header/nav, footer, `class!` tokens) | pages render inside the shell; print variants present |
 | 5 ✅ | `add: home page` | `/` and `/aepa` (hero, cards, latest + most-viewed tables) | parity with `HomePage` |
 | 6 ✅ | `add: songs index page` | `/himene` table | parity with `AllSongPage` |
-| 7 | `add: song page + metadata` | `/himene/{id}` + `<title>`, description, JSON-LD, OG/Twitter meta, `view_count` increment | parity with `SongPage` |
-| 8 | `add: i18n module and fr/ty catalogs` | `src/i18n.rs` + `hreflang`/`lang`/`og:locale`, labels wired | switching locale changes chrome text |
+| 7 ✅ | `add: song page + metadata` | `/himene/{id}` + `<title>`, description, JSON-LD, OG/Twitter meta, `view_count` increment | parity with `SongPage` |
+| 8 ✅ | `add: i18n module and fr/ty catalogs` | `src/i18n.rs` + `hreflang`/`lang`/`og:locale`, labels wired | switching locale changes chrome text |
 | 9 | `add: create-song page with chord tools` | `/himene/api` form + chord editor + artist picker | parity with `CreateSongPage` |
 | 10 | `add: agent-readiness (robots, sitemap, md negotiation, link headers)` | §6 checklist: `robots.txt`, sitemaps, `Link` headers, `Accept: text/markdown`, `llms.txt`, read-only JSON API | `isitagentready.com` scan improves |
 | 11 | `add: og/twitter image route` | `og.rs` per §7 decision | images render |
@@ -1205,3 +1205,122 @@ two fetches moved that song's `view_count` 29 → 31. `/` and `/himene` unchange
 — ten rows, 43 links, `<title>Chanson du Fenua</title>` — and `/himene/nope`
 still 404 with the chrome. 41/41 HTML checks and 27/27 stylesheet checks in
 `.run/step7.sh`.
+
+---
+
+## 20. Appendix — verified in step 8 (2026-10-05)
+
+French and Tahitian. `src/i18n.rs` is a `Lang` enum, a `Key` enum, and one
+exhaustive match per language; the layout and the pages ask it for the request's
+language and for the words of the chrome. §2.4 asked for a homegrown module
+because Topcoat's localization support is on its roadmap and not in the crate,
+and this is that module — **no new dependency**, only the `serde` and `topcoat`
+the crate already had.
+
+### The compiler is the translator's checklist
+
+A missing translation is a compile error, not a blank line. The two matches are
+over the whole `Key` enum, so adding a key stops the build until both languages
+answer for it — which is what §2.4 asked for and the reason the catalog is an
+enum rather than a table of strings. A unit test closes the other half that the
+compiler cannot: no key may hold the same string in both languages, so a key
+given its French words and a Tahitian placeholder that equals them fails.
+
+### What is translated, and what is deliberately not
+
+Chrome and labels only. That means the navigation, the 404, and the fixed action
+labels: the hero button and the closing button on the home page, the index's
+heading and two column titles, and the song sheet's "add lyrics" button. Twelve
+keys in all.
+
+Left in French, on purpose, and each for the same reason — they are not labels:
+
+- **the song lyrics**, which are the content;
+- **the home page's prose** (the hero's standfirst, the three cards, the synopsis,
+  the teaching paragraph). Translating prose is *writing*; a rewrite should not
+  put new words in the maintainer's mouth, and that is a separate decision from
+  giving the chrome a language;
+- **the footer sentence**, which is a single sentence with two links spliced into
+  the middle of it. Split into catalog fragments it would be ungrammatical in
+  both languages. It stays exactly as v3 wrote it, English words and all.
+
+`Facebook` stays a constant for the same kind of reason: a brand name is not a
+translation unit.
+
+### The resolution order, and the cookie that makes it stick
+
+§2.4's order, implemented as a pure function over the three sources so that it
+is testable without a request: `?lang=` → the `lang` cookie → `Accept-Language`
+→ French. Quality values are honoured and an entry the site cannot serve is
+skipped rather than scored, so `en;q=1.0, ty;q=0.5` is Tahitian — a first-match
+implementation would have called it French.
+
+An explicit `?lang=` is written back as a cookie, and that is not decoration: no
+link in the chrome carries the parameter, so without it the choice would last
+exactly one page. The jar is `CookieLayer`, registered in `lib.rs` with
+`.cookies()`; `i18n::resolve` is called by the layout *and* by each page that has
+a label, so the write is guarded on the stored value — a page whose cookie
+already agrees does not restate it, which is why the several calls per request
+produce one `Set-Cookie`. `Path=/`, because a choice made on `/himene/x` has to
+reach `/`.
+
+### `og:locale` follows the language — the one change to v3's metadata
+
+v3 wrote `ty_PF` and `fr_FR` as constants with Tahitian first. They are now
+`Lang::og_locale` and its alternate, so a page served in French says so. The
+default page therefore carries **`fr_FR`** where v3 carried `ty_PF`;
+`?lang=ty` reproduces v3's pair exactly. That is the point of the step rather
+than a regression, and `.run/step7.sh` carries one updated assertion to say so.
+
+Alongside it, a `hreflang` cluster on every page: `fr`, `ty`, and an `x-default`
+that points at the URL with no parameter. Every page on this site exists in both
+languages and the parameter is the only difference, so the alternates are the
+page's own URL plus `?lang=` — built from `uri(cx).path()`, which is why the
+cluster never stacks a second `?` when the reader arrives already carrying one.
+The canonical deliberately keeps no parameter: the canonical is the page, and the
+language is a variant of it.
+
+### Reo Tahiti: a first pass, awaiting a native review
+
+The Tahitian catalog was written without a native speaker to check it. The
+vocabulary is small and conservative — `hīmene` (song, the site's own word),
+`fa'aea` (welcome, used for the front page), `parau hīmene` (lyrics, the phrase
+the song page's metadata already mixes into its description), `tāpiri` (to add) —
+and every string is short enough to correct in `i18n.rs` alone, with no code
+touching it. This is the step's judgement call and its one known gap: the
+plumbing is done, the words want a fluent reader.
+
+### A trap this step walked past
+
+Tailwind scans `src/` as **text**, so a catalog is a source of class names as
+much as any markup is: a Tahitian word that happens to be a utility would be
+compiled into every stylesheet as a rule nothing can match. Checked, not assumed:
+`.run/step8.sh` reads the served CSS and fails if the set of dead rules grows past
+the six ambient ones step 7 documented. It did not grow — the stylesheet is
+**20 776 B**, byte for byte the size step 7 left it.
+
+One smaller thing, recorded because it cost a minute: `#[component]` puts the
+request context in scope only for a function that declares `cx: &Cx`. A
+component without one — `sheet_body` was without one — has no way to ask for the
+language, so the parameter had to be added; the call site is unchanged.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **103 tests green**
+(97 lib + 6 file-backed), five of them new: the catalog is complete and actually
+differs per language, the tag reader accepts `fr`/`fr-FR`/`ty_PF` and rejects
+`en`, and `Accept-Language` is ranked by quality.
+
+Against the real 22 March dump, imported into a scratch database and served
+(`.run/step8.sh`): **49/49 HTML checks and 13/13 stylesheet checks**. In
+particular — `/` is `lang="fr"` with the nav `Accueil`/`Chanson` and `/` with
+`?lang=ty` is `lang="ty"` with `Fa'aea`/`Hīmene`; the cookie is honoured, and an
+explicit `?lang=ty` beats a `lang=fr` cookie; `Accept-Language: ty-PF,ty;q=0.9`
+is Tahitian and `?lang=en` falls through to French without setting anything;
+`?lang=ty` responds `Set-Cookie: lang=ty; SameSite=Lax; Path=/; Max-Age=31536000`
+and a request whose cookie already says `ty` gets no `Set-Cookie` at all; the
+404, the index heading and columns, and both buttons translate; the `hreflang`
+cluster is complete and correctly formed on `/`, `/himene`, a song and the 404;
+`og:locale` swaps with the language; and the lyric block is byte-identical in the
+two languages, which is the check that says the step stopped where it said it
+would.

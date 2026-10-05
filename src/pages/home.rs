@@ -33,6 +33,7 @@ use topcoat::{
 
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
+use crate::i18n::{self, Key};
 use crate::pages::song as sheet;
 use crate::pages::songs;
 use crate::state;
@@ -43,13 +44,16 @@ use crate::ui::theme;
 /// A module rather than a flat list of constants so that a call site reads
 /// `copy::HERO_TITLE` and never has to wonder whether `HERO_TITLE` was the words
 /// or the styling — `theme::HERO_TITLE` is the styling.
+///
+/// **The action labels are not here.** The two buttons and the closing call to
+/// action are chrome, so they live in [`crate::i18n`] with the rest of the
+/// chrome: this module is the French prose a reader reads, and that one is the
+/// words that change with the site's language.
 pub mod copy {
     /// The hero's headline.
     pub const HERO_TITLE: &str = "Chanson du fenua";
     /// The hero's standfirst.
     pub const HERO_SUBTITLE: &str = "L'élégance de la musique polynésienne";
-    /// The hero's call to action.
-    pub const HERO_CTA: &str = "Découvrir les chansons";
 
     /// The three "why" cards, in v3's order: title, then body.
     pub const CARDS: &[(&str, &str)] = &[
@@ -79,12 +83,9 @@ pub mod copy {
     pub const FOOT_TITLE: &str = "Votre odyssée musicale commence ici";
     /// The line under it.
     pub const FOOT_TEXT: &str = "Rejoignez la communauté des passionnés de la musique polynésienne";
-    /// The first closing button.
+    /// The first closing button. A brand name, so it is the same in both
+    /// languages and stays a constant rather than becoming a key.
     pub const FOOT_FACEBOOK: &str = "Facebook";
-    /// The second closing button. v3 pointed it at `/himene/api`, the
-    /// create-song page; that page arrives in step 9 and the layout's branded
-    /// 404 catches the gap until then.
-    pub const FOOT_CTA: &str = "C'est parti !";
 
     /// The tail of the meta description — the phrase that is not on the page.
     pub const TAGLINE: &str =
@@ -133,6 +134,7 @@ pub async fn aepa() -> Result<impl View> {
 #[component]
 pub async fn home_body(cx: &Cx) -> Result<impl View> {
     let pool = state::db(cx).pool();
+    let lang = i18n::resolve(cx);
     let latest = db::songs(pool, SongOrder::Newest, Some(ROWS)).await?;
     let most_viewed = db::songs(pool, SongOrder::MostViewed, Some(ROWS)).await?;
     let songs_link = href!(songs::songs);
@@ -146,7 +148,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
                     href=(songs_link)
                     class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))
                 >
-                    (copy::HERO_CTA)
+                    (i18n::text(lang, Key::HomeDiscover))
                 </a>
             </section>
 
@@ -203,11 +205,14 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
                     >
                         (copy::FOOT_FACEBOOK)
                     </a>
+                    // v3's second closing button, pointed at the same URL: the
+                    // create-song page. That page arrives in step 9; until then
+                    // the layout's branded 404 catches the gap.
                     <a
                         href="/himene/api"
                         class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))
                     >
-                        (copy::FOOT_CTA)
+                        (i18n::text(lang, Key::HomeStart))
                     </a>
                 </div>
             </section>

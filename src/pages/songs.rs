@@ -41,17 +41,9 @@ use topcoat::{
 
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
+use crate::i18n::{self, Key};
 use crate::state;
 use crate::ui::theme;
-
-/// The page's heading — v3's words.
-const TITLE: &str = "Toutes les chansons";
-/// The first column: the song.
-const COLUMN_TITLE: &str = "Titre";
-/// The second column: who wrote or sings it.
-const COLUMN_ARTIST: &str = "Artiste";
-/// What the table says when nothing is published — v3's words.
-const EMPTY: &str = "Pas de chanson";
 
 /// `/himene` — every published song, newest first.
 ///
@@ -67,25 +59,30 @@ const EMPTY: &str = "Pas de chanson";
 /// [`SongOrder::Newest`] the home page's "Les dernières ajouts" asks for.
 #[page("/himene")]
 pub async fn songs(cx: &Cx) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
     let listed = db::songs(state::db(cx).pool(), SongOrder::Newest, None).await?;
 
     Ok(view! {
         <div class=(theme::PAGE)>
-            <h1 class=(theme::H1)>(TITLE)</h1>
+            <h1 class=(theme::H1)>(i18n::text(lang, Key::IndexTitle))</h1>
             <div class=(theme::INDEX_PANEL)>
                 <table class="w-full">
                     <thead>
                         <tr>
-                            <th class=(theme::INDEX_HEAD)>(COLUMN_TITLE)</th>
+                            <th class=(theme::INDEX_HEAD)>
+                                (i18n::text(lang, Key::IndexColumnTitle))
+                            </th>
                             <th class=(class!(theme::INDEX_HEAD, theme::INDEX_COLUMN_ARTIST))>
-                                (COLUMN_ARTIST)
+                                (i18n::text(lang, Key::IndexColumnArtist))
                             </th>
                         </tr>
                     </thead>
                     <tbody>
                         if listed.is_empty() {
                             <tr>
-                                <td colspan="2" class=(theme::INDEX_EMPTY)>(EMPTY)</td>
+                                <td colspan="2" class=(theme::INDEX_EMPTY)>
+                                    (i18n::text(lang, Key::IndexEmpty))
+                                </td>
                             </tr>
                         } else {
                             for song in listed {
