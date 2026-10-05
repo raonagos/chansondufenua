@@ -229,7 +229,7 @@ Every step must build and (where applicable) pass tests **before** its commit.
 | 3b ✅ | `add: surreal export importer (step 3b)` | `src/db/import.rs` (SurrealQL parser + transactional load) + `examples/import.rs` CLI | importer written and **proven against the real dump** (34 artists / 43 songs / 42 credits, byte-for-byte round-trip, order matches live); *running* it on real data is held for the v4 release — `11226ca` |
 | 4 ✅ | `add: app shell, layout and design tokens` | `src/ui/*` (layout, header/nav, footer, `class!` tokens) | pages render inside the shell; print variants present |
 | 5 ✅ | `add: home page` | `/` and `/aepa` (hero, cards, latest + most-viewed tables) | parity with `HomePage` |
-| 6 | `add: songs index page` | `/himene` table | parity with `AllSongPage` |
+| 6 ✅ | `add: songs index page` | `/himene` table | parity with `AllSongPage` |
 | 7 | `add: song page + metadata` | `/himene/{id}` + `<title>`, description, JSON-LD, OG/Twitter meta, `view_count` increment | parity with `SongPage` |
 | 8 | `add: i18n module and fr/ty catalogs` | `src/i18n.rs` + `hreflang`/`lang`/`og:locale`, labels wired | switching locale changes chrome text |
 | 9 | `add: create-song page with chord tools` | `/himene/api` form + chord editor + artist picker | parity with `CreateSongPage` |
@@ -980,3 +980,105 @@ the live site has since added (so live's newest table starts three rows earlier)
 and **view counts have moved** since 22 March 2025 (which is why two songs trade
 places 4 and 5 in the most-viewed table). Both close at release, when the export is
 refreshed.
+---
+
+## 18. Appendix — verified in step 6 (2026-10-05)
+
+The song index: `/himene`, transcribed from v3's `AllSongPage`
+(`app/src/pages/himene/allsong.rs`). One heading, one table, the artist column
+dropped below `md`. v3's copy, byte for byte.
+
+### A real defect, found by the verification and not by the tests
+
+`build.rs` printed two `rerun-if-changed` lines — `build.rs` itself and
+`src/ui/palette.rs` — and those two lines were the whole problem. **Cargo reruns
+a build script when any file in the package changes only if the script prints no
+`rerun-if-changed` at all; printing one replaces that default with the list.**
+So `build.rs` (which runs Tailwind) was rerun only when `palette.rs` changed,
+and Tailwind's whole job is to scan the *rest* of the source.
+
+Consequence: the stylesheet served with step 5 was the stylesheet of step 4b.
+`truncate`, `max-md:hidden`, `pt-[9px]`, the `w-[500px]`/`w-[800px]` measures —
+all of them were in the markup and **none of them were in the CSS**. On a phone
+the lyric column showed in full instead of hiding, and on every width it pushed
+the table wide instead of truncating. Nothing failed: `cargo test` never reads
+the stylesheet, and step 5's smoke test asserted on the class name in the HTML,
+which was there.
+
+The step-6 verification was written to fetch the stylesheet and look for the
+utilities it needs — that check is what surfaced it. Fixed in `build.rs` by
+adding `cargo:rerun-if-changed=src`, and `the stylesheet carries the new
+utilities` now asserts both the new step-6 classes *and* the two step-5 ones the
+bug had swallowed, plus the absence of one utility named only in a doc comment
+(Tailwind v4 scans comments; a class name written in prose is dead CSS).
+
+### Two differences from v3, both inherited from step 5
+
+1. **The rows are served, not streamed.** v3 built the list in the browser — a
+   `Resource` inside `<Suspense>` — so the first byte carried
+   `<td>Chargement...</td>` and the rows arrived afterwards, in a second request.
+   The live page still does it: its `<tbody>` is assembled *after* `</body>` in
+   the wire format, so the HTML the server sends contains an empty table.
+2. **The rows are links, not scripts.** v3's `<tr>` carried
+   `onclick="window.location=…"`, with `role="button"` and `tabindex="0"` to
+   match, *and* correct `<a href>` elements inside. The anchors stay; the rest is
+   gone — including `aria-label="Go to the song …"`, an English sentence on a
+   French page describing a role that no longer exists.
+
+### Unbounded, on purpose
+
+v3 asked for `page 0, limit 255`. There was never a page 2 to ask for:
+`app/src/app.rs` registers `himene/""` and `himene/:id`, so the page's
+`use_params_map().get("page")` could only ever read `0`. The 255th song would
+have been invisible with nothing to page to, and the call site said
+"pagination" while doing something else. v4 reads every published song; when the
+catalogue outgrows one page, the segment arrives *with* the pagination it
+implies.
+
+### One addition to v3's row rule
+
+`last:border-b-0`. v3's panel was borderless (`bg-transparent` under a
+`shadow-md`), so a rule under every row collided with nothing. The v4 panel is
+bordered, and on the last row the row's rule and the panel's edge land a pixel
+apart and read as a double line. v3's rule is otherwise kept utility for
+utility.
+
+### Judgement calls
+
+1. **The page title is `theme::H1`**, not v3's smaller heading — step 4b's
+   typography direction applied to the second page that has a title. It makes
+   the index heading *larger* than the home hero, which is the one thing here
+   worth a second look; it is one token away from changing.
+2. **The surface is the v4 panel**, following §17 rather than re-deciding it.
+   `INDEX_PANEL` is `CARD`'s surface plus `overflow-hidden` — the clipping is
+   the only reason the table's square corners do not poke out of the radius —
+   and **no padding**, because the cells carry it (`px-6`); a `p-8` on the panel
+   would inset the table's own edge and leave the header row floating.
+3. **`INDEX_COLUMN_ARTIST` is one token**, not the two spellings v3 needed. It
+   is a property of the *column*, so it composes with `INDEX_HEAD` and
+   `INDEX_CELL` at the two places that column is declared.
+4. **An uncredited song keeps its artist cell, empty.** v3 joined an empty
+   `Vec` and rendered the empty string; dropping the `<td>` would shift nothing
+   today and would break the table the moment a column follows it.
+
+### The trap this step found
+
+`#[page("/himene")]` emits a **unit struct named after its handler**, in the
+same module, in the *type* namespace. `let songs = …` in that module is then
+read as a pattern matching the unit struct rather than as a new binding, and the
+compiler reports a type mismatch on the *expression* — the error lands several
+lines from the cause. The index's rows are bound to `listed`; every future page
+in `src/pages/` has the same constraint.
+
+### Verified
+
+`cargo fmt --check` and `cargo clippy --all-targets` clean. **88 tests green**
+(82 lib + 6 file-backed). Against the real 22 March dump, imported into a
+scratch database: `/himene` → 200 with **43 rows for 43 published songs**, 43
+links, none duplicated, no row without one; credited songs carry their artists
+comma-joined in v3's order, uncredited ones carry an empty cell; zero `onclick`,
+`role="button"`, `tabindex`, `aria-label` or `Chargement` in the page. The
+`<link>`ed stylesheet → 200 `text/css` carrying `md:table-cell`,
+`last:border-b-0`, `px-6`, `rounded-card` — and, now, `truncate` and
+`max-md:hidden`. `/` unchanged (ten rows), `/himene/nope` still 404 with the
+chrome.

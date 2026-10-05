@@ -305,6 +305,49 @@ pub const BUTTON_OUTLINE: StaticClass = class!(
 );
 
 // ---------------------------------------------------------------------------
+// Song index
+// ---------------------------------------------------------------------------
+
+/// The panel the `/himene` table sits in.
+///
+/// [`CARD`]'s surface, written out again for the reason [`CARD_ROOMY`] gives —
+/// a [`StaticClass`] cannot be composed from constants — plus
+/// `overflow-hidden`, which is the only thing clipping the table's square
+/// corners to the panel's radius. **No padding:** on this page the cells carry
+/// it (`px-6`), so a `p-8` here would inset the table's own edge and leave the
+/// heading row floating inside a margin.
+pub const INDEX_PANEL: StaticClass =
+    class!("rounded-card border border-white/10 bg-tahiti-1000/40 shadow-card overflow-hidden");
+
+/// A heading cell of the index table — v3's `.all-song .tab-th`.
+pub const INDEX_HEAD: StaticClass = class!("px-6 py-3 text-left");
+
+/// The artist column, dropped below `md`.
+///
+/// v3 spelled this rule once per element — on the heading and on every cell. It
+/// is a property of the *column*, so it is one token here, composed with
+/// [`INDEX_HEAD`] and [`INDEX_CELL`] at the two places the column is declared.
+pub const INDEX_COLUMN_ARTIST: StaticClass = class!("hidden md:table-cell");
+
+/// A row of the index table — v3's `.all-song .tab-row`.
+///
+/// `last:border-b-0` is the one addition. v3's panel had no border of its own,
+/// so a rule under every row had nothing to collide with; the v4 panel is
+/// bordered, and on the last row the row's rule and the panel's edge land a
+/// pixel apart and read as a double line.
+pub const INDEX_ROW: StaticClass = class!(
+    "border-b border-gray-200 hover:border-tahiti-800 hover:bg-tahiti-800 \
+     dark:hover:border-tahiti-600 dark:hover:bg-tahiti-600 transition duration-150 \
+     ease-in-out last:border-b-0"
+);
+
+/// A cell of the index table — v3's `.all-song .tab-cell`.
+pub const INDEX_CELL: StaticClass = class!("px-6 py-4 whitespace-nowrap");
+
+/// The one row shown when nothing is published — v3's "Pas de chanson".
+pub const INDEX_EMPTY: StaticClass = class!("text-center py-4");
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -364,6 +407,12 @@ mod tests {
         BUTTON_LIGHT,
         BUTTON_OUTLINE,
         NOT_FOUND,
+        INDEX_PANEL,
+        INDEX_HEAD,
+        INDEX_COLUMN_ARTIST,
+        INDEX_ROW,
+        INDEX_CELL,
+        INDEX_EMPTY,
     ];
 
     /// Renders a token to the class string the layout would put in the markup.
@@ -569,6 +618,44 @@ mod tests {
         let table = classes(&TABLE_PANEL);
         assert!(table.contains(&"max-md:text-center"));
         assert!(table.contains(&"md:max-w-max"));
+    }
+
+    /// [`INDEX_PANEL`] repeats [`CARD`]'s surface for the reason [`CARD_ROOMY`]
+    /// documents, but it is not a `CARD_ROOMY`: the index table's cells carry
+    /// the padding, so the panel must not. What it cannot lose is the surface,
+    /// and `overflow-hidden` is the only thing clipping the table's square
+    /// corners to the panel's radius.
+    #[test]
+    fn the_index_panel_keeps_the_card_surface_without_the_padding() {
+        let surface: BTreeSet<&str> = classes(&CARD).into_iter().collect();
+        let names: BTreeSet<&str> = classes(&INDEX_PANEL).into_iter().collect();
+        let missing: Vec<&&str> = surface.difference(&names).collect();
+        assert!(missing.is_empty(), "the index panel lost {missing:?}");
+        assert!(names.contains(&"overflow-hidden"));
+        assert!(
+            !names.contains(&"p-8"),
+            "the cells carry the padding; the panel must not add its own"
+        );
+    }
+
+    /// The artist column is dropped on a phone, and only there. An unscoped
+    /// `hidden` renders a one-column table with no error anywhere, and a missing
+    /// `md:table-cell` lets the utility's `display: none` win at every width.
+    #[test]
+    fn the_artist_column_hides_only_below_md() {
+        assert_eq!(
+            classes(&INDEX_COLUMN_ARTIST),
+            ["hidden", "md:table-cell"],
+            "the column hide has to be scoped below md"
+        );
+    }
+
+    /// The last row drops its rule, so the panel's own border is the only line
+    /// at the foot of the table. Lose this and every index page shows a double
+    /// rule under the last song — nothing fails, it just looks wrong.
+    #[test]
+    fn the_last_index_row_has_no_rule() {
+        assert!(classes(&INDEX_ROW).contains(&"last:border-b-0"));
     }
 
     /// The same invariant as `every_colour_used_by_a_token_exists`, for depth.
