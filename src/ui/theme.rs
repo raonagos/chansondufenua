@@ -147,6 +147,37 @@ pub const NAV_LINK: StaticClass =
 pub const NAV_LINK_CURRENT: StaticClass =
     class!("text-mist-100 underline decoration-tahiti-400 decoration-2 underline-offset-8");
 
+/// The language switcher: one link per language, in the header of every page.
+///
+/// **In the header row, not inside [`NAV`].** The nav below `md` is a disclosure
+/// with a fixed open height, and a third line inside it would either overflow
+/// that box or change it on every screen; here the switcher sits beside the logo
+/// on every width, always drawn, and needs no script to reach. It is chrome, so
+/// [`HEADER`]'s `print:hidden` already keeps it out of a printed songbook.
+///
+/// The colour lives on the container, for the reason [`NAV`]'s does: a link is
+/// always composed with one of two colour states, and two colour utilities in
+/// one class list are resolved by stylesheet order rather than by intent.
+///
+/// `flex-none` rather than the more familiar no-shrink utility: that one's name
+/// contains the text of a colour this palette does not define, and
+/// `every_colour_used_by_a_token_exists` reads class *names* as text — it would
+/// read that utility as `ink-0` and fail.
+pub const LANGUAGE_SWITCH: StaticClass =
+    class!("mr-3 md:mr-6 flex flex-none items-center gap-2 md:gap-3 text-sm text-mist-300");
+
+/// A language link. Layout and motion only — the colour comes from
+/// [`LANGUAGE_SWITCH`].
+pub const LANGUAGE_LINK: StaticClass = class!("transition-colors hover:text-mist-100");
+
+/// The language the page is already in.
+///
+/// Underlined in the accent, not merely recoloured — the same reason
+/// [`NAV_LINK_CURRENT`] is: colour is already spoken for by the hover state, and
+/// a reader who cannot tell two shades apart still has to find the current one.
+pub const LANGUAGE_LINK_CURRENT: StaticClass =
+    class!("text-mist-100 underline decoration-tahiti-400 decoration-2 underline-offset-4");
+
 // ---------------------------------------------------------------------------
 // Page and footer
 // ---------------------------------------------------------------------------
@@ -716,6 +747,9 @@ mod tests {
         NAV_SPACER,
         NAV_LINK,
         NAV_LINK_CURRENT,
+        LANGUAGE_SWITCH,
+        LANGUAGE_LINK,
+        LANGUAGE_LINK_CURRENT,
         MAIN,
         PAGE,
         FOOTER,

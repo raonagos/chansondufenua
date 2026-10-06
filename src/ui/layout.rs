@@ -16,6 +16,9 @@
 //! * the document declares which language it is in, and names the other one,
 //!   because the shell is where the chrome's words live. `crate::i18n` decides
 //!   the language; this file only asks for the strings, and
+//! * the three languages are also a visible switcher — three plain links in the
+//!   header, in the served HTML of every page. A page's other addresses are part
+//!   of the page, not something a menu draws after a click, and
 //! * the three images the browser fetches are embedded in the binary and served
 //!   from content-hashed URLs, rather than handed out of a static directory the
 //!   way v3's web server did it. v3's own files, under a URL that cannot go
@@ -552,6 +555,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                     </a>
                 </div>
                 <span class="flex-1"></span>
+                language_switcher()
                 // Must stay a *previous sibling* of the nav for `peer-checked`
                 // to reach it.
                 <input id="nav-toggle" type="checkbox" class=(theme::NAV_TOGGLE)/>
@@ -587,6 +591,49 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                 </nav>
             </div>
         </header>
+    })
+}
+
+/// The language switcher: this page, in each of the site's three languages.
+///
+/// Three real links with no script anywhere near them. The set of addresses a
+/// page exists at is exactly what a crawler needs to see, so it is written into
+/// the HTML of every page rather than drawn by a menu that only opens for a
+/// pointer. `hreflang` says which language a link leads to and `lang` says which
+/// language its own label is written in — the pair is what lets a screen reader
+/// say *Reo Tahiti* in Tahitian while reading an English page.
+///
+/// The current language is a link like the others. A switcher that turns it into
+/// plain text reads as "you cannot go here", and `/fr/himene` linked from
+/// `/fr/himene` is what makes the three addresses one cluster instead of a
+/// one-way door. The one difference is `aria-current`, which is what tells a
+/// reader which of the three they are on when the underline is not enough.
+///
+/// The three URLs are [`Lang::ALL`] under their own prefixes — the same list the
+/// document head writes `hreflang` from, so the two cannot disagree.
+#[component]
+pub async fn language_switcher(cx: &Cx) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
+    let path = uri(cx).path();
+
+    Ok(view! {
+        <nav class=(theme::LANGUAGE_SWITCH) aria-label=(i18n::text(lang, Key::Language))>
+            for target in Lang::ALL {
+                <a
+                    href=(i18n::at(target, path))
+                    hreflang=(target.code())
+                    lang=(target.code())
+                    aria-current=((target == lang).then_some("true"))
+                    class=(class!(
+                        theme::LANGUAGE_LINK,
+                        theme::FOCUS,
+                        theme::LANGUAGE_LINK_CURRENT if target == lang,
+                    ))
+                >
+                    (target.name())
+                </a>
+            }
+        </nav>
     })
 }
 
@@ -731,6 +778,66 @@ mod tests {
                 );
                 assert_eq!(head.social.expect("cards").og_url, canonical);
             }
+        }
+    }
+
+    /// **The switcher and the `hreflang` cluster are the same three URLs.** Both
+    /// are built from [`Lang::ALL`] and both address a page under its language's
+    /// own prefix, so the served markup points a reader and a crawler at the same
+    /// three addresses. Two lists that can drift are one list that has drifted;
+    /// this is the check that they have not.
+    ///
+    /// It also pins the two properties a switcher is easy to get wrong: it
+    /// addresses *this* page (not the front door, and not the other language's
+    /// index), and its own language is among its links rather than left out.
+    #[test]
+    fn the_switcher_and_the_hreflang_cluster_name_the_same_urls() {
+        for path in [
+            HOME,
+            AEPA_PATH,
+            songs::PATH,
+            editor::PATH,
+            "/himene/ahani-e",
+        ] {
+            let links: Vec<(Lang, String)> = Lang::ALL
+                .iter()
+                .map(|lang| (*lang, i18n::at(*lang, path)))
+                .collect();
+
+            assert_eq!(links.len(), Lang::ALL.len());
+
+            for (lang, href) in &links {
+                assert!(
+                    href.starts_with(lang.prefix()),
+                    "{path} in {}: {href}",
+                    lang.code()
+                );
+                assert!(
+                    href.ends_with(path) || path == HOME,
+                    "{path} in {}",
+                    lang.code()
+                );
+                // The head writes the same address, qualified.
+                assert_eq!(
+                    i18n::url(*lang, path),
+                    format!("{SITE_URL}{href}"),
+                    "{path} in {}",
+                    lang.code()
+                );
+            }
+
+            // The current language is one of the links, not a hole in the row.
+            assert!(links.iter().any(|(lang, _)| *lang == Lang::DEFAULT));
+        }
+    }
+
+    /// A language's own name is what the link says: the switcher is the one
+    /// place the chrome does not translate, and that is deliberate.
+    #[test]
+    fn the_switcher_labels_each_language_in_its_own_words() {
+        for lang in Lang::ALL {
+            assert!(!lang.name().trim().is_empty());
+            assert_ne!(lang.name(), i18n::text(lang, Key::Language));
         }
     }
 

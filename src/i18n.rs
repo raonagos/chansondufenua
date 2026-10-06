@@ -24,6 +24,11 @@
 //! of it, and splitting it into catalog fragments would leave both languages
 //! ungrammatical. It stays exactly as v3 wrote it, English words and all.
 //!
+//! The one place the chrome names a *language* is the switcher (step 23), and
+//! its links are each language's own name rather than a translation of it —
+//! [`Lang::name`] says why they are outside this catalog. The switcher's
+//! container is a label like any other, so its accessible name is a key here.
+//!
 //! # Reo Tahiti, and English
 //!
 //! The Tahitian catalog is a first pass, written without a native speaker to
@@ -121,6 +126,22 @@ impl Lang {
             Lang::Fr => "fr_FR",
             Lang::Ty => "ty_PF",
             Lang::En => "en_US",
+        }
+    }
+
+    /// The language's name **in its own words**: the switcher's link text.
+    ///
+    /// Deliberately outside the catalog. A language names itself, so
+    /// `Français` is the same word on a French page and on an English one —
+    /// translating it would be a claim about the reader rather than a name, and
+    /// an English page that called the third language "Tahitian" would be
+    /// spelling a language it does not speak. The three are the names the site's
+    /// cards already carry.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Lang::Fr => "Français",
+            Lang::Ty => "Reo Tahiti",
+            Lang::En => "English",
         }
     }
 
@@ -238,6 +259,8 @@ pub enum Key {
     NavHome,
     /// The header link to the song index.
     NavSongs,
+    /// The language switcher's accessible name — read aloud, never drawn.
+    Language,
     /// The 404's heading.
     NotFoundTitle,
     /// The 404's explanation.
@@ -272,9 +295,10 @@ pub enum Key {
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 17] = [
+    pub const ALL: [Key; 18] = [
         Key::NavHome,
         Key::NavSongs,
+        Key::Language,
         Key::NotFoundTitle,
         Key::NotFoundBody,
         Key::NotFoundCta,
@@ -297,6 +321,7 @@ impl Key {
         match self {
             Key::NavHome => "Accueil",
             Key::NavSongs => "Chanson",
+            Key::Language => "Langue",
             Key::NotFoundTitle => "La page n'existe pas.",
             Key::NotFoundBody => "Cette page n'existe pas, ou n'existe plus.",
             Key::NotFoundCta => "Retour à l'accueil",
@@ -323,6 +348,7 @@ impl Key {
         match self {
             Key::NavHome => "Fa'aea",
             Key::NavSongs => "Hīmene",
+            Key::Language => "Reo",
             Key::NotFoundTitle => "'Aita te 'api",
             Key::NotFoundBody => "'Aita teie 'api e vai ra.",
             Key::NotFoundCta => "Ho'i i te fa'aea",
@@ -347,6 +373,7 @@ impl Key {
         match self {
             Key::NavHome => "Home",
             Key::NavSongs => "Songs",
+            Key::Language => "Language",
             Key::NotFoundTitle => "This page does not exist.",
             Key::NotFoundBody => "This page does not exist, or no longer does.",
             Key::NotFoundCta => "Back to the front page",
@@ -412,6 +439,72 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// **The French chrome, frozen at step 21.** Step 23 added the English
+    /// strings and the language switcher; neither may put a different word in a
+    /// French page than the one step 21 shipped, and a translation that quietly
+    /// "improved" the French is exactly the change this table catches.
+    ///
+    /// The catalog is allowed to grow — the switcher's own label is new chrome,
+    /// not a new translation of old chrome — so the table also pins *which* key
+    /// was added rather than only the words that were not.
+    #[test]
+    fn adding_english_did_not_change_a_word_of_french() {
+        const FRENCH_AT_STEP_21: [(Key, &str); 17] = [
+            (Key::NavHome, "Accueil"),
+            (Key::NavSongs, "Chanson"),
+            (Key::NotFoundTitle, "La page n'existe pas."),
+            (
+                Key::NotFoundBody,
+                "Cette page n'existe pas, ou n'existe plus.",
+            ),
+            (Key::NotFoundCta, "Retour à l'accueil"),
+            (Key::AddLyrics, "Ajouter des paroles"),
+            (Key::IndexTitle, "Toutes les chansons"),
+            (Key::IndexColumnTitle, "Titre"),
+            (Key::IndexColumnArtist, "Artiste"),
+            (Key::IndexEmpty, "Pas de chanson"),
+            (Key::HomeDiscover, "Découvrir les chansons"),
+            (Key::HomeStart, "C'est parti !"),
+            (Key::FieldLyrics, "Paroles"),
+            (Key::Save, "Enregistrer"),
+            (
+                Key::SaveError,
+                "La chanson n'a pas été enregistrée. Vérifiez le titre et les paroles.",
+            ),
+            (Key::RemoveArtist, "Retirer cet artiste"),
+            (Key::AddChord, "Ajouter cet accord"),
+        ];
+
+        for (key, words) in FRENCH_AT_STEP_21 {
+            assert_eq!(text(Lang::Fr, key), words, "{key:?} moved");
+        }
+
+        assert_eq!(Key::ALL.len(), FRENCH_AT_STEP_21.len() + 1);
+        assert!(
+            !FRENCH_AT_STEP_21
+                .iter()
+                .any(|(key, _)| *key == Key::Language),
+            "the one key step 23 added is the switcher's own label"
+        );
+    }
+
+    /// A language's own name is not a translation: it is one word per language,
+    /// the same on every page, and that is why it is not in the catalog.
+    #[test]
+    fn a_language_names_itself_in_its_own_words() {
+        let names: Vec<&str> = Lang::ALL.iter().map(|lang| lang.name()).collect();
+
+        assert_eq!(names, ["Français", "Reo Tahiti", "English"]);
+        assert_eq!(
+            names
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            names.len(),
+            "two languages answer to the same name: {names:?}"
+        );
     }
 
     /// The tag reader accepts what the site writes and rejects what it does
