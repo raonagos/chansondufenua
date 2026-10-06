@@ -18,7 +18,7 @@ Thank you for considering contributing to **Chanson du fenua** ! We welcome cont
 ## Usage
 
 1. Make sure you have [rust](https://www.rust-lang.org/learn/get-started) installed. That is the whole toolchain — there is no second target to install, no Node, and no database server to run.
-2. Read [env.example](./env.example) for the two variables the binary knows (`DATABASE_URL`, `HOST`, `PORT`). Nothing loads a `.env` file for you; export them, or put them on the command line.
+2. Read [env.example](./env.example) for the three variables the binary knows (`DATABASE_URL`, `HOST`, `PORT`). Nothing loads a `.env` file for you; export them, or put them on the command line.
 3. Bundle the assets and start the application:
 
 ```bash
@@ -29,7 +29,27 @@ cargo build && topcoat asset bundle && ./target/debug/chansondufenua
 
 The database is a SQLite file. It does not have to exist — the first boot creates `data/chansondufenua.db`, applies [migrations/](./migrations), and serves an empty songbook until you add something.
 
+Those three commands produce and run the whole site. Pages, stylesheet, fonts, logos and the database engine are compiled into the one executable; there is no client-side runtime, no separate database server and no asset pipeline beyond staging the bundled files next to the binary.
+
 4. Open your browser and go to the URL: `http://localhost:3000`.
+
+## Agent readiness
+
+The web is read by more than browsers now, and the site is built to be legible to the ones that do not run JavaScript. The clearest example is the song list. Version 3 rendered each row as a click handler — the link had no destination:
+
+```html
+<tr class="tab-row" role="button" tabindex="0" onclick="window.location='/himene/7114wvk91gffr2bj6wza'">
+  <td class="tab-cell"><a href class="tab-link">Āhani e</a></td>
+```
+
+The 3.x table was also filled in by the browser, so a client without a JavaScript engine read *"Chargement…"* and no songs at all. Now the same page arrives complete, with real destinations:
+
+```html
+<tr>
+  <td><a href="/himene/7114wvk91gffr2bj6wza">Āhani e</a></td>
+```
+
+Every song is followable, keyboard-reachable, middle-clickable and copyable. Alongside that, the site serves `robots.txt`, two XML sitemaps, an `llms.txt`, RFC 8288 `Link` headers, a Markdown version of any song when asked (`Accept: text/markdown`), and a small read-only JSON API — so a song can be read as a page, as Markdown, or as JSON, and every form is discoverable from the others.
 
 ## Contribute
 
