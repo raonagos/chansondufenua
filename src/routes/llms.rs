@@ -19,7 +19,7 @@ use topcoat::{Result, router::route};
 
 use crate::domain::song::SITE_URL;
 use crate::pages::{editor, songs};
-use crate::routes::{api, card, mcp, sitemap};
+use crate::routes::{api, card, catalog, mcp, sitemap};
 
 /// `/llms.txt` — the path, in one place.
 pub const PATH: &str = "/llms.txt";
@@ -58,6 +58,10 @@ fn body() -> String {
   version.
 - [One song as JSON]({SITE_URL}{api}/{{id}}): the same, plus the lyrics as
   Markdown with the chords inline.
+- [OpenAPI description]({SITE_URL}{openapi}): the JSON API's paths and shapes,
+  for a client that generates code from it.
+- [API catalog]({SITE_URL}{catalog}): the API as a linkset (RFC 9727) — the
+  OpenAPI description, this file, and the health probe.
 - Send `Accept: text/markdown` to a song page for the same document as Markdown.
 - [MCP server]({SITE_URL}{mcp}): a read-only Model Context Protocol server with
   two tools — `list_songs` pages the catalogue, `get_song` reads one sheet. Its
@@ -79,6 +83,8 @@ lyrics are the credited artists' work and are not training data:
 ",
         songs = songs::PATH,
         api = api::PATH,
+        openapi = api::OPENAPI_PATH,
+        catalog = catalog::PATH,
         health = api::HEALTH_PATH,
         sitemap = sitemap::PATH,
         song_sitemap = sitemap::SONGS_PATH,
@@ -118,6 +124,8 @@ mod tests {
             (songs::PATH, "/himene"),
             (api::PATH, "/api/songs"),
             (api::HEALTH_PATH, "/api/health"),
+            (api::OPENAPI_PATH, "/api/openapi.json"),
+            (catalog::PATH, "/.well-known/api-catalog"),
             (sitemap::PATH, "/sitemap.xml"),
             (sitemap::SONGS_PATH, "/himene/sitemap.xml"),
             (editor::PATH, "/himene/api"),

@@ -67,7 +67,7 @@ use crate::pages::{
     home::{AEPA_PATH as AEPA, PATH as HOME},
     songs,
 };
-use crate::routes::{api, card, sitemap};
+use crate::routes::{api, card, catalog, llms, sitemap};
 use crate::state;
 
 /// The media type this layer serves on request.
@@ -488,6 +488,11 @@ fn queue_links(cx: &Cx, path: &str, markdown: bool) -> Result<()> {
 ///   [`crate::routes::card::PATH`] is that description. It is one link, on the
 ///   front door, because the card is about the site and not about whichever page
 ///   a visitor happened to land on.
+/// * The home page also names the API catalog ([`crate::routes::catalog::PATH`])
+///   under `api-catalog` — RFC 9727 §3's recommendation, and the entry point a
+///   client follows to find the OpenAPI description — and its own written
+///   description, `llms.txt`, under `describedby`. Both are site-level promises
+///   and both are therefore on `/` alone, like the card.
 /// * Nothing else: nothing else on this site has a machine-readable form that a
 ///   `Link` to something absent would describe.
 fn links(path: &str, served_markdown: bool) -> Vec<String> {
@@ -521,6 +526,8 @@ fn links(path: &str, served_markdown: bool) -> Vec<String> {
             sitemap_link,
             alternate(format!("{SITE_URL}{HOME}")),
             card_link(),
+            catalog_link(),
+            describedby_link(),
         ],
         _ => vec![sitemap_link],
     }
@@ -536,6 +543,34 @@ fn card_link() -> String {
         "<{SITE_URL}{}>; rel=\"service-desc\"; type=\"{}\"",
         card::PATH,
         card::MEDIA_TYPE
+    )
+}
+
+/// The API catalog, as a `Link` value.
+///
+/// RFC 9727 §3's own recommendation: the site names the catalog document that
+/// lists its APIs, so a client that found the front page can find the API
+/// without knowing the well-known path. The type is the one the catalog is
+/// served as.
+fn catalog_link() -> String {
+    format!(
+        "<{SITE_URL}{}>; rel=\"api-catalog\"; type=\"{}\"",
+        catalog::PATH,
+        catalog::MEDIA_TYPE
+    )
+}
+
+/// The site's written description of itself, as a `Link` value.
+///
+/// `describedby` is the registered relation for "the target describes the link's
+/// context", and `llms.txt` is this site's description: what it is, where its
+/// content is, and what a program can read. One link, on the front door, for the
+/// same reason the card is: it describes the site, not the page a visitor landed
+/// on.
+fn describedby_link() -> String {
+    format!(
+        "<{SITE_URL}{}>; rel=\"describedby\"; type=\"text/plain\"",
+        llms::PATH
     )
 }
 
@@ -647,12 +682,14 @@ mod tests {
             )
         );
 
-        // The front door names the MCP server card under `service-desc`, and its
-        // own Markdown form; the page that is the same page under another URL
-        // names its Markdown form but does not repeat the card, because the card
-        // describes the site and one link on one URL is the whole promise.
+        // The front door names the MCP server card under `service-desc`, the API
+        // catalog under `api-catalog` (RFC 9727 §3), and its own written
+        // description under `describedby` — plus its Markdown form; the page that
+        // is the same page under another URL names its Markdown form but does not
+        // repeat the site-level links, because they describe the site and one
+        // link on one URL is the whole promise.
         let home = links(HOME, false);
-        assert_eq!(home.len(), 3);
+        assert_eq!(home.len(), 5);
         assert_eq!(home[0], song[0]);
         assert_eq!(
             home[1],
@@ -667,6 +704,23 @@ mod tests {
             )
         );
         assert_eq!(home[2], card_link());
+        assert_eq!(
+            home[3],
+            format!(
+                "<{SITE_URL}{}>; rel=\"api-catalog\"; type=\"{}\"",
+                catalog::PATH,
+                catalog::MEDIA_TYPE
+            )
+        );
+        assert_eq!(home[3], catalog_link());
+        assert_eq!(
+            home[4],
+            format!(
+                "<{SITE_URL}{}>; rel=\"describedby\"; type=\"text/plain\"",
+                llms::PATH
+            )
+        );
+        assert_eq!(home[4], describedby_link());
 
         let aepa = links(AEPA, false);
         assert_eq!(aepa.len(), 2);

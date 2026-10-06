@@ -2,8 +2,9 @@
 //!
 //! `pages/` renders a document for a reader. Everything here answers a request
 //! that is not a document: `robots.txt`, the two sitemaps, `llms.txt`, the
-//! read-only JSON API, the read-only MCP server and the card that advertises it,
-//! and the `Accept: text/markdown` variant of a song sheet.
+//! read-only JSON API and its OpenAPI description, the read-only MCP server and
+//! the card that advertises it, the API catalog that lists the JSON API, and the
+//! `Accept: text/markdown` variant of a song sheet.
 //!
 //! Each of them is declared with `#[route]` rather than `#[page]`, and that
 //! difference is why this module exists at all. A `#[page]` renders a view and
@@ -16,6 +17,7 @@
 
 pub mod api;
 pub mod card;
+pub mod catalog;
 pub mod llms;
 pub mod mcp;
 pub mod negotiation;
