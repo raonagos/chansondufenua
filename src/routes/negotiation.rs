@@ -59,7 +59,14 @@ use crate::db::{self, SongOrder};
 use crate::domain::Song;
 use crate::domain::song::SITE_URL;
 use crate::i18n::{self, Key, Lang};
-use crate::pages::{home, songs};
+use crate::pages::{
+    home,
+    // The two front-page URLs. Their owner is `pages::home` — the page that
+    // `#[page("/…")]` declares them in — because the layout matches the request
+    // path against the same two constants to decide the document head.
+    home::{AEPA_PATH as AEPA, PATH as HOME},
+    songs,
+};
 use crate::routes::{api, card, sitemap};
 use crate::state;
 
@@ -150,7 +157,12 @@ fn header(cx: &Cx, name: header::HeaderName) -> Option<String> {
 /// database read to reject, because the read is not the only caller: [`links`]
 /// writes promises from this answer, and a page advertising a Markdown form it
 /// does not have is a header lying about the response it arrived on.
-fn song_id(path: &str) -> Option<&str> {
+///
+/// `pub(crate)` because the layout asks the same question: it decides the
+/// document head from the path, and a song URL that names no published song
+/// becomes the 404's head. Two answers to "is this a song URL" would be a page
+/// and its `<head>` disagreeing about which pages exist.
+pub(crate) fn song_id(path: &str) -> Option<&str> {
     let id = path.strip_prefix(SONG_PREFIX)?;
     let is_song = !id.is_empty()
         && !id.contains('/')
@@ -513,16 +525,6 @@ fn links(path: &str, served_markdown: bool) -> Vec<String> {
         _ => vec![sitemap_link],
     }
 }
-
-/// The home page's address. Not shared with `#[page("/")]` — that macro takes a
-/// literal, so a constant here would be a second copy of the same path rather
-/// than the one owner of it.
-const HOME: &str = "/";
-
-/// The front page's second URL, `#[page("/aepa")]`. The same page — see
-/// [`crate::pages::home`] — kept because it is published and linked from the
-/// header, and a constant here for the same reason as [`HOME`].
-const AEPA: &str = "/aepa";
 
 /// The MCP server card, as a `Link` value.
 ///

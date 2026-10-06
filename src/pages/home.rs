@@ -22,7 +22,8 @@
 //!
 //! The copy is v3's, byte for byte. It lives in [`copy`] as constants rather than
 //! as literals in the markup so that the `<meta name="description">` the layout
-//! emits for this page is provably the same string the page shows.
+//! emits for this page is built from the page's own sentences, and a test can
+//! prove that it still is.
 //!
 //! The page has a second representation: `routes/negotiation.rs` answers
 //! `Accept: text/markdown` with the same prose and the same two tables as one
@@ -98,12 +99,21 @@ pub mod copy {
 
     /// The home page's `<meta name="description">`.
     ///
-    /// v3's, byte for byte: the synopsis, then the first card's body, then
-    /// [`TAGLINE`]. It is written out in full rather than assembled with
-    /// `format!` because it has to be a `const` — and
-    /// `the_description_is_the_copy_it_claims_to_be` is what keeps the three
+    /// The hero's standfirst, then [`TAGLINE`] — the sentence the front page
+    /// does not show, which says what the site is. 125 characters, inside the
+    /// [`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX) a snippet is
+    /// read at.
+    ///
+    /// **Not v3's**, and that is the fix: v3 pasted the synopsis, then the first
+    /// card's body, then the tagline into this field — 842 characters, of which
+    /// a search engine shows the first ~155, so every result for the front door
+    /// led with two paragraphs that never said "chansons tahitiennes". The prose
+    /// itself is untouched: it is still the page, [`SYNOPSIS`] and all.
+    ///
+    /// Written out rather than assembled with `format!` because it has to be a
+    /// `const`; `the_description_is_the_copy_it_claims_to_be` is what keeps the
     /// pieces from drifting apart.
-    pub const DESCRIPTION: &str = "Découvrez un monde musical unique où l'art des accords et la maîtrise des mélodies élèvent votre musique vers de nouveaux sommets. Laissez-vous séduire par la poésie des paroles, véritable fenêtre sur l'âme tahitienne, qui vous transporte dans un voyage lyrique et émouvant. Plongez dans une collection raffinée de chansons tahitiennes, savamment sélectionnées pour allier tradition et modernité, offrant une expérience musicale enrichissante et inoubliable. Découvrez des mélodies envoûtantes et des rythmes captivants, célébrant la richesse culturelle de Tahiti et invitant les auditeurs à explorer et apprécier la beauté et la profondeur de cette culture unique. Plongez dans une collection raffinée de chansons tahitiennes, alliant tradition et modernité. Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes.";
+    pub const DESCRIPTION: &str = "L'élégance de la musique polynésienne — Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes.";
 }
 
 /// How many songs each table lists. v3 asked both for five.
@@ -112,6 +122,18 @@ pub mod copy {
 /// document in `routes/negotiation.rs` shows the same two tables, and a second
 /// table size would make the two forms of one page disagree about it.
 pub(crate) const ROWS: i64 = 5;
+
+/// `/` — the front page, and the path `#[page]` below declares.
+///
+/// A constant as well as an attribute, because the layout matches the request
+/// path against it to decide this page's `<head>`: `#[page]` is a macro over a
+/// literal and cannot take one, so the constant restates it — the same
+/// arrangement `pages::songs::PATH` and `pages::editor::PATH` have.
+pub const PATH: &str = "/";
+
+/// `/aepa` — the front page under its Tahitian address, and the path `#[page]`
+/// below declares. See [`PATH`].
+pub const AEPA_PATH: &str = "/aepa";
 
 /// `/` — the front page.
 #[page("/")]
@@ -284,14 +306,19 @@ mod tests {
     use super::*;
     use crate::db::{Db, fixtures};
 
-    /// The description is three pieces of page copy, and the page copy is what
-    /// the description says. Editing the synopsis or the first card without
-    /// editing the description is exactly the drift this catches.
+    /// The description is the page's own two sentences, and it fits in a
+    /// snippet. Editing the standfirst or the tagline without editing the
+    /// description is exactly the drift this catches — and the length is what
+    /// v3's 842-character paragraph got wrong.
     #[test]
     fn the_description_is_the_copy_it_claims_to_be() {
         assert_eq!(
             copy::DESCRIPTION,
-            format!("{} {} {}", copy::SYNOPSIS, copy::CARDS[0].1, copy::TAGLINE)
+            format!("{} — {}", copy::HERO_SUBTITLE, copy::TAGLINE)
+        );
+        assert!(
+            copy::DESCRIPTION.chars().count() <= crate::domain::song::DESCRIPTION_MAX,
+            "the description is longer than a snippet"
         );
     }
 

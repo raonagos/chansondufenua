@@ -68,6 +68,18 @@ use crate::ui::theme;
 /// literal path — so the constant restates it, as `pages::editor::PATH` does.
 pub const PATH: &str = "/himene";
 
+/// The index's `<meta name="description">`.
+///
+/// The page's own heading, then what the page holds. Same budget as a song's:
+/// [`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX) is what a search
+/// engine shows.
+///
+/// French, like the rest of this page's prose: the lyrics are never translated
+/// and neither is the catalogue's own copy. The `<title>` above does follow the
+/// request's language, because a title is chrome.
+pub const DESCRIPTION: &str =
+    "Toutes les chansons du fenua : paroles et accords des chansons tahitiennes et polynésiennes.";
+
 #[page("/himene")]
 pub async fn songs(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);

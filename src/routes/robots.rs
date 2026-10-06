@@ -44,6 +44,15 @@ pub const PATH: &str = "/robots.txt";
 /// material (`ai-train=no`). Flipping one is a one-word edit to this constant,
 /// and this constant is the only place the choice is written down.
 ///
+/// **`Disallow: /himene/api` was here, and its removal is the point.** The
+/// create-song page is kept out of an index by its own
+/// `<meta name="robots" content="noindex">`, and a crawler never reads that
+/// directive on a URL its `robots.txt` told it not to fetch. What a `Disallow`
+/// buys here is therefore nothing — the form is reached by `POST`, which no
+/// crawler makes and which this file never governed — while it would cost the
+/// one protection the page actually needs. `Allow: /` is written out because a
+/// future rule above it should not be able to swallow the read side by accident.
+///
 /// The two named crawlers repeat `ai-train=no` for the engines that offer no
 /// other way to say it. `CCBot` feeds Common Crawl, which is a training corpus
 /// and nothing else. `Google-Extended` is Gemini's training token and is
@@ -51,8 +60,6 @@ pub const PATH: &str = "/robots.txt";
 /// indexing the site.
 const POLICY: &str = "\
 User-agent: *
-
-Disallow: /himene/api
 
 Allow: /
 
@@ -98,14 +105,20 @@ mod tests {
     use crate::pages::editor;
 
     #[test]
-    fn the_read_side_stays_open_and_the_write_side_stays_shut() {
+    fn the_read_side_stays_open_and_nothing_shadows_it() {
         let text = body();
 
         assert!(text.contains("User-agent: *\n"));
         assert!(text.contains("Allow: /\n"));
-        // The create-song form writes to the database, so crawlers must not
-        // follow it.
-        assert!(text.contains(&format!("Disallow: {}\n", editor::PATH)));
+        // The create-song page keeps itself out of an index with its own
+        // `noindex`, which a crawler can only obey if it is allowed to fetch the
+        // page. Disallowing it here would hide that directive instead of
+        // enforcing anything.
+        assert!(
+            !text.contains(&format!("Disallow: {}", editor::PATH)),
+            "a Disallow on the create-song page would hide its own noindex"
+        );
+        assert!(!text.contains("Disallow: /himene/api"));
     }
 
     /// The dead entries are the reason this is a route and not the file it

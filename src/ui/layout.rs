@@ -38,28 +38,41 @@ use topcoat::{
 use crate::db;
 use crate::domain::song::{SITE_URL, Song};
 use crate::i18n::{self, Key, Lang};
-use crate::pages::{home, songs};
+use crate::pages::{
+    editor,
+    home::{self, AEPA_PATH, PATH as HOME},
+    songs,
+};
+use crate::routes::{negotiation, og};
 use crate::state;
 use crate::ui::{assets, fonts, theme};
 
-/// The document title, for every page that is not a song.
+/// The site's name — v3's `<Title text="Chanson du Fenua"/>`.
 ///
-/// v3's `<Title text="Chanson du Fenua"/>`: set once on the app root. The
-/// capital F is v3's, not a typo — the song page writes the lowercase one, and
-/// both are in the wild. It is the site's name, so it is not translated.
+/// The capital F is v3's, not a typo: a song page's title ends with the lowercase
+/// one, and both are in the wild. It is the site's name, so it is not translated.
+/// It is the whole title of the front door and of the pages that name nothing
+/// else; every other page says what it is first — see [`site_head`].
 const TITLE: &str = "Chanson du Fenua";
 
 /// Everything the layout needs to write `<head>`.
 ///
-/// Built by [`document_head`] from the request path. The three fields are
-/// optional because they are per-route, not per-site: only a song page carries
-/// social cards and structured data, and only the home page and its duplicate
-/// carry a description.
+/// Built by [`document_head`] from the request path. The optional fields are
+/// per-route, not per-site: only the pages that carry prose have a description
+/// and a card, only a song has structured data, and only a page reachable at
+/// more than one URL has somewhere else to point as canonical.
 struct DocumentHead {
     title: String,
     description: Option<String>,
     /// The preferred URL of a page reachable at more than one.
     canonical: Option<String>,
+    /// Whether a crawler may index this page.
+    ///
+    /// False for the create-song form, which is the one page here that is not
+    /// written to be found, and for the 404. The directive and `robots.txt` have
+    /// to agree for it to mean anything: a path that its own `robots.txt`
+    /// disallows is never fetched, so its `<meta name="robots">` is never read.
+    noindex: bool,
     social: Option<SocialCards>,
     /// A schema.org `application/ld+json` payload, rendered verbatim.
     jsonld: Option<String>,
@@ -113,7 +126,40 @@ impl SocialCards {
             locale_alternate: lang.other().og_locale(),
         }
     }
+
+    /// Reads the cards off a page that is not a song.
+    ///
+    /// The page's own words, and one card image for the whole site: a page that
+    /// is not a song has no song to draw, and the alternative — a card per page,
+    /// rendered per request — buys nothing a title and a description do not
+    /// already say. The image is absolute because a card is read out of context,
+    /// and it is the same URL for every language, because it says the site's name
+    /// and nothing that is translated.
+    ///
+    /// `og:url` is the canonical URL, not the requested one: `/aepa` and `/` are
+    /// one page, and a card that named the second address would be advertising a
+    /// duplicate.
+    fn for_page(title: &str, description: &str, url: &str, lang: Lang) -> Self {
+        let image = format!("{SITE_URL}{}", og::SITE_CARD);
+
+        Self {
+            og_type: "website",
+            og_title: title.to_owned(),
+            og_description: description.to_owned(),
+            og_url: url.to_owned(),
+            og_image: image.clone(),
+            og_image_alt: SITE_CARD_ALT.to_owned(),
+            twitter_title: title.to_owned(),
+            twitter_description: description.to_owned(),
+            twitter_image: image,
+            locale: lang.og_locale(),
+            locale_alternate: lang.other().og_locale(),
+        }
+    }
 }
+
+/// The site card's alternative text. What the card spells out is its own name.
+const SITE_CARD_ALT: &str = "Chanson du fenua";
 
 /// Decides the per-route half of `<head>`.
 ///
@@ -136,13 +182,21 @@ impl SocialCards {
 async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
     let path = uri(cx).path();
 
-    if let Some(id) = path.strip_prefix("/himene/")
-        && !id.is_empty()
-        && !id.contains('/')
-        && let Ok(Some(song)) = db::song(state::db(cx).pool(), id).await
-        && song.is_published()
-    {
-        return song_head(&song, lang);
+    // What a song URL is is not decided here: the Markdown layer asks the same
+    // question about the same path, and two answers would be one page and its
+    // other form disagreeing about which URLs exist.
+    if let Some(id) = negotiation::song_id(path) {
+        if let Ok(Some(song)) = db::song(state::db(cx).pool(), id).await
+            && song.is_published()
+        {
+            return song_head(&song, lang);
+        }
+
+        // A song URL is also the only path *in the router* that can still fail:
+        // the page reads the same row and raises `NotFoundError`, which the
+        // error boundary below answers with the branded 404. So a row that is
+        // missing or unpublished is not the site's head — it is the 404's.
+        return missing_song_head(lang);
     }
 
     site_head(path, lang)
@@ -155,6 +209,7 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
     DocumentHead {
         title: meta.page_title.clone(),
         description: Some(meta.meta_description.clone()),
+        noindex: false,
         // The song's canonical URL and its `og:url` are the same thing, which is
         // what v3 emitted — and what the identity rule in `fixing-metadata`
         // asks for. It carries no language parameter: the canonical URL is the
@@ -165,27 +220,101 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
     }
 }
 
-/// The `<head>` of everything that is not a song.
+/// The `<head>` of everything that is not a song, by which route it is.
+///
+/// **One title per URL.** v3 set the site's name once, on the app root, and v4
+/// inherited the consequence: `/`, `/aepa` and `/himene` answered with the same
+/// `<title>`, which tells a search engine that three addresses are one page. The
+/// front door keeps the name; the others say what they are and then name the
+/// site, in the chrome's own words, so the title follows the page's language the
+/// way the rest of the chrome does.
+///
+/// The same three pages get a description, a canonical URL and a social card
+/// from [`page_head`], because having prose and being shareable are the same
+/// condition. `/aepa` is the exception that proves the shape: it is the front
+/// page under a second URL, so it shares the description and the canonical that
+/// points home, and differs in the one field where two URLs must differ.
 fn site_head(path: &str, lang: Lang) -> DocumentHead {
     // `/` and `/aepa` are one page under two URLs. v3 declared `/aepa` the
     // duplicate, and its canonical URL carries no trailing slash — that is the
     // form the live site emits, so that is the form kept.
-    let home = matches!(path, "/" | "/aepa");
+    if matches!(path, HOME | AEPA_PATH) {
+        let title = if path == AEPA_PATH {
+            format!("{} | {TITLE}", i18n::text(lang, Key::NavHome))
+        } else {
+            TITLE.to_owned()
+        };
 
-    // The create-song page is the one non-song route whose title is not the
-    // site's name. It says what it is for, which is what a `<title>` is for, and
-    // the layout is the only place that can say it: Topcoat has no per-page head
-    // API — see the module docs.
-    let title = if path == crate::pages::editor::PATH {
-        format!("{} | {TITLE}", i18n::text(lang, Key::AddLyrics))
-    } else {
-        TITLE.to_owned()
-    };
+        return page_head(title, home::copy::DESCRIPTION, SITE_URL, lang);
+    }
 
+    if path == songs::PATH {
+        return page_head(
+            format!("{} | {TITLE}", i18n::text(lang, Key::IndexTitle)),
+            songs::DESCRIPTION,
+            &format!("{SITE_URL}{}", songs::PATH),
+            lang,
+        );
+    }
+
+    // The create-song page is the one page here that is not written to be found:
+    // it holds a form. It says what it is for, which is what a `<title>` is for,
+    // and it is the only page that is kept out of an index.
+    if path == editor::PATH {
+        return DocumentHead {
+            title: format!("{} | {TITLE}", i18n::text(lang, Key::AddLyrics)),
+            description: None,
+            canonical: None,
+            noindex: true,
+            social: None,
+            jsonld: None,
+        };
+    }
+
+    // A path no route claims never reaches the layout at all — the router
+    // answers it — so what arrives here is a page rendered outside the three
+    // above, and the honest head for one is the site's name and nothing more
+    // than that.
     DocumentHead {
+        title: TITLE.to_owned(),
+        description: None,
+        canonical: None,
+        noindex: false,
+        social: None,
+        jsonld: None,
+    }
+}
+
+/// The `<head>` of a page with prose: a title of its own, a description, the
+/// canonical URL, and the site's card.
+///
+/// One function rather than a field per route, because these are the same
+/// decision four times over — a page that is worth reading is worth a snippet
+/// and a card, and the three pages this step fixes were each missing a
+/// different one of the four.
+fn page_head(title: String, description: &str, url: &str, lang: Lang) -> DocumentHead {
+    DocumentHead {
+        social: Some(SocialCards::for_page(&title, description, url, lang)),
         title,
-        description: home.then(|| home::copy::DESCRIPTION.to_owned()),
-        canonical: (path == "/aepa").then(|| SITE_URL.to_owned()),
+        description: Some(description.to_owned()),
+        canonical: Some(url.to_owned()),
+        noindex: false,
+        jsonld: None,
+    }
+}
+
+/// The `<head>` of a song URL that names no published song.
+///
+/// The page it lands on is the branded 404, so its title is the 404's own
+/// headline rather than the site's: an address a crawler may still hold from an
+/// old link must not answer with the front door's title, which is what made a
+/// missing song a duplicate of `/`.
+fn missing_song_head(lang: Lang) -> DocumentHead {
+    DocumentHead {
+        title: format!("{} | {TITLE}", i18n::text(lang, Key::NotFoundTitle)),
+        description: None,
+        canonical: None,
+        noindex: true,
         social: None,
         jsonld: None,
     }
@@ -234,6 +363,14 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                 match head.canonical {
                     Some(canonical) => <link rel="canonical" href=(canonical)/>,
                     None => "",
+                }
+                // The one page here that is not written to be found. It is a
+                // `<meta>` and not a `Disallow` because a disallowed URL is never
+                // fetched, and a directive no crawler reads is not a directive —
+                // see `crate::routes::robots`, which is where the two agree.
+                match head.noindex {
+                    true => <meta name="robots" content="noindex, follow"/>,
+                    false => "",
                 }
                 // The language alternates. Every URL on this site exists in
                 // both languages, and the parameter is the only difference:
@@ -451,4 +588,115 @@ pub async fn footer() -> Result<impl View> {
             </p>
         </footer>
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+    use crate::domain::song::DESCRIPTION_MAX;
+
+    /// Every page the router serves, in the order this module decides them.
+    const PAGES: [&str; 4] = [HOME, AEPA_PATH, songs::PATH, editor::PATH];
+
+    /// `<title>` is the one field a search result leads with, and two URLs
+    /// answering with the same one tells a crawler they are the same page. Three
+    /// of these used to answer with the site's own name.
+    #[test]
+    fn no_two_pages_share_a_title() {
+        let titles: Vec<String> = PAGES
+            .iter()
+            .map(|path| site_head(path, Lang::Fr).title)
+            .collect();
+        let unique: BTreeSet<&String> = titles.iter().collect();
+
+        assert_eq!(unique.len(), titles.len(), "{titles:?}");
+    }
+
+    /// The three pages that have prose to offer a search engine carry all four
+    /// fields — a description inside the budget a snippet is read at, the
+    /// canonical URL, and a card whose `og:url` is that same URL. Each of them
+    /// was missing a different one in v4.
+    #[test]
+    fn the_prose_pages_have_a_description_a_canonical_and_a_card() {
+        for path in [HOME, AEPA_PATH, songs::PATH] {
+            let head = site_head(path, Lang::Fr);
+            let description = head.description.expect("a description");
+            let canonical = head.canonical.expect("a canonical URL");
+            let cards = head.social.expect("social cards");
+
+            assert!(
+                description.chars().count() <= DESCRIPTION_MAX,
+                "{path} describes itself in {} characters",
+                description.chars().count()
+            );
+            assert!(canonical.starts_with(SITE_URL), "{path}: {canonical}");
+            assert_eq!(cards.og_url, canonical, "{path}");
+            assert_eq!(cards.og_type, "website", "{path}");
+            assert_eq!(cards.og_description, description, "{path}");
+            assert_eq!(cards.twitter_description, description, "{path}");
+            assert!(
+                cards.og_image.starts_with(SITE_URL),
+                "{path}: {}",
+                cards.og_image
+            );
+            assert!(!head.noindex, "{path}");
+        }
+    }
+
+    /// The front page under its second address is the same page, so it points at
+    /// the same canonical URL and offers the same description — and it still
+    /// names itself in its own title.
+    #[test]
+    fn the_two_front_page_urls_point_home() {
+        let home = site_head(HOME, Lang::Fr);
+        let aepa = site_head(AEPA_PATH, Lang::Fr);
+
+        assert_eq!(home.canonical.as_deref(), Some(SITE_URL));
+        assert_eq!(home.canonical, aepa.canonical);
+        assert_eq!(home.description, aepa.description);
+        assert_ne!(home.title, aepa.title);
+    }
+
+    /// The index is the one page that is not the front door and has an address of
+    /// its own to canonicalise to.
+    #[test]
+    fn the_index_canonicalises_to_its_own_path() {
+        let head = site_head(songs::PATH, Lang::Fr);
+
+        assert_eq!(head.canonical, Some(format!("{SITE_URL}{}", songs::PATH)));
+        assert_ne!(head.canonical, Some(SITE_URL.to_owned()));
+    }
+
+    /// The create-song page is the one page kept out of an index; everything else
+    /// the router serves may be indexed, and a 404 never is.
+    #[test]
+    fn only_the_create_song_page_is_kept_out_of_an_index() {
+        for path in PAGES {
+            assert_eq!(
+                site_head(path, Lang::Fr).noindex,
+                path == editor::PATH,
+                "{path}"
+            );
+        }
+
+        assert!(missing_song_head(Lang::Fr).noindex);
+    }
+
+    /// A song URL that names no published song is answered by the branded 404, so
+    /// its head is the 404's: its own headline, and not the front door's title.
+    #[test]
+    fn a_missing_song_gets_the_not_found_head() {
+        let head = missing_song_head(Lang::Fr);
+
+        assert!(
+            head.title
+                .contains(i18n::text(Lang::Fr, Key::NotFoundTitle))
+        );
+        assert!(head.title.contains(TITLE));
+        assert!(head.description.is_none());
+        assert!(head.canonical.is_none());
+        assert!(head.social.is_none());
+    }
 }
