@@ -591,6 +591,38 @@ pub const CHORD: StaticClass = class!(
      leading-none whitespace-nowrap text-tahiti-200 print:text-tahiti-900"
 );
 
+/// The transposition control in a sheet header: the label, the two step links
+/// and the step they are on.
+///
+/// A pill on the sheet's own surface, one size down from the header's button,
+/// because it is a reader's control over the lyric rather than an action on the
+/// song. It is hidden on paper: a printed sheet is a sheet at one offset, and a
+/// row of buttons on it is ink spent on a control no reader of paper can press.
+pub const TRANSPOSE: StaticClass = class!(
+    "flex flex-none items-center gap-1 rounded-full border border-ink-700 bg-ink-800 \
+     px-3 py-1 text-sm text-mist-300 print:hidden"
+);
+
+/// The word naming the transposition control.
+///
+/// Inside [`TRANSPOSE`]'s colour and size; the row's own label, so it is never
+/// the loudest thing in it.
+pub const TRANSPOSE_LABEL: StaticClass = class!("mr-1");
+
+/// One step link of the transposition control — down, or up.
+///
+/// Full-contrast against the label, because it is the part that is pressable,
+/// and `flex-none` so a long label does not squeeze it at a narrow width.
+pub const TRANSPOSE_LINK: StaticClass =
+    class!("flex-none rounded-full px-2 text-mist-100 transition-colors hover:text-tahiti-300");
+
+/// The step the sheet is on, between the two links.
+///
+/// Monospace and tabular, so the number does not shift the links either side of
+/// it as it changes width.
+pub const TRANSPOSE_VALUE: StaticClass =
+    class!("w-8 text-center font-mono tabular-nums text-mist-100");
+
 // ---------------------------------------------------------------------------
 // Create-song form
 // ---------------------------------------------------------------------------
@@ -796,6 +828,10 @@ mod tests {
         LYRIC_GAP,
         CHORDED,
         CHORD,
+        TRANSPOSE,
+        TRANSPOSE_LABEL,
+        TRANSPOSE_LINK,
+        TRANSPOSE_VALUE,
         FORM_PANEL,
         FORM_FIELD,
         FORM_LABEL,

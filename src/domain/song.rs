@@ -9,12 +9,15 @@
 //! * [`Song::clean_lyrics`] — chord-free plain text, byte-for-byte what v3 put
 //!   in `og:description`, and still what the JSON-LD `lyrics.text` carries.
 //! * [`Song::lyrics_markdown`] — Markdown with chords kept inline, for the
-//!   `Accept: text/markdown` negotiation in step 10.
+//!   `Accept: text/markdown` negotiation in step 10. Its transposed sibling,
+//!   [`Song::lyrics_markdown_at`], keeps the canonical spelling and comes from
+//!   [`crate::domain::chord`], which is where the wheel lives.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::artist::Artist;
+use super::chord;
 use super::error::{AppError, AppResult};
 
 type Datetime = DateTime<Utc>;
@@ -272,7 +275,18 @@ impl Song {
     /// rendered `[Eb]` at the same offset, lines become lines, and a
     /// `<div><br></div>` becomes a blank line.
     pub fn lyrics_markdown(&self) -> String {
-        html_to_markdown(&self.lyrics_html())
+        self.lyrics_markdown_at(0)
+    }
+
+    /// The same document with every chord moved by `offset` semitones.
+    ///
+    /// This is the transposed form of the page's Markdown representation, and
+    /// its chords keep the canonical spelling: the wheel names the chord, the
+    /// language never does (see [`crate::domain::chord`]). At offset zero it is
+    /// byte-for-byte [`Song::lyrics_markdown`], which is what every machine
+    /// surface reads.
+    pub fn lyrics_markdown_at(&self, offset: i32) -> String {
+        html_to_markdown(&self.lyrics_html(), offset)
     }
 
     /// The lyrics as lines of text and chords, for rendering.
@@ -664,17 +678,24 @@ fn normalize_lines(lines: Vec<LyricLine>) -> Vec<LyricLine> {
 /// `<sup>` for a chord — so this is a hand-rolled scanner rather than a regex
 /// pile. Anything unrecognised is dropped rather than escaped: the input has
 /// already been through [`ammonia`].
-fn html_to_markdown(html: &str) -> String {
+///
+/// A chord is collected in a buffer of its own rather than written into the line
+/// as it streams, so that the whole label can be moved by `offset` at `</sup>`:
+/// a root is more than one character, and half a chord cannot be transposed.
+/// At offset zero the two renderings are identical.
+fn html_to_markdown(html: &str, offset: i32) -> String {
     let mut lines: Vec<String> = Vec::new();
     let mut current = String::new();
+    let mut chord = String::new();
+    let mut in_chord = false;
     let bytes = html.as_bytes();
     let mut i = 0;
 
     while i < bytes.len() {
         match bytes[i] {
             b'<' => match html[i..].find('>') {
-                Some(offset) => {
-                    let tag = &html[i + 1..i + offset];
+                Some(offset_in) => {
+                    let tag = &html[i + 1..i + offset_in];
                     let closing = tag.starts_with('/');
                     let name = tag
                         .trim_start_matches('/')
@@ -684,8 +705,16 @@ fn html_to_markdown(html: &str) -> String {
                         .to_ascii_lowercase();
 
                     match (name.as_str(), closing) {
-                        ("sup", false) => current.push('['),
-                        ("sup", true) => current.push(']'),
+                        ("sup", false) => {
+                            in_chord = true;
+                            chord.clear();
+                            current.push('[');
+                        }
+                        ("sup", true) => {
+                            in_chord = false;
+                            current.push_str(&chord::spell(&chord, offset));
+                            current.push(']');
+                        }
                         // A `<div>` opens a line only if there is one to close —
                         // otherwise `<div>a</div><div>b</div>` would leave a
                         // spurious blank between a and b.
@@ -693,7 +722,7 @@ fn html_to_markdown(html: &str) -> String {
                         ("div" | "p", true) | ("br", _) => flush_hard(&mut lines, &mut current),
                         _ => {}
                     }
-                    i += offset + 1;
+                    i += offset_in + 1;
                 }
                 // Unterminated tag: stop rather than lose the tail.
                 None => {
@@ -703,17 +732,29 @@ fn html_to_markdown(html: &str) -> String {
             },
             b'&' => match decode_entity(html, i) {
                 Some((next, ch)) => {
-                    current.push(ch);
+                    if in_chord {
+                        chord.push(ch);
+                    } else {
+                        current.push(ch);
+                    }
                     i = next;
                 }
                 None => {
-                    current.push('&');
+                    if in_chord {
+                        chord.push('&');
+                    } else {
+                        current.push('&');
+                    }
                     i += 1;
                 }
             },
             _ => {
                 let ch = html[i..].chars().next().unwrap();
-                current.push(ch);
+                if in_chord {
+                    chord.push(ch);
+                } else {
+                    current.push(ch);
+                }
                 i += ch.len_utf8();
             }
         }
@@ -920,6 +961,24 @@ mod tests {
         assert_eq!(
             song.lyrics_markdown(),
             "'Āhani e[B] [F#]\nE rāve'a[Abm]\nNō te fa[E]'aho'i te ta[B]u i muri[F#]\nHina'a[Eb]ro ho'i au"
+        );
+    }
+
+    /// The Markdown form can be stepped like the page, and its chords keep the
+    /// canonical spelling: `Do dièse` is chrome, and a machine reading this wants
+    /// `C#`. At zero it is the document it has always been, byte for byte.
+    #[test]
+    fn markdown_transposes_without_renaming_a_chord() {
+        let song = song_with(REAL_LYRICS);
+
+        assert_eq!(song.lyrics_markdown_at(0), song.lyrics_markdown());
+        assert_eq!(
+            song.lyrics_markdown_at(2),
+            "'Āhani e[C#] [Ab]\nE rāve'a[Bbm]\nNō te fa[F#]'aho'i te ta[C#]u i muri[Ab]\nHina'a[F]ro ho'i au"
+        );
+        assert_eq!(
+            song.lyrics_markdown_at(-1),
+            "'Āhani e[Bb] [F]\nE rāve'a[Gm]\nNō te fa[Eb]'aho'i te ta[Bb]u i muri[F]\nHina'a[D]ro ho'i au"
         );
     }
 

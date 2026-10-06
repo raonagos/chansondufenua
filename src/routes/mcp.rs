@@ -538,7 +538,9 @@ async fn get_song(cx: &Cx, arguments: &Value) -> std::result::Result<Value, RpcE
         .filter(Song::is_published);
 
     Ok(match found {
-        Some(sheet) => text_result(song_document(&sheet, Lang::DEFAULT)),
+        // No step: MCP is not a page and a tool call carries no view of one.
+        // An agent asking for a song wants the chords the author wrote.
+        Some(sheet) => text_result(song_document(&sheet, Lang::DEFAULT, 0)),
         None => error_result(format!(
             "No published song with id or slug {id:?}. Use {LIST_TOOL} to find one."
         )),

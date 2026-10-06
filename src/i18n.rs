@@ -291,11 +291,18 @@ pub enum Key {
     RemoveArtist,
     /// The create-song form's custom-chord insert button, read aloud.
     AddChord,
+    /// The song page's transposition control — its visible label and the
+    /// group's accessible name.
+    Transpose,
+    /// The control's step-down link, read aloud.
+    TransposeDown,
+    /// The control's step-up link, read aloud.
+    TransposeUp,
 }
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 18] = [
+    pub const ALL: [Key; 21] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -314,6 +321,9 @@ impl Key {
         Key::SaveError,
         Key::RemoveArtist,
         Key::AddChord,
+        Key::Transpose,
+        Key::TransposeDown,
+        Key::TransposeUp,
     ];
 
     /// The French words. v3's, byte for byte.
@@ -339,6 +349,9 @@ impl Key {
             }
             Key::RemoveArtist => "Retirer cet artiste",
             Key::AddChord => "Ajouter cet accord",
+            Key::Transpose => "Transposer",
+            Key::TransposeDown => "Transposer un demi-ton plus bas",
+            Key::TransposeUp => "Transposer un demi-ton plus haut",
         }
     }
 
@@ -364,6 +377,9 @@ impl Key {
             Key::SaveError => "'Aita te hīmene i tāpiri. Hi'opoa i te i'oa e te parau hīmene.",
             Key::RemoveArtist => "Rave i teie ta'ata hīmene",
             Key::AddChord => "Tāpiri i teie accord",
+            Key::Transpose => "Huri i te accord",
+            Key::TransposeDown => "Huri i raro",
+            Key::TransposeUp => "Huri i ni'a",
         }
     }
 
@@ -389,6 +405,9 @@ impl Key {
             Key::SaveError => "The song was not saved. Check the title and the lyrics.",
             Key::RemoveArtist => "Remove this artist",
             Key::AddChord => "Add this chord",
+            Key::Transpose => "Transpose",
+            Key::TransposeDown => "Transpose a semitone down",
+            Key::TransposeUp => "Transpose a semitone up",
         }
     }
 }
@@ -442,15 +461,16 @@ mod tests {
     }
 
     /// **The French chrome, frozen at step 21.** Step 23 added the English
-    /// strings and the language switcher; neither may put a different word in a
-    /// French page than the one step 21 shipped, and a translation that quietly
-    /// "improved" the French is exactly the change this table catches.
+    /// strings and the language switcher, and step 24 the transposition control;
+    /// none of them may put a different word in a French page than the one step
+    /// 21 shipped, and a translation that quietly "improved" the French is
+    /// exactly the change this table catches.
     ///
-    /// The catalog is allowed to grow — the switcher's own label is new chrome,
-    /// not a new translation of old chrome — so the table also pins *which* key
-    /// was added rather than only the words that were not.
+    /// The catalog is allowed to grow — a new control's own label is new chrome,
+    /// not a new translation of old chrome — so the table also pins *which* keys
+    /// were added rather than only the words that were not.
     #[test]
-    fn adding_english_did_not_change_a_word_of_french() {
+    fn adding_chrome_did_not_change_a_word_of_french() {
         const FRENCH_AT_STEP_21: [(Key, &str); 17] = [
             (Key::NavHome, "Accueil"),
             (Key::NavSongs, "Chanson"),
@@ -481,13 +501,23 @@ mod tests {
             assert_eq!(text(Lang::Fr, key), words, "{key:?} moved");
         }
 
-        assert_eq!(Key::ALL.len(), FRENCH_AT_STEP_21.len() + 1);
-        assert!(
-            !FRENCH_AT_STEP_21
-                .iter()
-                .any(|(key, _)| *key == Key::Language),
-            "the one key step 23 added is the switcher's own label"
-        );
+        // Four keys have been added since: the switcher's own label (step 23),
+        // and the transposition control's label and its two step links (step
+        // 24). Every one of them is a new control, not a reworded old one.
+        const ADDED_SINCE: [Key; 4] = [
+            Key::Language,
+            Key::Transpose,
+            Key::TransposeDown,
+            Key::TransposeUp,
+        ];
+
+        assert_eq!(Key::ALL.len(), FRENCH_AT_STEP_21.len() + ADDED_SINCE.len());
+        for added in ADDED_SINCE {
+            assert!(
+                !FRENCH_AT_STEP_21.iter().any(|(key, _)| *key == added),
+                "{added:?} is not new chrome"
+            );
+        }
     }
 
     /// A language's own name is not a translation: it is one word per language,

@@ -79,6 +79,7 @@ use topcoat::{
 
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
+use crate::domain::chord;
 use crate::domain::song::SITE_URL;
 use crate::i18n::{self, Key, Lang};
 use crate::pages::{
@@ -254,7 +255,12 @@ async fn document(
     addressed: Option<&db::Addressed>,
 ) -> Result<Option<String>> {
     if song_segment(path).is_some() {
-        return Ok(addressed.map(|found| song_document(found.song(), lang)));
+        // The page's own step, from the page's own URL. A song is the one
+        // document here that has a second dimension, and the two forms of it
+        // have to describe the same chords or the `Vary: Accept` between them
+        // is a lie.
+        let offset = chord::offset(uri(cx).query().unwrap_or(""));
+        return Ok(addressed.map(|found| song_document(found.song(), lang, offset)));
     }
 
     // `/aepa` is the front page under a second URL, and the same document:
@@ -327,9 +333,14 @@ fn is_html(response: &Response) -> bool {
 /// The song as one Markdown document.
 ///
 /// The heading, the credits on their own line in emphasis, the lyric as
-/// [`Song::lyrics_markdown`] writes it — chords kept inline at the offset the
-/// author put them — and the canonical URL, so a document quoted out of context
-/// still says where it came from.
+/// [`Song::lyrics_markdown_at`] writes it — chords kept inline, at the step the
+/// page is on and in the canonical spelling — and the canonical URL, so a
+/// document quoted out of context still says where it came from.
+///
+/// `offset` is the page's `?tr=`, read by the caller. The Markdown form of a
+/// transposed page is that page's chords, spelled the way the wheel spells them:
+/// the solfège names are the French chrome's, and a machine reading this
+/// document wants the chord the author's peers would write.
 ///
 /// `pub(crate)` because the MCP server (`src/routes/mcp.rs`) answers `get_song`
 /// with exactly this document: an agent reading a song over MCP and an agent
@@ -337,7 +348,7 @@ fn is_html(response: &Response) -> bool {
 /// MCP has no language — it is not a page — so it asks for
 /// [`Lang::DEFAULT`](crate::i18n::Lang::DEFAULT)'s document, which is what the
 /// bare song URL serves too.
-pub(crate) fn song_document(sheet: &Song, lang: Lang) -> String {
+pub(crate) fn song_document(sheet: &Song, lang: Lang, offset: i32) -> String {
     let artists = sheet
         .get_artists()
         .iter()
@@ -349,7 +360,7 @@ pub(crate) fn song_document(sheet: &Song, lang: Lang) -> String {
     if !artists.is_empty() {
         out.push_str(&format!("_{artists}_\n\n"));
     }
-    out.push_str(&sheet.lyrics_markdown());
+    out.push_str(&sheet.lyrics_markdown_at(offset));
     out.push_str(&format!(
         "\n\nSource: {}\n",
         i18n::url(lang, &sheet.get_path())
@@ -887,7 +898,7 @@ mod tests {
             chrono::Utc::now(),
         );
 
-        let text = song_document(&sheet, Lang::Fr);
+        let text = song_document(&sheet, Lang::Fr, 0);
         let mut lines = text.lines();
 
         assert_eq!(lines.next(), Some("# Te here"));

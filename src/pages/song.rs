@@ -35,13 +35,14 @@
 use topcoat::{
     Result,
     context::Cx,
-    router::{error::RouterErrorExt, page, path_param},
+    router::{error::RouterErrorExt, page, path_param, request::uri},
     view::{View, class, component, view},
 };
 
 use crate::db;
+use crate::domain::chord;
 use crate::domain::song::{LyricLine, LyricSpan, Song};
-use crate::i18n::{self, Key};
+use crate::i18n::{self, Key, Lang};
 use crate::state;
 use crate::ui::theme;
 
@@ -104,7 +105,27 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
         .map(|artist| artist.get_fullname())
         .collect::<Vec<String>>()
         .join(", ");
-    let lines = sheet.lyrics_lines();
+
+    // `?tr=` — the reader's own key. Read from the request and applied to the
+    // stored chords, so a step is a function of the sheet and the offset and
+    // never of the step before it: at zero the author's spelling comes back
+    // untouched, which is what makes stepping away and back land on the page the
+    // reader opened. French is the one chrome that names the chords in solfege;
+    // the other two languages read the canonical spelling. See
+    // `crate::domain::chord`.
+    let offset = chord::offset(uri(cx).query().unwrap_or(""));
+    let french = lang == Lang::Fr;
+    let lines = sheet
+        .lyrics_lines()
+        .into_iter()
+        .map(|line| chord::localised_line(line, offset, french))
+        .collect::<Vec<_>>();
+    let transpose = i18n::text(lang, Key::Transpose);
+    let step = if offset == 0 {
+        "0".to_owned()
+    } else {
+        format!("{offset:+}")
+    };
 
     Ok(view! {
         <article class=(theme::SONG_SHEET)>
@@ -116,6 +137,25 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                     if !artists.is_empty() {
                         <p class=(theme::SONG_ARTISTS)>(artists)</p>
                     }
+                </div>
+                // The two steps are real links, not a control a script has to
+                // wire: the page has to transpose with JavaScript off, and a
+                // link is the one control that always works. Each one carries
+                // the step it leads to, so the number a reader sees and the
+                // address they are sent to are the same fact.
+                <div class=(theme::TRANSPOSE) role="group" aria-label=(transpose)>
+                    <span class=(theme::TRANSPOSE_LABEL) aria-hidden="true">(transpose)</span>
+                    <a
+                        href=(step_link(cx, &sheet.get_path(), offset - 1))
+                        class=(class!(theme::TRANSPOSE_LINK, theme::FOCUS))
+                        aria-label=(i18n::text(lang, Key::TransposeDown))
+                    >("\u{2212}")</a>
+                    <span class=(theme::TRANSPOSE_VALUE)>(step)</span>
+                    <a
+                        href=(step_link(cx, &sheet.get_path(), offset + 1))
+                        class=(class!(theme::TRANSPOSE_LINK, theme::FOCUS))
+                        aria-label=(i18n::text(lang, Key::TransposeUp))
+                    >("+")</a>
                 </div>
                 <a
                     href=(i18n::link(cx, crate::pages::editor::PATH))
@@ -132,6 +172,22 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
             </div>
         </article>
     })
+}
+
+/// The address of this sheet one step away from `offset`.
+///
+/// `?tr=0` is left off: the untransposed sheet is this page's canonical URL, and
+/// a link to `?tr=0` would be a second address for the page the reader is
+/// already on. A step past the end of the wheel clamps to it — the link is still
+/// served, and the sheet it returns is the one on screen.
+fn step_link(cx: &Cx, path: &str, offset: i32) -> String {
+    let stepped = offset.clamp(-chord::MAX_OFFSET, chord::MAX_OFFSET);
+    let base = i18n::link(cx, path);
+    if stepped == 0 {
+        base
+    } else {
+        format!("{base}?tr={stepped}")
+    }
 }
 
 /// One line of the lyric.

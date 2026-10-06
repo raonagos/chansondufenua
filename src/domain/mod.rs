@@ -5,6 +5,7 @@
 //! only thing kept from the hexagon; the crate ceremony around it is gone.
 
 pub mod artist;
+pub mod chord;
 pub mod error;
 pub mod slug;
 pub mod song;
