@@ -432,8 +432,14 @@ pub const INDEX_EMPTY: StaticClass = class!("py-4 text-center text-mist-500");
 /// Roomier than [`CARD_ROOMY`] from `md` up, because this is the one page a
 /// visitor came to read rather than scan, and a wall of lyric against a panel
 /// edge is tiring.
-pub const SONG_SHEET: StaticClass =
-    class!("rounded-card border border-ink-700 bg-ink-900 shadow-card p-6 md:p-10");
+///
+/// The panel prints white. A browser does not print the page's background, so
+/// the sheet's dark panel and its light text would print as a blank page — see
+/// [`LYRICS`], [`SONG_TITLE`] and [`CHORD`] for the other half of that.
+pub const SONG_SHEET: StaticClass = class!(
+    "rounded-card border border-ink-700 bg-ink-900 shadow-card p-6 md:p-10 \
+     print:bg-white"
+);
 
 /// The sheet's header: the song's name on the left, the actions on the right.
 ///
@@ -453,8 +459,10 @@ pub const SONG_HEADING: StaticClass = class!("grow basis-full md:basis-0");
 /// A song title is a heading, so it takes the display face like every other
 /// heading on the site — v3 set it in the body face, at a fixed size, in a
 /// slant that no shipped face can draw.
-pub const SONG_TITLE: StaticClass =
-    class!("font-display text-3xl md:text-4xl font-bold tracking-tight text-balance text-mist-100");
+pub const SONG_TITLE: StaticClass = class!(
+    "font-display text-3xl md:text-4xl font-bold tracking-tight text-balance text-mist-100 \
+     print:text-black"
+);
 
 /// Who wrote or sings the song, under its title.
 ///
@@ -462,7 +470,7 @@ pub const SONG_TITLE: StaticClass =
 /// The index shows them in a column, so a reader arriving from the index already
 /// knows them, and a reader arriving from a search result never saw them at all.
 /// They are the song's own data, rendered where they belong.
-pub const SONG_ARTISTS: StaticClass = class!("text-lg text-mist-300");
+pub const SONG_ARTISTS: StaticClass = class!("text-lg text-mist-300 print:text-black");
 
 /// The small filled button in a sheet header — "Ajouter des paroles".
 ///
@@ -477,13 +485,23 @@ pub const BUTTON_SMALL: StaticClass = class!(
 /// The lyric block.
 ///
 /// Leading is roughly double, which is not decoration: every chord is drawn
-/// *above* the line it belongs to, so the half of each line box above the text
-/// is where they live. [`CHORD`] takes that space out of the flow, so the lyric
-/// itself reads continuously — "Hina'a" and "ro" stay adjacent even though a
-/// chord sits between them in the source.
-pub const LYRICS: StaticClass = class!("text-lg leading-loose text-mist-100");
+/// *above* its syllable, so the half of each line box above the text is where it
+/// lives. [`CHORD`] takes that space out of the flow, so the lyric itself reads
+/// continuously — "Hina'a" and "ro" stay adjacent even though a chord sits
+/// between them in the source.
+///
+/// Black on paper for the reason [`SONG_SHEET`] gives: left in the dark page's
+/// own text colour, the printed sheet is a white page with nothing on it.
+pub const LYRICS: StaticClass = class!("text-lg leading-loose text-mist-100 print:text-black");
 
-/// One line of lyric. Positioned, because the chords are placed against it.
+/// One line of lyric.
+///
+/// The chords are drawn from their own syllable ([`CHORDED`]), so the line is no
+/// longer the box they are measured against. It stays positioned anyway, as it
+/// was in v3, because of the one chord that hangs from a gap rather than from a
+/// letter: if an engine drops the collapsed box at the end of a line, the line
+/// is what keeps the chord inside its own row instead of leaving it measured
+/// against the page.
 pub const LYRIC_LINE: StaticClass = class!("relative");
 
 /// The blank line between two verses.
@@ -492,20 +510,55 @@ pub const LYRIC_LINE: StaticClass = class!("relative");
 /// break is a visual pause, and a full line box would read as a missing line.
 pub const LYRIC_GAP: StaticClass = class!("h-6");
 
-/// A chord, drawn over the syllable it is written against.
+/// The syllable a chord is drawn over: a box around the character — or the gap —
+/// the chord was written against.
 ///
-/// Absolutely positioned so it adds no width — the lyric underneath reads as one
-/// unbroken line, which is what makes a chord sheet usable for singing. A
-/// negative margin pulls it back over the preceding character, because the chord
-/// marks where the harmony changes *on* a syllable rather than after it. The
-/// leading is reset to one, or the chord would inherit the lyric's doubled
-/// leading and drift down into the words.
+/// **An inline box, not an atomic one**, although sizing the syllable as a box
+/// of its own is the obvious way to write this. An atomic inline is a
+/// line-breaking opportunity on both sides in every browser (UAX #14 treats it
+/// as an object replacement), and this corpus writes most of its chords *inside*
+/// a word — `rei<sup>F</sup>nes` — so an atomic syllable would let a narrow
+/// screen break the word at the chord. A positioned inline forms the same
+/// containing block for absolutely positioned children, and adds no break where
+/// there was none.
+///
+/// One em tall, not the lyric's doubled leading: the chord is then drawn from
+/// the top of the glyph box rather than the top of the line box, so it lands in
+/// the leading space — clear of the words below it and of the descenders of the
+/// line above. The line box does not grow: the inline box is shorter than the
+/// line's strut, and [`CHORD`] is out of the flow entirely.
+pub const CHORDED: StaticClass = class!("relative leading-none");
+
+/// A chord, drawn above the syllable it was written against.
+///
+/// Absolutely positioned, so it adds no width: the lyric underneath reads as one
+/// unbroken line, which is what makes a chord sheet usable for singing. It is
+/// anchored to the *syllable's* box and centred over it, rather than pulled back
+/// over the lyric by a fixed negative margin — which is what put v3's chords
+/// over the middle of a word instead of over its vowel.
+///
+/// The top offset is reset to `auto` and that is load-bearing, not tidiness:
+/// Tailwind's preflight already positions `sup` and gives it a top offset, so a
+/// chord with a bottom offset *and* preflight's top offset would be stretched
+/// between the two. The leading is reset to one, or the chord would inherit the
+/// lyric's doubled leading and drift down into the words.
 ///
 /// Monospace, because chord labels are short, stacked and must not collide with
-/// the words they sit over; the accent colour is what separates them from the
-/// lyric without a box around each one.
-pub const CHORD: StaticClass =
-    class!("absolute top-1 -ml-2 font-mono text-[0.8rem] leading-none text-tahiti-300");
+/// the words they sit over. At 14px against the lyric's 18px it is larger than
+/// v3's 12.8px, and as large as it goes without neighbours colliding in the
+/// corpus's densest lines. No weight is added because there is none to add: the
+/// mono face ships one (see `crate::ui::fonts`), and asking for a bold one would
+/// be answered by the browser's synthesiser rather than the type designer.
+///
+/// `tahiti-200` measures 13.4:1 against the sheet's `ink-900`, against
+/// `tahiti-300`'s 11.5:1 — the lightest stop the accent ramp has, so a chord
+/// still reads as the accent without v3's washed-out look. On paper it becomes
+/// `tahiti-900`, 9.1:1 on white; left as `tahiti-200` a printed chord would be
+/// invisible.
+pub const CHORD: StaticClass = class!(
+    "absolute top-auto bottom-full left-1/2 -translate-x-1/2 font-mono text-sm \
+     leading-none whitespace-nowrap text-tahiti-200 print:text-tahiti-900"
+);
 
 // ---------------------------------------------------------------------------
 // Create-song form
@@ -707,6 +760,7 @@ mod tests {
         LYRICS,
         LYRIC_LINE,
         LYRIC_GAP,
+        CHORDED,
         CHORD,
         FORM_PANEL,
         FORM_FIELD,
@@ -941,6 +995,37 @@ mod tests {
         let shell = rendered(&SHELL);
         assert!(shell.contains("print:bg-white"));
         assert!(shell.contains("print:text-black"));
+    }
+
+    /// ...and the sheet repaints itself, which cancelling the page background
+    /// alone does not do.
+    ///
+    /// Every colour the sheet uses is set on the element that carries the text,
+    /// so it wins over anything the body says. A browser prints no background,
+    /// so a printed sheet keeps those colours on white paper: `mist-100` at
+    /// 1.03:1 and `tahiti-200` at 1.05:1, which is a blank page. Each of the
+    /// three has to say what it becomes on paper, and the chord has to stay
+    /// legible rather than merely dark.
+    #[test]
+    fn print_repaints_the_sheet_in_ink() {
+        for (name, token) in [
+            ("the lyric", &LYRICS),
+            ("the title", &SONG_TITLE),
+            ("the credits", &SONG_ARTISTS),
+        ] {
+            assert!(
+                classes(token).contains(&"print:text-black"),
+                "{name} would print as it looks on the dark page"
+            );
+        }
+        assert!(
+            classes(&SONG_SHEET).contains(&"print:bg-white"),
+            "the sheet's panel would print as a dark rectangle"
+        );
+        assert!(
+            classes(&CHORD).contains(&"print:text-tahiti-900"),
+            "a chord would print in the colour that is invisible on white"
+        );
     }
 
     /// Every colour name a token uses must exist in the palette `build.rs`
@@ -1239,25 +1324,51 @@ mod tests {
         }
     }
 
-    /// The lyric sheet only works if the three tokens agree about what draws a
-    /// chord: it is positioned against a positioned line, it takes the accent,
-    /// and it resets the leading it would otherwise inherit from [`LYRICS`].
+    /// The lyric sheet only works if the three tokens agree about how a chord is
+    /// drawn: the line has room above its text, the syllable is a box the chord
+    /// can be measured against, and the chord is drawn above that box — centred
+    /// over it, out of the flow, in the accent colour.
+    ///
+    /// The negative margin v3 used to drag a chord back over the lyric is gone
+    /// on purpose: it was a fixed distance, so it dropped the chord wherever
+    /// half a rem to the left of the flow happened to be — over the middle of
+    /// the word, which is the defect this replaces. This test fails if it comes
+    /// back.
     #[test]
-    fn the_lyric_sheet_places_chords_against_positioned_lines() {
+    fn a_chord_is_drawn_from_the_syllable_it_was_written_against() {
         let line = classes(&LYRIC_LINE);
+        let syllable = classes(&CHORDED);
         let chord = classes(&CHORD);
 
         assert!(
             line.contains(&"relative"),
-            "a chord has nothing to anchor to"
+            "a chord hanging from a gap has no box to fall back to inside its own line"
+        );
+        assert!(
+            syllable.contains(&"relative"),
+            "the syllable is not the box the chord is measured against"
+        );
+        assert!(
+            syllable.contains(&"leading-none"),
+            "the syllable would inherit the lyric's doubled leading, and its chord \
+             would be drawn from the top of the line box instead of the glyph box"
         );
         assert!(
             chord.contains(&"absolute"),
             "a chord would add width to the line"
         );
         assert!(
-            chord.iter().any(|c| c.starts_with("-ml-")),
-            "a chord would sit after its syllable instead of over it"
+            chord.contains(&"bottom-full"),
+            "a chord would not be drawn from the top of its syllable"
+        );
+        assert!(
+            chord.contains(&"left-1/2") && chord.contains(&"-translate-x-1/2"),
+            "a chord is not centred over the syllable it belongs to"
+        );
+        assert!(
+            chord.contains(&"top-auto"),
+            "preflight already offsets a sup from the top, so the chord would be \
+             stretched between the two offsets"
         );
         assert!(
             chord.contains(&"leading-none"),
@@ -1266,6 +1377,11 @@ mod tests {
         assert!(
             chord.iter().any(|c| c.starts_with("text-tahiti-")),
             "a chord is not told apart from the lyric"
+        );
+        assert!(
+            !chord.iter().any(|c| c.starts_with(concat!("-ml", "-"))),
+            "a fixed negative margin puts the chord where the margin lands, not \
+             over the syllable it was written against"
         );
     }
 }
