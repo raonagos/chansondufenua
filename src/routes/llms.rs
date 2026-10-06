@@ -48,8 +48,9 @@ fn body() -> String {
 ## Where the content is
 
 - [Song index]({SITE_URL}{songs}): every published song, newest first.
-- [One song]({SITE_URL}/himene/{{id}}): the lyric with its chords. Add
-  `?lang=ty` for the Tahitian chrome; the lyrics themselves are as written.
+- [One song]({SITE_URL}/himene/{{slug}}): the lyric with its chords. The slug is
+  the song's address, as the catalogue's `url` field spells it. Add `?lang=ty`
+  for the Tahitian chrome; the lyrics themselves are as written.
 
 ## For a program
 

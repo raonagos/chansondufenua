@@ -408,9 +408,10 @@ fn tools() -> Value {
                         "id": {
                             "type": "string",
                             "minLength": 1,
-                            "description": "The song's id, exactly as list_songs returns \
-                                it. The identifier is opaque text, so a slug will resolve \
-                                here too once slug URLs ship."
+                            "description": "The song's address segment or its id: the \
+                                slug from a list_songs `url`, or the id it returns. \
+                                Both resolve, and so does a slug the song used to \
+                                have."
                         }
                     },
                     "required": ["id"],
@@ -509,8 +510,13 @@ async fn list_songs(cx: &Cx, arguments: &Value) -> std::result::Result<Value, Rp
 /// either way (`-32602` would tell a client its request was malformed, and it
 /// was not).
 ///
+/// **The argument is a slug or an id.** `list_songs` returns both (`url` and
+/// `id`), and a client that followed a link has the slug, so both have to
+/// resolve: [`db::song_at`] is the same resolution the site's own URLs use, and a
+/// slug the song used to have resolves too rather than failing.
+///
 /// **A draft is not found**, the rule the sheet and the JSON API both keep:
-/// [`db::song`] returns drafts so the editor can see them, and this surface is
+/// [`db::song_at`] returns drafts so the editor can see them, and this surface is
 /// public.
 async fn get_song(cx: &Cx, arguments: &Value) -> std::result::Result<Value, RpcError> {
     let object = arguments.as_object().ok_or_else(|| {
@@ -524,15 +530,16 @@ async fn get_song(cx: &Cx, arguments: &Value) -> std::result::Result<Value, RpcE
         .filter(|id| !id.is_empty())
         .ok_or_else(|| RpcError::invalid_params("Invalid params: get_song requires \"id\""))?;
 
-    let found = db::song(state::db(cx).pool(), id)
+    let found = db::song_at(state::db(cx).pool(), id)
         .await
         .map_err(internal)?
+        .map(db::Addressed::into_song)
         .filter(Song::is_published);
 
     Ok(match found {
         Some(sheet) => text_result(song_document(&sheet)),
         None => error_result(format!(
-            "No published song with id {id:?}. Use {LIST_TOOL} to find one."
+            "No published song with id or slug {id:?}. Use {LIST_TOOL} to find one."
         )),
     })
 }

@@ -20,7 +20,10 @@
 //!   hashes for 135 records. The v4 schema has no user table and no auth, so
 //!   there is nothing to import them into — and no reason to move hashes off
 //!   the host they came from.
-//! * **Ids are preserved.** A song's id is its URL. See `migrations/0001_init.sql`.
+//! * **Ids are preserved.** A song's id is its stable key — the `id` field of
+//!   the JSON API and of the MCP tools — and `Song::get_path` is its address:
+//!   a slug built from the title, which is what keeps every v3 URL alive as a
+//!   301. See `migrations/0002_slugs.sql`.
 //! * **Credit order is preserved**, because it is visible on the page.
 //!
 //! The import is idempotent: re-running it over the same dump updates rows
@@ -30,6 +33,7 @@ use sqlx::SqlitePool;
 use thiserror::Error;
 
 use super::DbResult;
+use super::queries::assign_slug;
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -647,6 +651,13 @@ pub async fn load(pool: &SqlitePool, dump: &Dump) -> DbResult<ImportReport> {
         .execute(&mut *tx)
         .await?;
 
+        // The address, minted from the title by the same function the form and
+        // the backfill use. Idempotent for a title that has not changed — the
+        // slug comes back identical — and for one that has, the song moves and
+        // the slug it used to live at stays in `song_slug`, which is what makes
+        // the old URL a 301 rather than a 404.
+        assign_slug(&mut tx, &song.id, &song.title).await?;
+
         // Clear then re-insert, so a re-import cannot accumulate stale credits
         // and a changed credit order is honoured.
         sqlx::query("DELETE FROM song_artist WHERE song_id = ?1")
@@ -829,6 +840,45 @@ INSERT [ { ROLE: 'GUESS', id: user:0cbdjtwxu46c2p6msxts, password: '$argon2id$v=
             .await
             .unwrap();
         assert_eq!(credits, 2);
+    }
+
+    /// The address survives a re-import unchanged, and a *renamed* song in a
+    /// corrected dump moves — with the slug it used to live at left in the
+    /// history, so the old URL redirects rather than 404s.
+    #[tokio::test]
+    async fn loading_assigns_the_slug_and_a_rename_moves_it_once() {
+        let db = Db::open_in_memory().await.unwrap();
+        let dump = Dump::parse(SAMPLE).unwrap();
+        load(db.pool(), &dump).await.unwrap();
+
+        let id = "7bvi97gjea010jgxejv5";
+        let first = crate::db::song(db.pool(), id).await.unwrap().unwrap();
+        assert_eq!(first.get_slug().as_deref(), Some("pape-mehai"));
+
+        // Same dump again: the address must not move, and must not grow a `-2`.
+        load(db.pool(), &Dump::parse(SAMPLE).unwrap())
+            .await
+            .unwrap();
+        let again = crate::db::song(db.pool(), id).await.unwrap().unwrap();
+        assert_eq!(again.get_slug().as_deref(), Some("pape-mehai"));
+
+        // A corrected dump with a new title: the song moves, the old slug stays
+        // resolvable and points at the new address.
+        let renamed = SAMPLE.replace(r#"title: "Pape meha'i""#, r#"title: "Pape meha'i nui""#);
+        load(db.pool(), &Dump::parse(&renamed).unwrap())
+            .await
+            .unwrap();
+
+        let moved = crate::db::song(db.pool(), id).await.unwrap().unwrap();
+        assert_eq!(moved.get_slug().as_deref(), Some("pape-mehai-nui"));
+
+        let retired = crate::db::song_at(db.pool(), "pape-mehai")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!retired.is_canonical());
+        assert_eq!(retired.song().get_id(), id);
+        assert_eq!(retired.song().get_path(), "/himene/pape-mehai-nui");
     }
 
     #[tokio::test]

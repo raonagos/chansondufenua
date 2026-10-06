@@ -17,6 +17,11 @@
 //! * **Artists are names.** There is no artist resource to dereference and no
 //!   page per artist, so an id here would advertise a relationship the API does
 //!   not have. The sheet prints the same names, in the same order.
+//! * **`id` is the key, `url` is the address.** The address is the slug
+//!   (`/himene/ahani-e`), which is what a reader's link points at; the id is what
+//!   this API's single-song read is keyed by, so `/api/songs/{id}` never has to
+//!   move when a title changes. Two fields, two jobs, neither derived from the
+//!   other.
 //! * **A missing song is a JSON 404**, not the site's HTML one. The error body
 //!   is part of the surface: a caller that asked for JSON should not have to
 //!   parse a document to find out it was wrong.
@@ -333,10 +338,10 @@ fn schemas() -> Value {
             "type": "object",
             "required": ["id", "title", "artists", "url", "view_count", "created_at", "updated_at"],
             "properties": {
-                "id": { "type": "string", "description": "20 characters of [0-9a-z]." },
+                "id": { "type": "string", "description": "The stable key: 20 characters of [0-9a-z]. It is not the page's address — `url` is." },
                 "title": { "type": "string" },
                 "artists": { "type": "array", "items": { "type": "string" } },
-                "url": { "type": "string", "format": "uri", "description": "The song page's canonical URL." },
+                "url": { "type": "string", "format": "uri", "description": "The song page's canonical URL: the slug form. `/himene/{id}` answers a 301 to it." },
                 "view_count": { "type": "integer" },
                 "created_at": { "type": "string", "format": "date-time" },
                 "updated_at": { "type": "string", "format": "date-time" },
@@ -384,6 +389,7 @@ mod tests {
         let fixture = &fixtures::SONGS[0];
         Song::new(
             fixture.id.to_owned(),
+            Some(fixture.slug.to_owned()),
             fixture.title.to_owned(),
             fixture.lyrics.to_owned(),
             7,

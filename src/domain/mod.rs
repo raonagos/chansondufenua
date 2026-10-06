@@ -6,6 +6,7 @@
 
 pub mod artist;
 pub mod error;
+pub mod slug;
 pub mod song;
 
 pub use artist::Artist;

@@ -266,7 +266,9 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
 /// optional for that: resolving a parameterised `href` needs the request.
 #[component]
 pub async fn song_row(cx: &Cx, song: Song, #[default] inverse: bool) -> Result<impl View> {
-    let url = href!(sheet::song, sheet::Id(song.get_id())).resolve(cx);
+    // The address of the sheet, from the route's own parameter: the slug, or the
+    // id for a song whose title earned no slug.
+    let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
     let title = song.get_title();
     let lyrics = song.clean_lyrics();
 

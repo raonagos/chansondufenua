@@ -1,4 +1,5 @@
-//! `Accept: text/markdown`, and the `Link` headers that advertise it.
+//! `Accept: text/markdown`, the `Link` headers that advertise it, and the one
+//! spelling of a song URL.
 //!
 //! The site's prose pages have two representations and one URL each. Asked for
 //! HTML — which is every browser, and the default — a page renders inside the
@@ -8,6 +9,15 @@
 //! index the same prose and the same catalogue, every title a link. That is the
 //! difference between an agent reading the content and an agent scraping it out
 //! of markup.
+//!
+//! **A song URL has one spelling, and this layer is what enforces it.** A song
+//! is published at `/himene/{slug}`; `/himene/{id}` and a slug the song used to
+//! have are answered `301` to the current address, in *either* representation —
+//! so no cache, index or reader ever sees the same sheet at two URLs. The
+//! redirect is issued here rather than in the page because a page is wrapped by
+//! the layout: it would carry the site's whole chrome on a response whose only
+//! content is where to go next, and because the Markdown form is served by this
+//! layer too and would otherwise be the one spelling that did *not* move.
 //!
 //! **Which pages have a Markdown form** is one list, spelled in the private
 //! `document` below: a song, the front page (`/`, and the `/aepa` duplicate of
@@ -33,23 +43,28 @@
 //!
 //! Three properties the code below is arranged to keep:
 //!
-//! * **No database read on the common path.** The Markdown branch reads what the
-//!   document it is building needs, once; every other request — HTML, images,
-//!   the API — never opens the pool. The negotiation is decided from the
-//!   request's own headers and path first.
+//! * **No database read on the common path.** Every request that is not a song
+//!   URL — the images, the API, the sitemaps, `robots.txt`, the two front-page
+//!   URLs, the index — never opens the pool: the negotiation and the
+//!   canonicalisation are both decided from the request's own headers and path
+//!   first. A song URL is the exception, and it has to be: "is this the address
+//!   the song is published at" is a fact about the row. It is one indexed lookup
+//!   on a table of 43 rows, and the page reads the same row anyway.
 //! * **A request that asks for Markdown on a path with no Markdown form — or
 //!   names a song that is missing or a draft — falls through to the router**,
 //!   which is what turns it into the site's 404. The layer does not invent an
 //!   error response of its own.
 //! * **The links are on the response, not on the representation.** They are
 //!   queued through `response_headers`, so they survive whatever the response
-//!   turns out to be, errors included.
+//!   turns out to be, errors included. A redirect is the one exception: it
+//!   returns before the queue is built, because a `Link` header describing a
+//!   representation of the URL you are being sent away from is noise.
 
 use topcoat::{
     Result,
     context::Cx,
     router::{
-        Body, Layer, LayerFuture, Next, Path, header,
+        Body, HeaderValue, Layer, LayerFuture, Next, Path, StatusCode, header,
         request::{headers, uri},
         response::{IntoResponse, Response, response_headers},
     },
@@ -118,10 +133,32 @@ impl Layer for Negotiation {
             let path = uri(cx).path();
             let wanted = header(cx, header::ACCEPT);
 
-            if prefers_markdown(wanted.as_deref())
-                && let Some(text) = document(cx, path).await?
+            // The song this URL names, if it names one, resolved once for all
+            // three decisions below: whether the URL has to move, whether the
+            // Markdown form exists, and what the `Link` headers should promise.
+            // Reading the row twice would be two answers to one question.
+            let addressed = match song_segment(path) {
+                Some(segment) => db::song_at(state::db(cx).pool(), segment).await?,
+                None => None,
+            };
+            // A draft is not published, so it is not a page: it 404s, and
+            // nothing is promised about it.
+            let addressed = addressed.filter(|found| found.song().is_published());
+
+            // The one URL a song is published at, decided before the
+            // representation is chosen: an id URL and a retired slug are a 301
+            // whether the client asked for HTML or for Markdown, so neither form
+            // can be served — or cached, or indexed — under a second spelling.
+            if let Some(found) = &addressed
+                && !found.is_canonical()
             {
-                queue_links(cx, path, true)?;
+                return Ok(moved_permanently(&found.song().get_path()));
+            }
+
+            if prefers_markdown(wanted.as_deref())
+                && let Some(text) = document(cx, path, addressed.as_ref()).await?
+            {
+                queue_links(cx, path, true, addressed.as_ref())?;
                 return markdown(cx, text);
             }
 
@@ -131,12 +168,34 @@ impl Layer for Negotiation {
             // `robots.txt` and the served stylesheet all pass through here too,
             // and none of them is described by them.
             if is_html(&response) {
-                queue_links(cx, path, false)?;
+                queue_links(cx, path, false, addressed.as_ref())?;
             }
 
             Ok(response)
         })
     }
+}
+
+/// `301` to `location`, with no body.
+///
+/// **301, not 308.** Topcoat's own `redirect_permanent` is a 308, which is the
+/// right code for a *method-preserving* move and the wrong one here: what is
+/// being retired is one address of a `GET`-only document, and 301 is the code
+/// every crawler has consolidated on since before 308 existed. The plan says
+/// 301 for the same reason.
+///
+/// The target is root-relative — the site's own spelling for a redirect, and one
+/// that does not bake in a host the request may not have arrived on. Slugs are
+/// `[a-z0-9-]` by construction (`domain::slug`), so the header value cannot be
+/// malformed and there is nothing to percent-encode.
+fn moved_permanently(location: &str) -> Response {
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::MOVED_PERMANENTLY;
+    response.headers_mut().insert(
+        header::LOCATION,
+        HeaderValue::from_str(location).expect("a slug is a valid header value"),
+    );
+    response
 }
 
 /// One request header, as a string, if it is there and readable.
@@ -147,13 +206,13 @@ fn header(cx: &Cx, name: header::HeaderName) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The id of the song a path names, or `None` if it names no song.
+/// The song a path names — its slug, or an id or retired slug that has to move.
 ///
-/// One segment below the prefix and nothing else. `/himene/{id}/anything` is
+/// One segment below the prefix and nothing else. `/himene/{slug}/anything` is
 /// nobody's page; `/himene/sitemap.xml` *is* one segment and is a route of its
 /// own, and so is the create-song page — the router prefers a literal segment to
 /// a parameter, so both reach their own handlers and never
-/// `#[page("/himene/{id}")]`. They are excluded here rather than left for the
+/// `#[page("/himene/{slug}")]`. They are excluded here rather than left for the
 /// database read to reject, because the read is not the only caller: [`links`]
 /// writes promises from this answer, and a page advertising a Markdown form it
 /// does not have is a header lying about the response it arrived on.
@@ -162,14 +221,14 @@ fn header(cx: &Cx, name: header::HeaderName) -> Option<String> {
 /// document head from the path, and a song URL that names no published song
 /// becomes the 404's head. Two answers to "is this a song URL" would be a page
 /// and its `<head>` disagreeing about which pages exist.
-pub(crate) fn song_id(path: &str) -> Option<&str> {
-    let id = path.strip_prefix(SONG_PREFIX)?;
-    let is_song = !id.is_empty()
-        && !id.contains('/')
+pub(crate) fn song_segment(path: &str) -> Option<&str> {
+    let segment = path.strip_prefix(SONG_PREFIX)?;
+    let is_song = !segment.is_empty()
+        && !segment.contains('/')
         && path != crate::pages::editor::PATH
         && path != sitemap::SONGS_PATH;
 
-    is_song.then_some(id)
+    is_song.then_some(segment)
 }
 
 /// The Markdown form of a path, if the path has one.
@@ -183,12 +242,17 @@ pub(crate) fn song_id(path: &str) -> Option<&str> {
 ///
 /// The reads happen here, in the branch that needs them, and only there: a
 /// request for HTML — which is every browser — never reaches this function.
-async fn document(cx: &Cx, path: &str) -> Result<Option<String>> {
-    if let Some(id) = song_id(path) {
-        let sheet = db::song(state::db(cx).pool(), id)
-            .await?
-            .filter(Song::is_published);
-        return Ok(sheet.as_ref().map(song_document));
+///
+/// A song is resolved by [the handler](Negotiation::handle) and handed in, not
+/// read again here: the segment in the path is a slug, and reading it as an id
+/// would 404 the Markdown form of every song on the site.
+async fn document(
+    cx: &Cx,
+    path: &str,
+    addressed: Option<&db::Addressed>,
+) -> Result<Option<String>> {
+    if song_segment(path).is_some() {
+        return Ok(addressed.map(|found| song_document(found.song())));
     }
 
     // `/aepa` is the front page under a second URL, and the same document:
@@ -460,8 +524,13 @@ fn estimated_tokens(text: &str) -> u64 {
 ///
 /// Separate `Link` headers rather than one comma-joined value: RFC 8288 permits
 /// both, and separate ones keep the quoting inside each value simple.
-fn queue_links(cx: &Cx, path: &str, markdown: bool) -> Result<()> {
-    for value in links(path, markdown) {
+fn queue_links(
+    cx: &Cx,
+    path: &str,
+    markdown: bool,
+    addressed: Option<&db::Addressed>,
+) -> Result<()> {
+    for value in links(path, markdown, addressed) {
         response_headers(cx).append(header::LINK, header::HeaderValue::from_str(&value)?);
     }
 
@@ -475,12 +544,18 @@ fn queue_links(cx: &Cx, path: &str, markdown: bool) -> Result<()> {
 /// reference, but a header is exactly the thing that gets quoted away from the
 /// response it arrived on, and one that no longer resolves is a broken promise.
 ///
+/// `addressed` is the song the path names, already resolved by the caller — a
+/// `Link` header is a promise about a row, and this function has no business
+/// reading one of its own.
+///
 /// * Every document names the sitemap.
 /// * Every page with a Markdown form names the other of its two representations
 ///   under `alternate` — a song, the front page, its `/aepa` duplicate, and the
 ///   index. That is the same list [`document`] serves, and it is derived from
 ///   `served_markdown` rather than from a second table.
-/// * A song names its JSON read under `describedby`.
+/// * A song names its JSON read under `describedby`. That URL is keyed by the
+///   song's **id**, which is the API's stable key: the page it arrived on is
+///   named by a slug, and the two are not interchangeable.
 /// * The song index names the catalogue, which is the machine-readable form of
 ///   the same list.
 /// * The home page describes the MCP server: `service-desc` is the registered
@@ -495,7 +570,7 @@ fn queue_links(cx: &Cx, path: &str, markdown: bool) -> Result<()> {
 ///   and both are therefore on `/` alone, like the card.
 /// * Nothing else: nothing else on this site has a machine-readable form that a
 ///   `Link` to something absent would describe.
-fn links(path: &str, served_markdown: bool) -> Vec<String> {
+fn links(path: &str, served_markdown: bool, addressed: Option<&db::Addressed>) -> Vec<String> {
     let sitemap_link = format!("<{SITE_URL}{}>; rel=\"sitemap\"", sitemap::PATH);
 
     // The representation a caller did not get. `alternate` is the registered
@@ -504,11 +579,21 @@ fn links(path: &str, served_markdown: bool) -> Vec<String> {
     let other = if served_markdown { HTML } else { MARKDOWN_TYPE };
     let alternate = |url: String| format!("<{url}>; rel=\"alternate\"; type=\"{other}\"");
 
-    if let Some(id) = song_id(path) {
+    // A song that is there — a draft or a missing one has no links, the same rule
+    // the other pages follow: nothing is described that is not served. Both URLs
+    // come from the row: the JSON read is keyed by id (its stable key), and the
+    // canonical form of the page is the slug, which the path alone cannot be
+    // asked for — the segment in it may be an id on its way to a 301.
+    if let Some(found) = addressed {
+        let sheet = found.song();
         return vec![
             sitemap_link,
-            format!("<{SITE_URL}{}/{id}>; rel=\"describedby\"", api::PATH),
-            alternate(format!("{SITE_URL}{SONG_PREFIX}{id}")),
+            format!(
+                "<{SITE_URL}{}/{}>; rel=\"describedby\"",
+                api::PATH,
+                sheet.get_id()
+            ),
+            alternate(sheet.get_url()),
         ];
     }
 
@@ -619,17 +704,20 @@ mod tests {
     /// and the layer must not describe them as songs.
     #[test]
     fn only_a_single_segment_under_himene_is_a_song() {
+        // A slug and an id are both one segment: what the segment *is* is the
+        // resolver's question, not this reader's.
+        assert_eq!(song_segment("/himene/ahani-e"), Some("ahani-e"));
         assert_eq!(
-            song_id("/himene/8nntgjk4rl5dbp67c6en"),
+            song_segment("/himene/8nntgjk4rl5dbp67c6en"),
             Some("8nntgjk4rl5dbp67c6en")
         );
-        assert_eq!(song_id("/himene/sitemap.xml"), None);
-        assert_eq!(song_id(crate::pages::editor::PATH), None);
-        assert_eq!(song_id("/himene/"), None);
-        assert_eq!(song_id("/himene"), None);
-        assert_eq!(song_id("/himene/a/b"), None);
-        assert_eq!(song_id("/api/songs/x"), None);
-        assert_eq!(song_id("/"), None);
+        assert_eq!(song_segment("/himene/sitemap.xml"), None);
+        assert_eq!(song_segment(crate::pages::editor::PATH), None);
+        assert_eq!(song_segment("/himene/"), None);
+        assert_eq!(song_segment("/himene"), None);
+        assert_eq!(song_segment("/himene/a/b"), None);
+        assert_eq!(song_segment("/api/songs/x"), None);
+        assert_eq!(song_segment("/"), None);
     }
 
     /// Every document names the sitemap; a song names its JSON read and its
@@ -640,7 +728,22 @@ mod tests {
     /// arrived on.
     #[test]
     fn the_links_say_what_the_page_is_and_where_its_other_forms_are() {
-        let song = links("/himene/8nntgjk4rl5dbp67c6en", false);
+        // A published song, resolved: its URL is the slug and its JSON read is
+        // keyed by the id, which is the distinction these three headers have to
+        // keep — the page is named one way and the API another.
+        let sheet = Song::new(
+            "8nntgjk4rl5dbp67c6en".to_owned(),
+            Some("te-here".to_owned()),
+            "Te here".to_owned(),
+            "<div>Hina'a</div>".to_owned(),
+            1,
+            Vec::new(),
+            true,
+            chrono::Utc::now(),
+            chrono::Utc::now(),
+        );
+        let addressed = db::Addressed::new(sheet, true);
+        let song = links("/himene/te-here", false, Some(&addressed));
         assert_eq!(song.len(), 3);
         assert_eq!(
             song[0],
@@ -655,19 +758,21 @@ mod tests {
         );
         assert_eq!(
             song[2],
-            format!(
-                "<{SITE_URL}/himene/8nntgjk4rl5dbp67c6en>; rel=\"alternate\"; type=\"text/markdown\""
-            )
+            format!("<{SITE_URL}/himene/te-here>; rel=\"alternate\"; type=\"text/markdown\"")
         );
 
         // Serving Markdown flips the alternate to the HTML document, because the
         // other representation is now the one the caller did not get.
-        let as_markdown = links("/himene/8nntgjk4rl5dbp67c6en", true);
+        let as_markdown = links("/himene/te-here", true, Some(&addressed));
         assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
         assert_eq!(as_markdown[0], song[0]);
 
+        // A song URL that names no published song promises nothing: a draft is
+        // not served, so there is nothing to describe.
+        assert_eq!(links("/himene/te-here", false, None).len(), 1);
+
         // The index names the catalogue and its own Markdown form.
-        let index = links(songs::PATH, false);
+        let index = links(songs::PATH, false, None);
         assert_eq!(index.len(), 3);
         assert_eq!(index[0], song[0]);
         assert_eq!(
@@ -688,7 +793,7 @@ mod tests {
         // is the same page under another URL names its Markdown form but does not
         // repeat the site-level links, because they describe the site and one
         // link on one URL is the whole promise.
-        let home = links(HOME, false);
+        let home = links(HOME, false, None);
         assert_eq!(home.len(), 5);
         assert_eq!(home[0], song[0]);
         assert_eq!(
@@ -722,7 +827,7 @@ mod tests {
         );
         assert_eq!(home[4], describedby_link());
 
-        let aepa = links(AEPA, false);
+        let aepa = links(AEPA, false, None);
         assert_eq!(aepa.len(), 2);
         assert_eq!(
             aepa[1],
@@ -730,7 +835,7 @@ mod tests {
         );
 
         // A path with no Markdown form promises nothing but the sitemap.
-        assert_eq!(links(crate::pages::editor::PATH, false).len(), 1);
+        assert_eq!(links(crate::pages::editor::PATH, false, None).len(), 1);
     }
 
     /// The document is Markdown a reader can use: an `# ` title, then the lyric
@@ -739,6 +844,7 @@ mod tests {
     fn the_document_opens_with_the_title_and_closes_with_its_url() {
         let sheet = Song::new(
             "8nntgjk4rl5dbp67c6en".to_owned(),
+            Some("te-here".to_owned()),
             "Te here".to_owned(),
             "<div>Hina'a<sup data-nosnippet=\"true\">Eb</sup>ro</div>".to_owned(),
             1,
@@ -792,6 +898,7 @@ mod tests {
     fn the_song_list_links_every_title_absolutely() {
         let song = Song::new(
             "8nntgjk4rl5dbp67c6en".to_owned(),
+            Some("te-here".to_owned()),
             "Te here".to_owned(),
             "<div>Hina'a</div>".to_owned(),
             1,

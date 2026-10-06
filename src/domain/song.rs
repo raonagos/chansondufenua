@@ -51,6 +51,10 @@ pub const DESCRIPTION_MAX: usize = 155;
 /// Structure representing a song.
 pub struct Song {
     id: String,
+    /// The address this song is published under, built from its title by
+    /// [`super::slug::slugify`]. `None` when the title has no Latin letters in
+    /// it, and then the id is the address — see [`Song::get_path`].
+    slug: Option<String>,
     title: String,
     lyrics: String,
     view_count: u32,
@@ -61,12 +65,13 @@ pub struct Song {
 }
 
 impl Song {
-    /// Eight arguments is a lot, but this is v3's constructor signature kept
-    /// intact so the port is auditable. It disappears once the repository builds
-    /// songs from rows (step 3a).
+    /// Nine arguments is a lot, but this is v3's constructor signature plus the
+    /// slug, kept intact so the port is auditable. It disappears once the
+    /// repository builds songs from rows (step 3a).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
+        slug: Option<String>,
         title: String,
         lyrics: String,
         view_count: u32,
@@ -77,6 +82,7 @@ impl Song {
     ) -> Self {
         Self {
             id,
+            slug,
             title,
             lyrics,
             view_count,
@@ -88,8 +94,25 @@ impl Song {
     }
 
     /// Retrieves the `id` of the song.
+    ///
+    /// The v3 record key, and the stable identifier of the JSON API and the MCP
+    /// tools. It is no longer the song's address — [`Song::get_path`] is.
     pub fn get_id(&self) -> String {
         self.id.to_owned()
+    }
+
+    /// Retrieves the `slug` of the song, if it has one.
+    pub fn get_slug(&self) -> Option<String> {
+        self.slug.to_owned()
+    }
+
+    /// The path segment this song is addressed by: its slug, or its id when the
+    /// title earned it no slug.
+    ///
+    /// This is what a link to the song is built from, and what the redirect from
+    /// the id URL points at.
+    pub fn get_segment(&self) -> String {
+        self.slug.to_owned().unwrap_or_else(|| self.id.to_owned())
     }
 
     /// Retrieves the `title` of the song.
@@ -137,9 +160,20 @@ impl Song {
         self.updated_at.timestamp_micros()
     }
 
+    /// The root-relative path the song is served at, canonical form.
+    ///
+    /// One spelling of a song URL, used by every link the site emits and by the
+    /// `Location` of the 301 from the id form. The absolute form is
+    /// [`Song::get_url`]; this is what a `Location` header and an internal link
+    /// want, because it does not name a host the request may not have arrived
+    /// on.
+    pub fn get_path(&self) -> String {
+        format!("/himene/{}", self.get_segment())
+    }
+
     /// The song's canonical URL.
     pub fn get_url(&self) -> String {
-        format!("{SITE_URL}/himene/{}", self.id)
+        format!("{SITE_URL}{}", self.get_path())
     }
 
     /// Rejects a song the database would reject, before it gets there.
@@ -324,6 +358,11 @@ impl Song {
 
         let meta_og_url = self.get_url();
         let uat = self.get_uat_timestamp();
+        // The two card URLs stay keyed by `id`. They are not addresses of a
+        // document — they are the cache key of a PNG, asked for by this page and
+        // by no one else — and the id is the stable key. Moving them to the slug
+        // form would re-render two images per song for no reader's benefit, and
+        // they are served `immutable` for a year.
         let meta_img_url_og = format!("{SITE_URL}/drive/genog/{uat}/himene/{}", self.id);
         let meta_img_url_tw = format!("{SITE_URL}/drive/gentw/{uat}/himene/{}", self.id);
         let meta_og_img_alt = format!("Lyrics for {}", page_title);
@@ -764,6 +803,7 @@ mod tests {
     fn song_with(lyrics: &str) -> Song {
         Song::new(
             "8nntgjk4rl5dbp67c6en".to_string(),
+            Some("song-title".to_owned()),
             "Song Title".to_string(),
             lyrics.to_string(),
             100,
@@ -784,6 +824,7 @@ mod tests {
         );
         let song = Song::new(
             "Song ID".to_string(),
+            Some("song-title".to_owned()),
             "Song Title".to_string(),
             "Song Lyrics".to_string(),
             100,
@@ -915,6 +956,7 @@ mod tests {
         );
         let song = Song::new(
             "Song ID".to_string(),
+            Some("song-title".to_owned()),
             "Song Title".to_string(),
             "Song Lyrics".to_string(),
             100,
@@ -936,7 +978,7 @@ mod tests {
         assert_eq!(meta_data.meta_og_description, meta_data.meta_description);
         assert_eq!(
             meta_data.meta_og_url,
-            "https://www.chansondufenua.pf/himene/Song ID"
+            "https://www.chansondufenua.pf/himene/song-title"
         );
         assert!(
             meta_data
@@ -1009,6 +1051,7 @@ mod tests {
         let long = "Ā".repeat(TITLE_MAX);
         let song = Song::new(
             "8nntgjk4rl5dbp67c6en".to_string(),
+            Some("song-title".to_owned()),
             long.clone(),
             "Song Lyrics".to_string(),
             100,
@@ -1036,7 +1079,7 @@ mod tests {
         assert_eq!(jsonld["lyrics"]["text"], "Line and more");
         assert_eq!(
             jsonld["url"],
-            "https://www.chansondufenua.pf/himene/8nntgjk4rl5dbp67c6en"
+            "https://www.chansondufenua.pf/himene/song-title"
         );
         assert!(jsonld["composer"].as_array().unwrap().is_empty());
     }
@@ -1070,12 +1113,50 @@ mod tests {
         assert_eq!(jsonld["composer"][0]["name"], "2B Brothers Tahiti");
     }
 
+    // ---- identity: the slug, and the id it falls back to -------------------
+
+    /// The address is the slug. `get_url` and `get_path` are the two spellings
+    /// of it that the site emits — one for a canonical link, one for a
+    /// `Location` header and an internal `href`.
+    #[test]
+    fn a_song_with_a_slug_is_addressed_by_its_slug() {
+        let song = song_with("Song Lyrics");
+
+        assert_eq!(song.get_slug(), Some("song-title".to_owned()));
+        assert_eq!(song.get_segment(), "song-title");
+        assert_eq!(song.get_path(), "/himene/song-title");
+        assert_eq!(
+            song.get_url(),
+            "https://www.chansondufenua.pf/himene/song-title"
+        );
+        // ...and the id is still the stable key, not the address.
+        assert_eq!(song.get_id(), "8nntgjk4rl5dbp67c6en");
+    }
+
+    /// A title with no Latin letters earns no slug (`slugify` returns nothing to
+    /// build one from), and the song keeps the address v3 gave it rather than
+    /// getting an invented one.
+    #[test]
+    fn a_song_with_no_slug_is_addressed_by_its_id() {
+        let mut song = song_with("Song Lyrics");
+        song.slug = None;
+
+        assert_eq!(song.get_slug(), None);
+        assert_eq!(song.get_segment(), "8nntgjk4rl5dbp67c6en");
+        assert_eq!(song.get_path(), "/himene/8nntgjk4rl5dbp67c6en");
+        assert_eq!(
+            song.get_url(),
+            "https://www.chansondufenua.pf/himene/8nntgjk4rl5dbp67c6en"
+        );
+    }
+
     // ---- validation -------------------------------------------------------
 
     #[test]
     fn validate_accepts_a_real_song() {
         let song = Song::new(
             "8nntgjk4rl5dbp67c6en".to_string(),
+            Some("ahani-e".to_owned()),
             "'Āhani e".to_string(),
             REAL_LYRICS.to_string(),
             1,

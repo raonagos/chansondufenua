@@ -39,13 +39,14 @@
 use topcoat::{
     Result,
     context::Cx,
-    router::page,
+    router::{href, page},
     view::{View, class, component, view},
 };
 
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
 use crate::i18n::{self, Key};
+use crate::pages::song as sheet;
 use crate::state;
 use crate::ui::theme;
 
@@ -125,8 +126,10 @@ pub async fn songs(cx: &Cx) -> Result<impl View> {
 /// disappearing — v3 joined an empty list, and a missing `<td>` would shift the
 /// row's remaining columns. Both fixtures with no artists depend on this.
 #[component]
-pub async fn song_row(song: Song) -> Result<impl View> {
-    let url = format!("/himene/{}", song.get_id());
+pub async fn song_row(cx: &Cx, song: Song) -> Result<impl View> {
+    // The route's own parameter, so `/himene/` is spelled in one file: the index
+    // and the home page both link through `pages::song`'s `#[page]` path.
+    let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
     let title = song.get_title();
     let artists = song
         .get_artists()

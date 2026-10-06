@@ -15,8 +15,8 @@ pub mod queries;
 
 pub use import::{Dump, ImportReport, ImportedArtist, ImportedSong, import_dump};
 pub use queries::{
-    Counts, SongOrder, artists, counts, create_song, increment_view_count, search_artists, song,
-    songs, songs_page,
+    Addressed, Counts, SongOrder, artists, backfill_slugs, counts, create_song,
+    increment_view_count, search_artists, song, song_at, songs, songs_page,
 };
 
 /// Where the database lives when `DATABASE_URL` is not set.
@@ -121,6 +121,12 @@ impl Db {
             .await?;
 
         MIGRATIONS.run(&pool).await?;
+
+        // The second half of migration `0002_slugs.sql`: what a title slugifies
+        // to is a Rust rule with a transliteration table, so the backfill is a
+        // Rust step and not a SQL one. Idempotent, and a no-op on a database the
+        // importer has already written.
+        backfill_slugs(&pool).await?;
 
         Ok(Self { pool })
     }

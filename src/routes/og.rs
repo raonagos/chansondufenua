@@ -454,6 +454,7 @@ mod tests {
         let fixture = &fixtures::SONGS[index];
         Song::new(
             fixture.id.to_owned(),
+            Some(fixture.slug.to_owned()),
             fixture.title.to_owned(),
             fixture.lyrics.to_owned(),
             7,
@@ -511,6 +512,7 @@ mod tests {
     fn the_card_carries_the_words_and_not_the_chords() {
         let sheet = Song::new(
             "8nntgjk4rl5dbp67c6en".to_owned(),
+            Some("te-here".to_owned()),
             "Te here".to_owned(),
             "<div>Hina'a<sup data-nosnippet=\"true\">Eb</sup>ro</div>".to_owned(),
             1,

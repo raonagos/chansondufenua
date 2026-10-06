@@ -184,12 +184,13 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
 
     // What a song URL is is not decided here: the Markdown layer asks the same
     // question about the same path, and two answers would be one page and its
-    // other form disagreeing about which URLs exist.
-    if let Some(id) = negotiation::song_id(path) {
-        if let Ok(Some(song)) = db::song(state::db(cx).pool(), id).await
-            && song.is_published()
+    // other form disagreeing about which URLs exist. The segment is a slug or an
+    // id, so the lookup is the resolver's and not `db::song`'s.
+    if let Some(segment) = negotiation::song_segment(path) {
+        if let Ok(Some(found)) = db::song_at(state::db(cx).pool(), segment).await
+            && found.song().is_published()
         {
-            return song_head(&song, lang);
+            return song_head(found.song(), lang);
         }
 
         // A song URL is also the only path *in the router* that can still fail:

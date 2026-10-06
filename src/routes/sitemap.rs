@@ -114,30 +114,35 @@ mod tests {
 
     /// The parameterised song route must not swallow the sitemap. This is the
     /// half of that claim a unit test can hold: the path is under `/himene/`,
-    /// and what follows it is not one of the song ids in the corpus.
+    /// and what follows it is not one of the slugs or ids in the corpus.
     #[test]
-    fn the_songs_sitemap_is_not_a_song_id() {
-        let id = SONGS_PATH
+    fn the_songs_sitemap_is_not_a_song_address() {
+        let segment = SONGS_PATH
             .strip_prefix("/himene/")
             .expect("the sitemap is under the song prefix");
 
-        assert!(fixtures::by_id(id).is_none(), "{id} is a fixture's id");
+        for song in fixtures::SONGS {
+            assert_ne!(segment, song.slug, "{segment} is a fixture's slug");
+            assert_ne!(segment, song.id, "{segment} is a fixture's id");
+        }
     }
 
-    /// Every id the sitemap will put in a `<loc>` is a legal path segment: 20
-    /// characters of `[0-9a-z]`. A character outside that set
-    /// would need escaping in the URL and is not what the corpus holds.
+    /// Every address the sitemap will put in a `<loc>` is a legal path segment:
+    /// lowercase ASCII, digits and hyphens. Asserted against the rule as well as
+    /// the fixtures' own literals, because the sitemap lists slugs now and an
+    /// illegal one would need escaping in the URL.
     #[test]
-    fn every_fixture_id_is_a_legal_path_segment() {
+    fn every_fixture_slug_is_a_legal_path_segment() {
         for song in fixtures::SONGS {
-            assert_eq!(song.id.len(), 20, "{}", song.id);
+            assert_eq!(crate::domain::slug::slugify(song.title), song.slug);
             assert!(
-                song.id
+                song.slug
                     .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
                 "{}",
-                song.id
+                song.slug
             );
+            assert!(!song.slug.is_empty(), "{}", song.title);
         }
     }
 

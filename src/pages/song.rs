@@ -1,7 +1,7 @@
-//! The song sheet — `/himene/{id}`.
+//! The song sheet — `/himene/{slug}`.
 //!
 //! Transcribed from v3's `SongPage` (`app/src/pages/himene/song.rs`): the title,
-//! a link to the create-song page, and the lyric with its chords. Three things
+//! a link to the create-song page, and the lyric with its chords. Four things
 //! differ, each deliberate:
 //!
 //! * **The lyric is rendered from data, not injected as HTML.** v3 dropped
@@ -17,13 +17,18 @@
 //!   browser for the song and rendered nothing at all when the request failed.
 //! * **A served sheet counts as a view**, where v3 incremented the count inside
 //!   its own read function, before it knew whether there was a song to read.
+//! * **The URL is the slug**, and this page is reached by one: the negotiation
+//!   layer answers `/himene/{id}` and a retired slug with a `301` before routing
+//!   has a say, so what arrives here is already the canonical address. The page
+//!   still resolves the segment rather than trusting that, because "trusting
+//!   that" is how a page ends up 404ing when a layer is reordered.
 //!
 //! The page's `<head>` is not here. Topcoat 0.10 has no per-page head API, so
 //! the layout decides it from the request path and the same row — see
 //! `src/ui/layout.rs`.
 //!
 //! Note the naming constraint that every page in this directory shares:
-//! `#[page("/himene/{id}")]` emits a unit struct named after its handler, in
+//! `#[page("/himene/{slug}")]` emits a unit struct named after its handler, in
 //! this module's *type* namespace, so a local binding called `song` would be
 //! read as a pattern matching it.
 
@@ -42,26 +47,28 @@ use crate::ui::theme;
 
 use std::collections::VecDeque;
 
-// The `{id}` in this page's path.
+// The `{slug}` in this page's path.
 //
 // Public because the index and the home page build their links with `href!`,
 // which fills a route's parameters by naming the type this declares. That is the
 // point of declaring it at all: the URL shape lives in one place, in the
-// `#[page]` attribute below, and no other module spells it out.
-path_param!(pub id);
+// `#[page]` attribute below, and no other module spells it out. What goes in it
+// is [`Song::get_segment`] — the slug, or the id for a song that has none.
+path_param!(pub slug);
 
-/// `/himene/{id}` — one song, with its chords.
+/// `/himene/{slug}` — one song, with its chords.
 ///
-/// **Unpublished is not found.** [`db::song`] deliberately returns drafts as
+/// **Unpublished is not found.** [`db::song_at`] deliberately returns drafts as
 /// well, so that the editor can see them; this page is the public one and asks
 /// whether the song is published before it renders anything.
-#[page("/himene/{id}")]
+#[page("/himene/{slug}")]
 pub async fn song(cx: &Cx) -> Result<impl View> {
-    let id: &str = path_param::<Id>(cx);
+    let segment: &str = path_param::<Slug>(cx);
 
-    let sheet = db::song(state::db(cx).pool(), id)
+    let sheet = db::song_at(state::db(cx).pool(), segment)
         .await?
-        .filter(Song::is_published)
+        .filter(|found| found.song().is_published())
+        .map(db::Addressed::into_song)
         .ok_or_not_found()?;
 
     // Serving the sheet is what counts as a view, which is v3's rule: its
@@ -71,10 +78,14 @@ pub async fn song(cx: &Cx) -> Result<impl View> {
     // a draft still counted. Here only a sheet that is about to be served counts,
     // which is what the home page's most-viewed table means by a view.
     //
+    // The count is keyed by the song's **id**, not by the segment that arrived:
+    // the address is the slug and the identifier is the id, and this write is
+    // about the row.
+    //
     // Awaited rather than detached: this is an in-process write to a database
     // compiled into the binary, and a response that says "200" should mean the
     // view it reports was recorded.
-    db::increment_view_count(state::db(cx).pool(), id).await?;
+    db::increment_view_count(state::db(cx).pool(), &sheet.get_id()).await?;
 
     Ok(view! { sheet_body(sheet: sheet) })
 }
@@ -450,6 +461,7 @@ mod tests {
     fn a_blank_line_is_an_empty_span_list() {
         let sheet = Song::new(
             "id".to_owned(),
+            Some("titre".to_owned()),
             "Titre".to_owned(),
             "<div>one</div><div><br></div><div>two</div>".to_owned(),
             1,
@@ -471,6 +483,7 @@ mod tests {
     fn sheet_of(markup: &str) -> Song {
         Song::new(
             "id".to_owned(),
+            Some("titre".to_owned()),
             "Titre".to_owned(),
             markup.to_owned(),
             1,

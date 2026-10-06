@@ -53,7 +53,7 @@ use topcoat::{
         Body, Method, StatusCode,
         content::Form,
         error::see_other,
-        page,
+        href, page,
         request::{FromRequest, method},
     },
     view::{Unescaped, View, class, component, view},
@@ -65,6 +65,7 @@ use crate::db::{self, DbError};
 use crate::domain::{AppError, Artist, sanitise_lyrics};
 use crate::i18n::{self, Key};
 use crate::log;
+use crate::pages::song as sheet;
 use crate::state;
 use crate::ui::theme;
 
@@ -139,7 +140,15 @@ pub async fn editor(cx: &Cx, body: Body) -> Result<impl View> {
             // 303, not v3's 302. Both are followed with a `GET` by every browser
             // that matters, and 303 is the code that *says* so — the whole point
             // of the redirect is that the browser must not re-post the form.
-            Ok(song) => return Err(see_other(format!("/himene/{}", song.get_id())).into()),
+            //
+            // The address is the song's own, which is now the slug the write
+            // minted for it (`db::create_song` → `queries::assign_slug`): the
+            // author lands on the URL the song is published at rather than being
+            // sent through a second redirect from the id.
+            Ok(song) => {
+                let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
+                return Err(see_other(url).into());
+            }
             Err(DbError::Domain(cause @ AppError::Invalid { .. })) => {
                 // The domain said no, which is the author's problem and not a
                 // server fault — so a 400, and the form goes back with the
