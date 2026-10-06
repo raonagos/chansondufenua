@@ -328,11 +328,23 @@ pub enum Key {
     /// A word of its own rather than [`PlurielTitle`](Self::PlurielTitle): a
     /// heading names a page, and a link has to say what following it does.
     PlurielOpen,
+    /// The heading of `/recherche` — the search page, in both of its states.
+    SearchTitle,
+    /// The label of the search form's one field: what the box searches.
+    SearchLabel,
+    /// The search form's submit button.
+    SearchSubmit,
+    /// The results' songs section.
+    SearchSongs,
+    /// The results' artists section.
+    SearchArtists,
+    /// What a search says when neither half found anything.
+    SearchEmpty,
 }
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 29] = [
+    pub const ALL: [Key; 35] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -362,6 +374,12 @@ impl Key {
         Key::PlurielHint,
         Key::PlurielRead,
         Key::PlurielOpen,
+        Key::SearchTitle,
+        Key::SearchLabel,
+        Key::SearchSubmit,
+        Key::SearchSongs,
+        Key::SearchArtists,
+        Key::SearchEmpty,
     ];
 
     /// The French words. v3's, byte for byte.
@@ -400,6 +418,12 @@ impl Key {
             Key::PlurielHint => "Choisissez des chansons pour lire leurs paroles à la suite.",
             Key::PlurielRead => "Lire la sélection",
             Key::PlurielOpen => "Lire plusieurs chansons",
+            Key::SearchTitle => "Recherche",
+            Key::SearchLabel => "Chanson ou artiste",
+            Key::SearchSubmit => "Chercher",
+            Key::SearchSongs => "Chansons",
+            Key::SearchArtists => "Artistes",
+            Key::SearchEmpty => "Aucun résultat",
         }
     }
 
@@ -441,6 +465,15 @@ impl Key {
             Key::PlurielHint => "Ma'iti i te mau hīmene no te hi'o i te parau hīmene.",
             Key::PlurielRead => "Hi'o i te mau hīmene",
             Key::PlurielOpen => "Hi'o i te mau hīmene rau",
+            // A first pass like the rest of this catalog: `'imi` is "to seek",
+            // and the two section headings reuse the words the index already
+            // uses for a song and for a credited artist.
+            Key::SearchTitle => "'Imi",
+            Key::SearchLabel => "Hīmene 'aore ra ta'ata hīmene",
+            Key::SearchSubmit => "'Imi",
+            Key::SearchSongs => "Te mau hīmene",
+            Key::SearchArtists => "Te mau ta'ata hīmene",
+            Key::SearchEmpty => "'Aita e mea i roa'a",
         }
     }
 
@@ -479,6 +512,12 @@ impl Key {
             Key::PlurielHint => "Pick songs to read their lyrics one after another.",
             Key::PlurielRead => "Read the selection",
             Key::PlurielOpen => "Read several songs",
+            Key::SearchTitle => "Search",
+            Key::SearchLabel => "Song or artist",
+            Key::SearchSubmit => "Search",
+            Key::SearchSongs => "Songs",
+            Key::SearchArtists => "Artists",
+            Key::SearchEmpty => "No results",
         }
     }
 }
@@ -573,12 +612,12 @@ mod tests {
             assert_eq!(text(Lang::Fr, key), words, "{key:?} moved");
         }
 
-        // Twelve keys have been added since: the switcher's own label (step 23),
-        // the transposition control's label and its two step links (step 24),
-        // the auto-scroll control's four words (step 25), and the multi-lyric
-        // page's four (step 26). Every one of them is a new control or a new
-        // page, not a reworded old line.
-        const ADDED_SINCE: [Key; 12] = [
+        // Eighteen keys have been added since: the switcher's own label (step
+        // 23), the transposition control's label and its two step links (step
+        // 24), the auto-scroll control's four words (step 25), the multi-lyric
+        // page's four (step 26), and the search page's six (step 29). Every one
+        // of them is a new control or a new page, not a reworded old line.
+        const ADDED_SINCE: [Key; 18] = [
             Key::Language,
             Key::Transpose,
             Key::TransposeDown,
@@ -591,6 +630,12 @@ mod tests {
             Key::PlurielHint,
             Key::PlurielRead,
             Key::PlurielOpen,
+            Key::SearchTitle,
+            Key::SearchLabel,
+            Key::SearchSubmit,
+            Key::SearchSongs,
+            Key::SearchArtists,
+            Key::SearchEmpty,
         ];
 
         // Step 28's own work, and the only French in this test that is not

@@ -39,12 +39,13 @@ use topcoat::{
 };
 
 use crate::db;
+use crate::domain::Artist;
 use crate::domain::song::{SITE_URL, Song};
 use crate::i18n::{self, Key, Lang};
 use crate::pages::{
-    editor,
+    artiste, editor,
     home::{self, AEPA_PATH, PATH as HOME},
-    pluriel, songs,
+    pluriel, recherche, songs,
 };
 use crate::routes::{negotiation, og};
 use crate::state;
@@ -227,7 +228,78 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
         };
     }
 
+    // An artist's page. Read here for the head's sake, exactly as a song's row is
+    // read for its own: the layout cannot see the row the page loaded, and a
+    // `MusicGroup` that named a different artist than the page prints would be a
+    // lie told to a machine. An id that resolves to nothing is the 404 the page
+    // handler raises, so it gets the 404's head.
+    if let Some(id) = artiste::segment(path) {
+        return match db::artist(state::db(cx).pool(), id).await {
+            Ok(Some(row)) => artist_head(cx, &row, lang).await,
+            // A read that fails is the page's own read failing too: the response
+            // is a 500 with nothing of the catalogue in it, and the site's head is
+            // the honest one.
+            _ => not_found_head(lang),
+        };
+    }
+
+    // The search page. `noindex` and **no canonical**, the multi-lyric page's
+    // decision made for the same reason (see `pages::recherche`): the URL space is
+    // every string a person could type, and a canonical URL on a page a crawler is
+    // told not to index names a preferred address for nothing. The bare form gets
+    // the same head as a search, because there is nothing about a form to
+    // describe; the title is chrome and follows the request's language.
+    if path == recherche::PATH {
+        return DocumentHead {
+            title: format!("{} | {TITLE}", i18n::text(lang, Key::SearchTitle)),
+            description: None,
+            canonical: None,
+            noindex: true,
+            social: None,
+            jsonld: None,
+        };
+    }
+
     site_head(path, lang)
+}
+
+/// The `<head>` of an artist's page.
+///
+/// Its own title, its own description, its own canonical URL and its own card,
+/// and — the reason this page exists in the search's eyes — its own structured
+/// data: a `MusicGroup` for the artist and an `ItemList` of their songs, from the
+/// same read the page renders ([`artiste::jsonld`]).
+///
+/// The songs are read a second time here, after the page's own read. That is the
+/// trade the song head already makes and documents: the layout cannot see the
+/// row the page loaded, and the alternative is a head written for no artist in
+/// particular.
+async fn artist_head(cx: &Cx, artist: &Artist, lang: Lang) -> DocumentHead {
+    let listed = match db::songs_by_artist(state::db(cx).pool(), &artist.get_id()).await {
+        Ok(listed) => listed,
+        // The page's own read fails the same way, so the response is a 500 with
+        // nothing of the catalogue in it.
+        Err(_) => return site_head(&artiste::path_of(&artist.get_id()), lang),
+    };
+
+    let name = artist.get_fullname();
+    let title = format!("{name} | {TITLE}");
+    let description = artiste::description(&name);
+    let canonical = i18n::url(lang, &artiste::path_of(&artist.get_id()));
+
+    DocumentHead {
+        title: title.clone(),
+        description: Some(description.clone()),
+        canonical: Some(canonical.clone()),
+        noindex: false,
+        social: Some(SocialCards::for_page(
+            &title,
+            &description,
+            &canonical,
+            lang,
+        )),
+        jsonld: Some(artiste::jsonld(artist, &canonical, &listed)),
+    }
 }
 
 /// The `<head>` of one page of the index.
@@ -254,6 +326,7 @@ fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
         &description,
         &i18n::url(lang, &songs::page_path(number)),
         lang,
+        None,
     )
 }
 
@@ -313,7 +386,19 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
             TITLE.to_owned()
         };
 
-        return page_head(title, home::copy::DESCRIPTION, &i18n::url(lang, HOME), lang);
+        // The front door describes the site once, and `/aepa` — the same page
+        // under a second URL — does not repeat it: what the structured data
+        // describes is the site, and two copies on two URLs is one description
+        // competing with itself.
+        let jsonld = (path == HOME).then(website_jsonld);
+
+        return page_head(
+            title,
+            home::copy::DESCRIPTION,
+            &i18n::url(lang, HOME),
+            lang,
+            jsonld,
+        );
     }
 
     if path == songs::PATH {
@@ -322,6 +407,7 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
             songs::DESCRIPTION,
             &i18n::url(lang, songs::PATH),
             lang,
+            None,
         );
     }
 
@@ -401,15 +487,51 @@ fn addressed_path(cx: &Cx) -> String {
 /// decision four times over — a page that is worth reading is worth a snippet
 /// and a card, and the three pages this step fixes were each missing a
 /// different one of the four.
-fn page_head(title: String, description: &str, url: &str, lang: Lang) -> DocumentHead {
+fn page_head(
+    title: String,
+    description: &str,
+    url: &str,
+    lang: Lang,
+    jsonld: Option<String>,
+) -> DocumentHead {
     DocumentHead {
         social: Some(SocialCards::for_page(&title, description, url, lang)),
         title,
         description: Some(description.to_owned()),
         canonical: Some(url.to_owned()),
         noindex: false,
-        jsonld: None,
+        jsonld,
     }
+}
+
+/// The front door's structured data: the site, and the box that searches it.
+///
+/// A `WebSite` node with a `SearchAction` is what makes a search box appear in a
+/// result for the site's own name, and it is a statement about the site rather
+/// than about a page — so it is written on `/` alone, in the language-neutral
+/// form (`x-default`), because the action it describes is available in every
+/// language at the same URL.
+///
+/// `urlTemplate` names [`recherche::PATH`] through its own constant, so the
+/// template and the page cannot drift; the placeholder is schema.org's own
+/// required name, not a translatable string.
+fn website_jsonld() -> String {
+    serde_json::json!({
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": TITLE,
+        "url": SITE_URL,
+        "inLanguage": Lang::DEFAULT.code(),
+        "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": format!("{}{}?{}={{search_term_string}}", SITE_URL, recherche::PATH, recherche::PARAM),
+            },
+            "query-input": "required name=search_term_string",
+        },
+    })
+    .to_string()
 }
 
 /// The `<head>` of a URL that names no page: a song that is not published, or a
@@ -846,6 +968,47 @@ mod tests {
         assert_eq!(home.canonical, aepa.canonical);
         assert_eq!(home.description, aepa.description);
         assert_ne!(home.title, aepa.title);
+    }
+
+    /// The front door names the site and the box that searches it, and `/aepa`
+    /// — the same page under a second URL — does not repeat either.
+    ///
+    /// The `SearchAction`'s template is the search page's own path and parameter,
+    /// through their constants: a template and a form that disagree would send a
+    /// client to a URL this site does not answer.
+    #[test]
+    fn the_front_door_describes_the_site_and_its_search() {
+        let home = site_head(HOME, Lang::Fr);
+        let jsonld = home.jsonld.expect("the front door carries structured data");
+        let document: serde_json::Value = serde_json::from_str(&jsonld).expect("valid JSON");
+
+        assert_eq!(document["@type"], "WebSite");
+        assert_eq!(document["url"], SITE_URL);
+        assert_eq!(document["name"], TITLE);
+        assert_eq!(
+            document["potentialAction"]["@type"], "SearchAction",
+            "the search box is missing"
+        );
+        let template = format!(
+            "{}{}?{}={{search_term_string}}",
+            SITE_URL,
+            recherche::PATH,
+            recherche::PARAM
+        );
+        assert_eq!(
+            document["potentialAction"]["target"]["urlTemplate"], template,
+            "the template does not name the search page"
+        );
+        assert_eq!(
+            document["potentialAction"]["query-input"],
+            "required name=search_term_string"
+        );
+
+        assert!(
+            site_head(AEPA_PATH, Lang::Fr).jsonld.is_none(),
+            "/aepa repeats the site description"
+        );
+        assert!(site_head(songs::PATH, Lang::Fr).jsonld.is_none());
     }
 
     /// The index is the one page that is not the front door and has an address of

@@ -280,6 +280,28 @@ pub async fn songs_page(
     assemble(rows)
 }
 
+/// Every published song credited to one artist, newest first.
+///
+/// The artist page's list. The window is the whole catalogue on purpose — an
+/// artist with forty songs is still one page — and the filter is a sub-select on
+/// `song_artist` rather than a second join, so the `LIMIT`-counts-songs rule that
+/// [`songs`] documents holds here too by construction.
+pub async fn songs_by_artist(pool: &SqlitePool, artist_id: &str) -> DbResult<Vec<Song>> {
+    let keys = SongOrder::Newest.song_keys();
+    let sql = format!(
+        "{SONGS_SELECT} WHERE s.published = 1 AND s.id IN \
+         (SELECT song_id FROM song_artist WHERE artist_id = ?1) \
+         ORDER BY {keys}, sa.position"
+    );
+
+    let rows = sqlx::query_as::<_, SongArtistRow>(&sql)
+        .bind(artist_id)
+        .fetch_all(pool)
+        .await?;
+
+    assemble(rows)
+}
+
 /// One song by id, published or not — the page decides whether to 404, and the
 /// editor needs to see drafts.
 pub async fn song(pool: &SqlitePool, id: &str) -> DbResult<Option<Song>> {
@@ -551,6 +573,45 @@ pub async fn artists(pool: &SqlitePool) -> DbResult<Vec<Artist>> {
     rows.into_iter().map(ArtistRow::into_artist).collect()
 }
 
+/// One artist by id, published or not — the read, not the policy.
+///
+/// The artist page (`pages::artiste`) is what decides that an id it cannot
+/// resolve is a 404; `routes::negotiation` reads the same row so its `Link`
+/// headers do not promise a Markdown form for a page that is not served.
+pub async fn artist(pool: &SqlitePool, id: &str) -> DbResult<Option<Artist>> {
+    let row = sqlx::query_as::<_, ArtistRow>(
+        "SELECT id, fullname, created_at, updated_at FROM artist WHERE id = ?1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    row.map(ArtistRow::into_artist).transpose()
+}
+
+/// The FTS5 `MATCH` expression for a needle a person typed, or `None` when the
+/// needle carries no text worth searching for.
+///
+/// Shared by the artist autocomplete and the catalogue search so the two cannot
+/// disagree about what a typed string means: both wrap the needle in a quoted
+/// phrase — so FTS5 operators (`*`, `NEAR(`, `"`) are read as text rather than
+/// as syntax — and append `*` so the last word is a prefix.
+///
+/// `None` for a needle with no alphanumeric character at all: the quoted form of
+/// `""`, `*` or `()` tokenizes to nothing, and FTS5 answers that with a syntax
+/// error rather than with nothing found. A caller that asked for `*` is owed an
+/// empty result, not a 500.
+pub(crate) fn fts_match(query: &str) -> Option<String> {
+    let needle = query.trim();
+    if !needle.chars().any(char::is_alphanumeric) {
+        return None;
+    }
+
+    // FTS5 string literal: wrap in double quotes so operator characters are
+    // treated as text, and double any embedded quote. Then `*` for prefix.
+    Some(format!("\"{}\"*", needle.replace('"', "\"\"")))
+}
+
 /// Artist autocomplete for the editor's credit field.
 ///
 /// Uses the FTS5 index rather than `LIKE`, for the same reason v3 used a
@@ -559,14 +620,17 @@ pub async fn artists(pool: &SqlitePool) -> DbResult<Vec<Artist>> {
 /// it, so a name containing an ʻokina is indexed as separate tokens and only the
 /// trailing token is reachable by prefix. See the tests.
 pub async fn search_artists(pool: &SqlitePool, query: &str, limit: i64) -> DbResult<Vec<Artist>> {
-    let needle = query.trim();
-    if needle.is_empty() {
+    // A blank needle is not a search: the editor's autocomplete shows the whole
+    // list until something is typed. That is this function's own rule and not
+    // [`fts_match`]'s, which answers `None` for anything with no searchable
+    // text in it.
+    if query.trim().is_empty() {
         return artists(pool).await;
     }
 
-    // FTS5 string literal: wrap in double quotes so operator characters are
-    // treated as text, and double any embedded quote. Then `*` for prefix.
-    let match_expr = format!("\"{}\"*", needle.replace('"', "\"\""));
+    let Some(match_expr) = fts_match(query) else {
+        return Ok(Vec::new());
+    };
 
     let rows = sqlx::query_as::<_, ArtistRow>(
         "SELECT a.id, a.fullname, a.created_at, a.updated_at \
@@ -582,6 +646,43 @@ pub async fn search_artists(pool: &SqlitePool, query: &str, limit: i64) -> DbRes
     .await?;
 
     rows.into_iter().map(ArtistRow::into_artist).collect()
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+/// The published songs whose **title** matches a typed needle, newest first.
+///
+/// Title only — the lyrics are not indexed, for the reason
+/// `migrations/0003_search.sql` records: a common French word in a 6000-character
+/// lyric would return the whole catalogue. Diacritics and case are folded by the
+/// index, so `mama` finds `Māmā Tahiti` and `ahani` finds `'Āhani e`.
+///
+/// The ids come from the FTS index and the rows from the same projection the
+/// index page uses, so a hit carries its credits and a draft can never appear:
+/// both halves of that sentence are the point of searching through `song` rather
+/// than through the index alone.
+pub async fn search_songs(pool: &SqlitePool, query: &str, limit: i64) -> DbResult<Vec<Song>> {
+    let Some(match_expr) = fts_match(query) else {
+        return Ok(Vec::new());
+    };
+
+    let keys = SongOrder::Newest.song_keys();
+    let sql = format!(
+        "{SONGS_SELECT} WHERE s.published = 1 AND s.id IN \
+         (SELECT s2.id FROM song_fts JOIN song s2 ON s2.rowid = song_fts.rowid \
+          WHERE song_fts MATCH ?1) \
+         ORDER BY {keys}, sa.position LIMIT ?2"
+    );
+
+    let rows = sqlx::query_as::<_, SongArtistRow>(&sql)
+        .bind(match_expr)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?;
+
+    assemble(rows)
 }
 
 // ---------------------------------------------------------------------------

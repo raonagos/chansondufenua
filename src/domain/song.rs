@@ -443,7 +443,7 @@ fn description_sentence(title: &str, artists: &str) -> String {
 /// The first `room` characters of `text`, with an ellipsis when it had to be cut.
 ///
 /// Counts characters, not bytes: the corpus's titles carry macrons and `ʻokina`.
-fn truncate_chars(text: &str, room: usize) -> String {
+pub(crate) fn truncate_chars(text: &str, room: usize) -> String {
     if text.chars().count() <= room {
         return text.to_owned();
     }

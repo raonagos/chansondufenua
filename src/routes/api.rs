@@ -54,13 +54,22 @@ use topcoat::{
 };
 
 use crate::db::{self, SongOrder};
-use crate::domain::Song;
 use crate::domain::song::SITE_URL;
-use crate::pages::pluriel;
+use crate::domain::{Artist, Song};
+use crate::i18n;
+use crate::pages::{artiste, pluriel, recherche};
 use crate::state;
 
 /// The catalogue.
 pub const PATH: &str = "/api/songs";
+
+/// The search endpoint: `/api/search?q=…`.
+///
+/// The machine-readable half of [`crate::pages::recherche`]: the same needle, the
+/// same two reads, the same limit. The page's own form and this endpoint share
+/// `recherche::needle`, so the string a browser submits and the string a client
+/// sends are read identically.
+pub const SEARCH_PATH: &str = "/api/search";
 
 /// The health probe.
 pub const HEALTH_PATH: &str = "/api/health";
@@ -161,6 +170,32 @@ impl SongJson {
     }
 }
 
+/// One artist, as the search answers it.
+///
+/// A shape of its own rather than `serde` on [`Artist`], for the reason
+/// [`SongJson`] gives: the entity's fields are private and the API is a
+/// published shape. There is no `/api/artists/{id}` — the machine-readable
+/// resource for an artist is its *page*, so the row carries the page's URL and
+/// nothing else the page does not already say.
+#[derive(Debug, Serialize)]
+pub(crate) struct ArtistJson {
+    id: String,
+    name: String,
+    /// The artist page's language-neutral address, on the canonical host:
+    /// `/artiste/{id}`, the same URL the search page links to.
+    url: String,
+}
+
+impl ArtistJson {
+    pub(crate) fn of(artist: &Artist) -> Self {
+        Self {
+            id: artist.get_id(),
+            name: artist.get_fullname(),
+            url: i18n::absolute(&artiste::path_of(&artist.get_id())),
+        }
+    }
+}
+
 /// `GET /api/health` — whether the service is up, and how big the catalogue is.
 ///
 /// The counts are read from the database on every probe, because "the process
@@ -232,6 +267,44 @@ async fn catalogue(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
     ))
 }
 
+/// `GET /api/search` — the catalogue's titles and the artists' names, by needle.
+///
+/// The same two reads the search page makes, from the same function
+/// ([`recherche::run`]), so the HTML and the JSON cannot disagree about what a
+/// needle found. The matching is accent- and ʻokina-insensitive: `ahani` finds
+/// `'Āhani e` and `mama` finds `Māmā Tahiti`.
+///
+/// **A missing needle is a `400`, not an empty answer.** "Nothing was typed" and
+/// "nothing was found" are different facts, and a caller that forgot the
+/// parameter wants to be told so rather than handed two empty arrays it will
+/// report as success. The body is this API's own error shape, so a client that
+/// asked for JSON does not have to parse a document to find out it was wrong.
+#[route(GET "/api/search")]
+async fn search(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
+    let query = uri(cx).query().unwrap_or("");
+
+    let Some(needle) = recherche::needle(query) else {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "invalid_request",
+                "message": format!("no search term: pass ?{}=…", recherche::PARAM),
+            })),
+        ));
+    };
+
+    let found = recherche::run(state::db(cx).pool(), &needle).await?;
+
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "query": needle,
+            "songs": found.songs.iter().map(SongJson::summary).collect::<Vec<_>>(),
+            "artists": found.artists.iter().map(ArtistJson::of).collect::<Vec<_>>(),
+        })),
+    ))
+}
+
 /// `GET /api/songs/{id}` — one song, with its lyric as Markdown.
 ///
 /// **A draft is not found**, the same rule the sheet applies and for the same
@@ -292,6 +365,7 @@ fn openapi_document() -> Value {
     let mut paths = Map::new();
     paths.insert(PATH.to_owned(), json!({ "get": catalogue_operation() }));
     paths.insert(SONG_PATH.to_owned(), json!({ "get": song_operation() }));
+    paths.insert(SEARCH_PATH.to_owned(), json!({ "get": search_operation() }));
     paths.insert(HEALTH_PATH.to_owned(), json!({ "get": health_operation() }));
 
     json!({
@@ -379,6 +453,40 @@ fn song_operation() -> Value {
     })
 }
 
+/// `GET /api/search` — the needle, and the two halves it found.
+fn search_operation() -> Value {
+    json!({
+        "operationId": "search",
+        "summary": "Search song titles and artist names",
+        "description": "One needle, two reads: the published songs whose title matches and the artists whose name matches. Matching folds case and diacritics and treats the ʻokina as a separator, so `ahani` finds `'Āhani e` and `mama` finds `Māmā Tahiti`. The same needle, the same two reads and the same limit the search page uses, so the JSON and the HTML cannot disagree. A missing or blank needle is a 400: nothing typed and nothing found are different answers.",
+        "parameters": [{
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "What to search for. Percent-encoded by the client, as any query value is; `+` is read as a space.",
+            "schema": { "type": "string" }
+        }],
+        "responses": {
+            "200": {
+                "description": "The songs and the artists the needle matched, each half possibly empty",
+                "content": {
+                    "application/json": {
+                        "schema": { "$ref": "#/components/schemas/Search" }
+                    }
+                }
+            },
+            "400": {
+                "description": "No search term was given",
+                "content": {
+                    "application/json": {
+                        "schema": { "$ref": "#/components/schemas/Error" }
+                    }
+                }
+            }
+        }
+    })
+}
+
 /// `GET /api/health` — the probe.
 fn health_operation() -> Value {
     json!({
@@ -427,6 +535,24 @@ fn schemas() -> Value {
             "properties": {
                 "count": { "type": "integer" },
                 "songs": { "type": "array", "items": { "$ref": "#/components/schemas/Song" } }
+            }
+        },
+        "Artist": {
+            "type": "object",
+            "required": ["id", "name", "url"],
+            "properties": {
+                "id": { "type": "string", "description": "The stable key, as the artist's page is addressed by it: `/artiste/{id}`." },
+                "name": { "type": "string", "description": "The credited name, as the songs print it." },
+                "url": { "type": "string", "format": "uri", "description": "The artist page's language-neutral address, on the canonical host. The page's own canonical URL carries a language prefix." }
+            }
+        },
+        "Search": {
+            "type": "object",
+            "required": ["query", "songs", "artists"],
+            "properties": {
+                "query": { "type": "string", "description": "The needle, decoded — what was searched for, not the raw query string." },
+                "songs": { "type": "array", "items": { "$ref": "#/components/schemas/Song" }, "description": "The published songs whose title matched, newest first, without lyrics." },
+                "artists": { "type": "array", "items": { "$ref": "#/components/schemas/Artist" }, "description": "The artists whose name matched, best match first." }
             }
         },
         "Health": {
@@ -553,7 +679,57 @@ mod tests {
         assert_eq!(PATH, "/api/songs");
         assert_eq!(HEALTH_PATH, "/api/health");
         assert_eq!(OPENAPI_PATH, "/api/openapi.json");
+        assert_eq!(SEARCH_PATH, "/api/search");
+        // The endpoint and the page read the same parameter, so the JSON a
+        // client is told to send is the query string a browser's form submits.
+        assert_eq!(recherche::PARAM, "q");
         assert!(VERSION.starts_with('4'));
+    }
+
+    /// A search answers the page's own two reads, and an artist is handed the
+    /// address of the page that describes them — the language-neutral form, the
+    /// same one every other `url` field in this API uses.
+    #[tokio::test]
+    async fn a_search_answers_the_pages_own_reads() {
+        let db = Db::open_in_memory().await.expect("in-memory database");
+        fixtures::seed(db.pool()).await.expect("seed fixtures");
+
+        let found = recherche::run(db.pool(), "mama").await.expect("the read");
+        assert!(
+            found
+                .songs
+                .iter()
+                .any(|song| song.get_title() == "Māmā Tahiti"),
+            "the accent-insensitive title match is gone"
+        );
+
+        let body = serde_json::json!({
+            "query": "mama",
+            "songs": found.songs.iter().map(SongJson::summary).collect::<Vec<_>>(),
+            "artists": found.artists.iter().map(ArtistJson::of).collect::<Vec<_>>(),
+        });
+
+        let artist = ArtistJson::of(&fixtures_artist());
+        assert_eq!(artist.id, fixtures::ARTISTS[0].id);
+        assert_eq!(artist.name, fixtures::ARTISTS[0].fullname);
+        assert_eq!(
+            artist.url,
+            format!("{SITE_URL}{}", artiste::path_of(fixtures::ARTISTS[0].id))
+        );
+        assert!(body["songs"].as_array().is_some());
+        assert!(body["artists"].as_array().is_some());
+    }
+
+    /// A `crate::domain::Artist` built from the fixture table, for the JSON shape
+    /// tests — the rows come from the database in production and from here in a
+    /// unit test, which is the only difference.
+    fn fixtures_artist() -> crate::domain::Artist {
+        crate::domain::Artist::new(
+            fixtures::ARTISTS[0].id.to_owned(),
+            fixtures::ARTISTS[0].fullname.to_owned(),
+            chrono::Utc::now(),
+            chrono::Utc::now(),
+        )
     }
 
     /// The catalogue's selection read answers the same rows the page serves, in
@@ -610,7 +786,7 @@ mod tests {
 
         assert_eq!(OPENAPI_PATH, "/api/openapi.json");
         assert_eq!(SONG_PATH, "/api/songs/{id}");
-        let mut served = vec![PATH, SONG_PATH, HEALTH_PATH];
+        let mut served = vec![PATH, SONG_PATH, SEARCH_PATH, HEALTH_PATH];
         served.sort_unstable();
         assert_eq!(paths.keys().map(String::as_str).collect::<Vec<_>>(), served);
 

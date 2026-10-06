@@ -54,7 +54,7 @@ use topcoat::{
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
 use crate::i18n::{self, Key};
-use crate::pages::{pluriel, song as sheet};
+use crate::pages::{artiste, pluriel, song as sheet};
 use crate::state;
 use crate::ui::theme;
 
@@ -333,16 +333,20 @@ pub async fn song_row(cx: &Cx, song: Song) -> Result<impl View> {
     let artists = song
         .get_artists()
         .iter()
-        .map(|artist| artist.get_fullname())
-        .collect::<Vec<String>>()
-        .join(", ");
+        .map(|artist| (artiste::link(cx, artist), artist.get_fullname()))
+        .collect::<Vec<(String, String)>>();
 
     Ok(view! {
         <tr class=(theme::INDEX_ROW)>
             <td class=(theme::INDEX_CELL)>
                 <a href=(url)>(title)</a>
             </td>
-            <td class=(class!(theme::INDEX_CELL, theme::INDEX_COLUMN_ARTIST))>(artists)</td>
+            <td class=(class!(theme::INDEX_CELL, theme::INDEX_COLUMN_ARTIST))>
+                for (index, (url, name)) in artists.into_iter().enumerate() {
+                    if index > 0 { ", " }
+                    <a href=(url) class=(theme::LINK)>(name)</a>
+                }
+            </td>
         </tr>
     })
 }

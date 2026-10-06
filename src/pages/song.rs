@@ -43,6 +43,7 @@ use crate::db;
 use crate::domain::chord;
 use crate::domain::song::{LyricLine, LyricSpan, Song};
 use crate::i18n::{self, Key, Lang};
+use crate::pages::artiste;
 use crate::state;
 use crate::ui::theme;
 
@@ -99,12 +100,14 @@ pub async fn song(cx: &Cx) -> Result<impl View> {
 pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let title = sheet.get_title();
+    // Each credit is a link to its own page (v4.1 step 29), the same address a
+    // search result uses: an artist's name is how a reader finds the rest of
+    // what they sang, and it is how a crawler finds the artist page at all.
     let artists = sheet
         .get_artists()
         .iter()
-        .map(|artist| artist.get_fullname())
-        .collect::<Vec<String>>()
-        .join(", ");
+        .map(|artist| (artiste::link(cx, artist), artist.get_fullname()))
+        .collect::<Vec<(String, String)>>();
 
     // `?tr=` — the reader's own key. Read from the request and applied to the
     // stored chords, so a step is a function of the sheet and the offset and
@@ -139,7 +142,12 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                     // An uncredited song renders no line at all, rather than an
                     // empty paragraph with a margin under it.
                     if !artists.is_empty() {
-                        <p class=(theme::SONG_ARTISTS)>(artists)</p>
+                        <p class=(theme::SONG_ARTISTS)>
+                            for (index, (url, name)) in artists.into_iter().enumerate() {
+                                if index > 0 { ", " }
+                                <a href=(url) class=(theme::LINK)>(name)</a>
+                            }
+                        </p>
                     }
                 </div>
                 // The two steps are real links, not a control a script has to

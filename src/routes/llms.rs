@@ -18,7 +18,7 @@
 use topcoat::{Result, router::route};
 
 use crate::domain::song::SITE_URL;
-use crate::pages::{editor, songs};
+use crate::pages::{artiste, editor, recherche, songs};
 use crate::routes::{api, card, catalog, mcp, sitemap};
 
 /// `/llms.txt` — the path, in one place.
@@ -53,12 +53,20 @@ fn body() -> String {
   the song's address, as the catalogue's `url` field spells it. The page is also
   published in the chrome of each language — `/ty/himene/{{slug}}` and
   `/en/himene/{{slug}}` — and the lyrics themselves are as written.
+- [Search]({SITE_URL}{search}?q={{needle}}): one box over the song titles and the
+  artists' names. Matching ignores accents and the ʻokina, so `ahani` finds
+  `'Āhani e` and `mama` finds `Māmā Tahiti`.
+- [An artist]({SITE_URL}{artist}{{id}}): the songs credited to one artist, each a
+  link to its own sheet.
 
 ## For a program
 
 - [Songs]({SITE_URL}{api}): the catalogue as JSON — id, title, artists, URL,
   view count, timestamps. [Health]({SITE_URL}{health}) reports the counts and the
   version.
+- [Search as JSON]({SITE_URL}{api_search}?q={{needle}}): the same two reads the
+  search page makes — the songs whose title matched and the artists whose name
+  did, each with the page URL it is about.
 - [One song as JSON]({SITE_URL}{api}/{{id}}): the same, plus the lyrics as
   Markdown with the chords inline.
 - [OpenAPI description]({SITE_URL}{openapi}): the JSON API's paths and shapes,
@@ -86,6 +94,9 @@ lyrics are the credited artists' work and are not training data:
 ",
         songs = songs::PATH,
         api = api::PATH,
+        api_search = api::SEARCH_PATH,
+        search = recherche::PATH,
+        artist = artiste::PREFIX,
         openapi = api::OPENAPI_PATH,
         catalog = catalog::PATH,
         health = api::HEALTH_PATH,
@@ -126,6 +137,9 @@ mod tests {
         let served = [
             (songs::PATH, "/himene"),
             (api::PATH, "/api/songs"),
+            (api::SEARCH_PATH, "/api/search"),
+            (recherche::PATH, "/recherche"),
+            (artiste::PREFIX, "/artiste/"),
             (api::HEALTH_PATH, "/api/health"),
             (api::OPENAPI_PATH, "/api/openapi.json"),
             (catalog::PATH, "/.well-known/api-catalog"),

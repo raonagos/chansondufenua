@@ -47,7 +47,7 @@ use topcoat::{
 };
 
 use crate::i18n::{self, Lang, Language};
-use crate::pages::{editor, home, pluriel, songs};
+use crate::pages::{artiste, editor, home, pluriel, recherche, songs};
 use crate::routes::negotiation;
 
 /// The layer. A unit value: it holds no state, and the request context is where
@@ -154,6 +154,8 @@ fn is_page(path: &str) -> bool {
         || path == songs::PATH
         || path == editor::PATH
         || path == pluriel::PATH
+        || path == recherche::PATH
+        || artiste::segment(path).is_some()
         || songs::page_segment(path).is_some()
         || negotiation::song_segment(path).is_some()
 }
@@ -312,12 +314,32 @@ mod tests {
             songs::PATH,
             editor::PATH,
             pluriel::PATH,
+            recherche::PATH,
         ] {
             assert!(page_of(path).is_some(), "{path}");
         }
         assert_eq!(
             page_of("/ty/himene/pluriel"),
             Some(("/himene/pluriel", Some(Lang::Ty)))
+        );
+
+        // An artist's page is a page like any other, and one id deep — an
+        // artist URL below that is nobody's page, prefixed or not.
+        assert_eq!(
+            page_of("/artiste/1kvm9y2tcplm43wgeuni"),
+            Some(("/artiste/1kvm9y2tcplm43wgeuni", None))
+        );
+        assert_eq!(
+            page_of("/en/artiste/1kvm9y2tcplm43wgeuni"),
+            Some(("/artiste/1kvm9y2tcplm43wgeuni", Some(Lang::En)))
+        );
+        assert_eq!(page_of("/artiste/a/b"), None);
+        assert_eq!(page_of("/ty/artiste/a/b"), None);
+        // The search page carries its needle in the query string, so its path is
+        // a page like the multi-lyric page's is.
+        assert_eq!(
+            page_of("/fr/recherche"),
+            Some(("/recherche", Some(Lang::Fr)))
         );
 
         // A page of the index: the two-segment shape is a page, whatever number
