@@ -15,8 +15,8 @@
 //!   domain rejects is answered `400` *with the form filled back in*, where v3
 //!   answered a bare error and lost everything the author had typed.
 //! * **The chord tools are ordinary JavaScript, in the page.** v3's were Rust
-//!   compiled to WebAssembly and hydrated over the server's markup; the rewrite
-//!   has no client build step (`PLAN.md` §2.1), so the same behaviour is ~50
+//!   compiled to WebAssembly and hydrated over the server's markup; v4 is
+//!   server-rendered with no client build step, so the same behaviour is ~50
 //!   lines of vanilla script. Nothing about the site depends on it running: it
 //!   is the editor, and an editor needs a browser.
 //! * **The artist field is one `<input>`, with the chips drawn from it.** v3

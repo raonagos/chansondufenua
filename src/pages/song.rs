@@ -8,7 +8,7 @@
 //!   `inner_html` straight into the template, so every visual decision about a
 //!   chord had to be a CSS rule matching a `<sup>`. v4 parses the same sanitised
 //!   HTML into lines of text and chord spans ([`Song::lyrics_lines`]) and renders
-//!   them with the site's own tokens — see `PLAN.md` §19.
+//!   them with the site's own tokens.
 //! * **The credits are shown.** v3 carried the artists only inside the page's
 //!   metadata. The index lists them, so a reader arriving from the index has
 //!   already seen them; one arriving from a search result never did.

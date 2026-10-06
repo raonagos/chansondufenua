@@ -82,7 +82,7 @@ pub const PALETTE: &[(&str, &str)] = &[
 /// v3 also asked Google Fonts for *Roboto Serif* while writing
 /// `font-family: Roboto, Arial, serif` — two different families, so the
 /// downloaded font was never applied and no visitor ever saw it. v4 fixes that
-/// by naming the family it actually ships; see `PLAN.md` §15.
+/// by naming the family it actually ships.
 ///
 /// **`FONT_SANS` is the body face, and it is a serif.** The name is Tailwind's,
 /// not a description: `--font-sans` is what Tailwind's preflight reads for the

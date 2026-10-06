@@ -1,7 +1,7 @@
 -- 0001_init.sql — Chanson du fenua v4 (embedded SQLite)
 --
--- Transcribed from the v3 SurrealDB schema in `legacy/surrealdb.surql`, which is
--- kept in the tree as the source of truth for parity. Four conventions:
+-- Transcribed from the v3 SurrealDB schema, which is the source of truth for
+-- parity. Four conventions:
 --
 --   * `id` keeps the *original* v3 record key (20 chars of [0-9a-z]). Every song
 --     lives at `/himene/{id}`, so preserving the key preserves every inbound

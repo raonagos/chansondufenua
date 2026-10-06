@@ -35,8 +35,8 @@ serde_json = "1.0.151"
 ammonia = "4.2.1"
 regex-lite = "0.1.9"
 thiserror = "2.0.21"
-# The social cards (`src/routes/og.rs`). `PLAN.md` §7 chose pure-Rust rendering
-# over headless Chromium, so `fontdue` rasterises the glyphs and `png` encodes
+# The social cards (`src/routes/og.rs`). Pure-Rust rendering was chosen over
+# headless Chromium, so `fontdue` rasterises the glyphs and `png` encodes
 # the canvas — neither pulls a browser into the deployment.
 #
 # `epaint_default_fonts` is a data-only crate: the four faces an egui app falls

@@ -12,7 +12,7 @@
 //!   [`NotFoundError`] renders the site's own 404 instead of Topcoat's bare
 //!   default. That covers *raised* errors only — a URL matching no route never
 //!   reaches the layout at all, which is why `pages::not_found!("/")` also
-//!   exists; see `PLAN.md` §17, and
+//!   exists, and
 //! * the document declares which language it is in, and names the other one,
 //!   because the shell is where the chrome's words live. `crate::i18n` decides
 //!   the language; this file only asks for the strings, and

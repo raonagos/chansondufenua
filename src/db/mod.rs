@@ -1,4 +1,4 @@
-//! SQLite persistence layer (step 3a of `PLAN.md`).
+//! SQLite persistence layer.
 //!
 //! One embedded database, no server, no credentials. The engine is compiled into
 //! the binary by `sqlx`'s bundled `libsqlite3-sys`, so deploying the site is
@@ -7,7 +7,7 @@
 //! This module is the *outside* of the former hexagon: it is allowed to know
 //! about SQLite, and it is the only place that is. `src/domain` stays ignorant
 //! of it, which is the one rule worth keeping from v3's ports-and-adapters
-//! layout (see `PLAN.md` §2.1).
+//! layout.
 
 pub mod fixtures;
 pub mod import;

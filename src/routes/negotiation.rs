@@ -4,9 +4,9 @@
 //! every browser, and the default — it renders the sheet inside the site's
 //! chrome. Asked for `text/markdown` it answers with the same song as one
 //! Markdown document: the title, the credits, the lyric with its chords inline
-//! as `[Eb]`, and the canonical URL. That is the single highest-value item on
-//! `PLAN.md` §6's list, because it is the difference between an agent reading
-//! the lyric and an agent scraping it out of markup.
+//! as `[Eb]`, and the canonical URL. That is the highest-value item on the
+//! list, because it is the difference between an agent reading the lyric and
+//! an agent scraping it out of markup.
 //!
 //! **Why this is a layer and not a page.** A `#[page]` renders a view, and every
 //! layout whose path is a prefix of the page's wraps it; the site's layout sits

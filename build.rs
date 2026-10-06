@@ -2,9 +2,9 @@
 //
 // Tailwind v4 reads `@theme` only from CSS, and `topcoat-tailwind`'s
 // `BuildConfig` exposes exactly one knob for supplying CSS: `input(path)`.
-// Rather than keep a `.css` file in the tree for it (PLAN.md §2.3 forbids one),
-// the input is GENERATED here from `src/ui/palette.rs`, which is where the
-// palette actually lives.
+// v4 keeps no hand-written CSS at all — not even a token file — so there is
+// none to point `input` at. The input is GENERATED here instead, from
+// `src/ui/palette.rs`, which is where the palette actually lives.
 //
 // The generated file goes to `$OUT_DIR/tailwind-input.css` — inside `target/`,
 // gitignored, and exactly where `topcoat-tailwind` puts its own default input

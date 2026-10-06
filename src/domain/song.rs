@@ -25,14 +25,14 @@ pub const SITE_URL: &str = "https://www.chansondufenua.pf";
 /// Schema bounds, mirrored by the `CHECK` constraints in
 /// `migrations/0001_init.sql`.
 ///
-/// `TITLE_MIN`, `LYRICS_MIN` and `LYRICS_MAX` are transcribed verbatim from v3
-/// (`legacy/surrealdb.surql`). `TITLE_MAX` and `ARTISTS_MAX` were changed on
-/// review (2026-10-04) and are deliberately *not* v3's values.
+/// `TITLE_MIN`, `LYRICS_MIN` and `LYRICS_MAX` are transcribed verbatim from v3.
+/// `TITLE_MAX` and `ARTISTS_MAX` were changed on review (2026-10-04) and are
+/// deliberately *not* v3's values.
 pub const TITLE_MIN: usize = 4;
 pub const TITLE_MAX: usize = 255;
 pub const LYRICS_MIN: usize = 100;
 pub const LYRICS_MAX: usize = 6000;
-/// v3 allowed 75 (`ASSERT array::len($value) <= 75` in `legacy/surrealdb.surql`).
+/// v3 allowed 75 (`ASSERT array::len($value) <= 75`).
 /// The highest count across every song in the 2025-03-22 export is 2, so 10
 /// leaves room to spare while keeping a runaway create-song request cheap to
 /// reject.
@@ -135,10 +135,10 @@ impl Song {
 
     /// Rejects a song the database would reject, before it gets there.
     ///
-    /// The bounds v3 expressed as SurrealDB `ASSERT` clauses
-    /// (`legacy/surrealdb.surql`), with `title` and the artist count adjusted on
-    /// review — `title` 4..=255, `lyrics` 100..=6000, `view_count > 0`, at most
-    /// 10 artists, each with a valid `fullname`.
+    /// The bounds v3 expressed as SurrealDB `ASSERT` clauses, with `title` and
+    /// the artist count adjusted on review — `title` 4..=255, `lyrics`
+    /// 100..=6000, `view_count > 0`, at most 10 artists, each with a valid
+    /// `fullname`.
     pub fn validate(&self) -> AppResult<()> {
         let title_len = self.title.trim().chars().count();
         if !(TITLE_MIN..=TITLE_MAX).contains(&title_len) {

@@ -1,7 +1,7 @@
 //! Domain layer: the entities and the rules that govern them.
 //!
 //! This is the *inside* of what used to be the hexagonal centre in v3. It knows
-//! nothing about SQLite, Topcoat or HTTP — see `PLAN.md` §2.1. The rule is the
+//! nothing about SQLite, Topcoat or HTTP. The rule is the
 //! only thing kept from the hexagon; the crate ceremony around it is gone.
 
 pub mod artist;

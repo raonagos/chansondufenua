@@ -1,7 +1,7 @@
 //! The read-only JSON API — `/api/songs`, `/api/songs/{id}`, `/api/health`.
 //!
-//! `PLAN.md` §6 asks for "a small, documented surface" that lets a program read
-//! the catalogue without parsing a page. The shape is deliberately the one the
+//! A small, documented surface that lets a program read the catalogue without
+//! parsing a page. The shape is deliberately the one the
 //! sitemap and the Markdown negotiation already assume: one URL per song, the
 //! same ids, the same canonical host, and a `Link` header on the page that
 //! points here (see [`crate::routes::negotiation`]).

@@ -6,7 +6,7 @@
 //! keys, and one exhaustive match per language. A key with no translation is a
 //! **compile error** rather than a blank line on the page, which is the whole
 //! reason the catalog is an enum and not a lookup map: the compiler checks what
-//! a map would let rot silently. See `PLAN.md` §2.4.
+//! a map would let rot silently.
 //!
 //! # What is translated, and what is not
 //!
@@ -34,7 +34,7 @@
 //!
 //! # Resolution
 //!
-//! §2.4's order: an explicit `?lang=` wins, then the `lang` cookie, then the
+//! The order: an explicit `?lang=` wins, then the `lang` cookie, then the
 //! request's `Accept-Language`, then French. Only the two languages the site
 //! speaks are ever selected: a reader whose browser asks for `en-US` gets
 //! French, which is what the site's own chrome is written in.

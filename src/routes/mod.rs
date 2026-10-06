@@ -10,7 +10,6 @@
 //! layout sits at `/`, so a page is always an HTML document carrying the site's
 //! chrome. A `#[route]` is not wrapped: it answers with its own `IntoResponse`,
 //! which is what an XML sitemap, a JSON body or a Markdown document has to be.
-//! `PLAN.md` §3 sketched this module for that reason.
 //!
 //! Nothing in this module renders a view.
 

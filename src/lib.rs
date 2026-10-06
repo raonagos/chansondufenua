@@ -8,7 +8,8 @@
 //!   path the application uses.
 //!
 //! It is still **one crate**, not a workspace. v3's seven-crate hexagon was
-//! collapsed in step 1 — see `PLAN.md` §2.1 for why.
+//! collapsed in step 1: ports-and-adapters pays off when several
+//! interchangeable adapters sit behind one core, and this app has one of each.
 //!
 //! The route tree lives here rather than in `main.rs` because the layout in
 //! [`ui`] and the pages in [`pages`] are library items: a `href!` from the shell

@@ -4,7 +4,7 @@
 //! markup in `src/ui/` and `src/pages/` reads as composition rather than as
 //! markup full of class soup. v3 expressed a similar vocabulary as `@apply`
 //! blocks in `style/tailwind.scss`; this module keeps the *mechanism* and
-//! repaints the design on purpose — see `PLAN.md` §15 for what changed and why.
+//! repaints the design on purpose.
 //!
 //! Three rules this module exists to enforce:
 //!
@@ -295,7 +295,7 @@ pub const BUTTON_PRIMARY: StaticClass = class!(
 /// The long synopsis between the hero and the tables.
 ///
 /// A wider measure than body copy's, because this is a display paragraph and not
-/// prose to be read line by line — v3's own width, kept, see `PLAN.md` §16.
+/// prose to be read line by line — v3's own width, kept.
 /// Muted, with generous leading, so a hundred words do not read as a wall.
 pub const SYNOPSIS: StaticClass = class!("mx-auto max-w-[800px] text-lg leading-8 text-mist-300");
 

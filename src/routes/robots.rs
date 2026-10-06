@@ -13,8 +13,8 @@
 //!   live site had already stopped advertising them and the file had not.
 //! * `Disallow: /pkg` is gone. `/pkg` was v3's WebAssembly bundle — the path
 //!   does not exist in v4, and a rule about nothing is worse than no rule.
-//! * `Content-Signal` and the two named AI crawlers are new; they are the policy
-//!   half of `PLAN.md` §6. See [`POLICY`].
+//! * `Content-Signal` and the two named AI crawlers are new; they are the
+//!   policy half of the agent-readiness work. See [`POLICY`].
 //!
 //! `Sitemap` directives have to be absolute URLs, so they are built from
 //! [`SITE_URL`] rather than written out. That is what keeps this text and the
@@ -36,7 +36,7 @@ pub const PATH: &str = "/robots.txt";
 /// into a model's context, which is what an agent fetching a page does) and
 /// `ai-train` (fold it into a training corpus).
 ///
-/// **The maintainer chooses this policy** (`PLAN.md` §6). The values below are
+/// **The maintainer chooses this policy.** The values below are
 /// alice's reading of what the rest of the site already says rather than a
 /// decision handed down: the site exists to be found and sung from
 /// (`search=yes`), this step exists to make it legible to agents
@@ -103,8 +103,8 @@ mod tests {
 
         assert!(text.contains("User-agent: *\n"));
         assert!(text.contains("Allow: /\n"));
-        // The create-song form writes to the database, and `PLAN.md` §6 keeps
-        // the rule that crawlers must not follow it.
+        // The create-song form writes to the database, so crawlers must not
+        // follow it.
         assert!(text.contains(&format!("Disallow: {}\n", editor::PATH)));
     }
 

@@ -18,7 +18,7 @@
 //! * **The surfaces are the v4 panel.** v3's cards and table panels were a
 //!   translucent wash under a frosted backdrop; v4 uses the one raised-panel
 //!   token the header and footer already speak. This is the one
-//!   *visible* change in the step — see `PLAN.md` §16.
+//!   *visible* change in the step.
 //!
 //! The copy is v3's, byte for byte. It lives in [`copy`] as constants rather than
 //! as literals in the markup so that the `<meta name="description">` the layout

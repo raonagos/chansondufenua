@@ -6,16 +6,15 @@
 //! That means a browser on the server — several hundred megabytes of one, plus a
 //! process per card and a known way to hang — to draw black text on white.
 //!
-//! `PLAN.md` §7 named the three ways out (pure-Rust rendering, pre-generated
-//! static cards, keep Chromium) and recommended the first. This is it: the card
+//! There were three ways out — pure-Rust rendering, pre-generated static
+//! cards, or keeping Chromium — and this is the first: the card
 //! is painted into an in-memory canvas by `fontdue` and encoded by `png`, both
 //! pure Rust, and `/drive/…` needs nothing installed beside the binary.
 //!
 //! **What the card says is v3's, exactly: the lyric and nothing else.** No title,
 //! no artist line, no site mark — v3 drew the lyric into a centred box and that
 //! is what the cards in the wild look like. Whether a card *should* name the song
-//! is a product question and not this step's; it is flagged in `PLAN.md` §23
-//! rather than answered here.
+//! is a product question, left open rather than answered here.
 //!
 //! Three things differ from v3, all deliberate:
 //!
@@ -272,9 +271,9 @@ fn text_width(line: &str, font: &Font, size: f32) -> f32 {
 /// characters a Latin-only face does not have. Dropping one out of a word would
 /// corrupt it, so each gets a covered relative instead: a macron vowel loses its
 /// macron, and the two turned commas — `ʻ` U+02BB, the ʻokina, and `ʼ` U+02BC —
-/// become an apostrophe. `PLAN.md` §23 records which of them the bundled face
-/// has as glyphs of its own, because that decides whether the substitution is
-/// ever reached and the answer is a fact about the font, not about the site.
+/// become an apostrophe. Which of them the bundled face has as glyphs of its
+/// own decides whether the substitution is ever reached, and that is a fact
+/// about the font, not about the site.
 ///
 /// `None` is the last resort: a character with no glyph and no relative is left
 /// out of the drawing, and [`text_width`] skips it in the same way, so the layout

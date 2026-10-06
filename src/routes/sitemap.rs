@@ -6,13 +6,13 @@
 //! rather than at the next deploy, and no build step can forget to regenerate
 //! one.
 //!
-//! **Two sitemaps, not a sitemap index.** `PLAN.md` §6 calls this "the sitemap
-//! index" and names the two documents it means: `/sitemap.xml` for the site's
-//! fixed pages and `/himene/sitemap.xml` for the songs. A `<sitemapindex>`
-//! document would have to live at one of those two URLs and would push the other
-//! somewhere new, which is not worth it for two files — and both URLs are
-//! advertised in `robots.txt` today, in v3's copy and in the live site's. What
-//! *is* dropped from v3 is its hand-written `lastmod`: see below.
+//! **Two sitemaps, not a sitemap index.** The two documents are `/sitemap.xml`
+//! for the site's fixed pages and `/himene/sitemap.xml` for the songs. A
+//! `<sitemapindex>` document would have to live at one of those two URLs and
+//! would push the other somewhere new, which is not worth it for two files —
+//! and both URLs are advertised in `robots.txt` today, in v3's copy and in the
+//! live site's. What *is* dropped from v3 is its hand-written `lastmod`: see
+//! below.
 //!
 //! One deliberate difference from v3. Its home entry carried
 //! `<lastmod>2024-08-21</lastmod>`, a date written into the generator and never
@@ -125,7 +125,7 @@ mod tests {
     }
 
     /// Every id the sitemap will put in a `<loc>` is a legal path segment: 20
-    /// characters of `[0-9a-z]` (`PLAN.md` §5). A character outside that set
+    /// characters of `[0-9a-z]`. A character outside that set
     /// would need escaping in the URL and is not what the corpus holds.
     #[test]
     fn every_fixture_id_is_a_legal_path_segment() {

@@ -18,9 +18,9 @@
 //!   rest. Gone with them is `aria-label="Go to the song …"` — an English
 //!   sentence on a French page, describing a role that no longer exists.
 //!
-//! The surface is the v4 panel, as decided in `PLAN.md` §17; the page title is
-//! the v4 [`theme::H1`] token rather than v3's smaller heading, because that is
-//! what step 4b's typography direction is for. Both are recorded in §18.
+//! The surface is the v4 panel; the page title is the v4 [`theme::H1`] token
+//! rather than v3's smaller heading, because that is what the v4 typography
+//! direction is for.
 //!
 //! (Note the phrasing: v3's heading size is *described*, not spelled. Tailwind
 //! scans the crate's source text for class names, and a utility named in a doc
