@@ -19,7 +19,7 @@ use topcoat::{Result, router::route};
 
 use crate::domain::song::SITE_URL;
 use crate::pages::{editor, songs};
-use crate::routes::{api, sitemap};
+use crate::routes::{api, card, mcp, sitemap};
 
 /// `/llms.txt` — the path, in one place.
 pub const PATH: &str = "/llms.txt";
@@ -59,6 +59,9 @@ fn body() -> String {
 - [One song as JSON]({SITE_URL}{api}/{{id}}): the same, plus the lyrics as
   Markdown with the chords inline.
 - Send `Accept: text/markdown` to a song page for the same document as Markdown.
+- [MCP server]({SITE_URL}{mcp}): a read-only Model Context Protocol server with
+  two tools — `list_songs` pages the catalogue, `get_song` reads one sheet. Its
+  [server card]({SITE_URL}{card}) names the endpoint and the protocol versions.
 - [Sitemaps]({SITE_URL}{sitemap}): the site's fixed pages; the songs are at
   {SITE_URL}{song_sitemap}.
 
@@ -80,6 +83,8 @@ lyrics are the credited artists' work and are not training data:
         sitemap = sitemap::PATH,
         song_sitemap = sitemap::SONGS_PATH,
         editor = editor::PATH,
+        mcp = mcp::PATH,
+        card = card::PATH,
     )
 }
 
@@ -116,6 +121,8 @@ mod tests {
             (sitemap::PATH, "/sitemap.xml"),
             (sitemap::SONGS_PATH, "/himene/sitemap.xml"),
             (editor::PATH, "/himene/api"),
+            (mcp::PATH, "/mcp"),
+            (card::PATH, "/.well-known/mcp/server-card.json"),
         ];
 
         for (constant, expected) in served {

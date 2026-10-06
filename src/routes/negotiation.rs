@@ -49,7 +49,7 @@ use topcoat::{
 use crate::db;
 use crate::domain::Song;
 use crate::domain::song::SITE_URL;
-use crate::routes::{api, sitemap};
+use crate::routes::{api, card, sitemap};
 use crate::state;
 
 /// The media type this layer serves on request.
@@ -252,9 +252,13 @@ fn queue_links(cx: &Cx, path: &str, markdown: bool) -> Result<()> {
 ///   representations under `alternate`.
 /// * The song index names the catalogue, which is the machine-readable form of
 ///   the same list.
-/// * Nothing else: the home page has no JSON counterpart, and a `Link` to
-///   something that does not describe it is a wrong answer rather than a
-///   missing one.
+/// * The home page describes the MCP server: `service-desc` is the registered
+///   relation for a resource that describes a service, and the card at
+///   [`crate::routes::card::PATH`] is that description. It is one link, on the
+///   front door, because the card is about the site and not about whichever page
+///   a visitor happened to land on.
+/// * Nothing else: nothing else on this site has a machine-readable form that a
+///   `Link` to something absent would describe.
 fn links(path: &str, served_markdown: bool) -> Vec<String> {
     let sitemap_link = format!("<{SITE_URL}{}>; rel=\"sitemap\"", sitemap::PATH);
 
@@ -275,8 +279,27 @@ fn links(path: &str, served_markdown: bool) -> Vec<String> {
             sitemap_link,
             format!("<{SITE_URL}{}>; rel=\"describedby\"", api::PATH),
         ],
+        None if path == HOME => vec![sitemap_link, card_link()],
         None => vec![sitemap_link],
     }
+}
+
+/// The home page's address. Not shared with `#[page("/")]` — that macro takes a
+/// literal, so a constant here would be a second copy of the same path rather
+/// than the one owner of it.
+const HOME: &str = "/";
+
+/// The MCP server card, as a `Link` value.
+///
+/// Absolute and typed: a caller that finds this header without ever having heard
+/// of the site must be able to fetch the card and know what it is reading, and
+/// `service-desc` (RFC 8631) is the registered relation for exactly that.
+fn card_link() -> String {
+    format!(
+        "<{SITE_URL}{}>; rel=\"service-desc\"; type=\"{}\"",
+        card::PATH,
+        card::MEDIA_TYPE
+    )
 }
 
 #[cfg(test)]
@@ -376,7 +399,22 @@ mod tests {
             format!("<{SITE_URL}{}>; rel=\"describedby\"", api::PATH)
         );
 
-        assert_eq!(links("/", false).len(), 1);
+        // The front door names the MCP server card under `service-desc`; the
+        // page that is the same page under another URL does not, because the
+        // card describes the site and one link on one URL is the whole promise.
+        let home = links("/", false);
+        assert_eq!(home.len(), 2);
+        assert_eq!(home[0], song[0]);
+        assert_eq!(
+            home[1],
+            format!(
+                "<{SITE_URL}{}>; rel=\"service-desc\"; type=\"{}\"",
+                card::PATH,
+                card::MEDIA_TYPE
+            )
+        );
+        assert_eq!(home[1], card_link());
+
         assert_eq!(links("/aepa", false).len(), 1);
     }
 

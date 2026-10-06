@@ -57,8 +57,12 @@ pub const PATH: &str = "/mcp";
 
 /// The server's name, as the protocol calls it — a stable identifier, not a
 /// title. [`SERVER_TITLE`] is what a client shows a person.
-const SERVER_NAME: &str = "chansondufenua";
-const SERVER_TITLE: &str = "Chanson du fenua";
+///
+/// `pub(crate)` because the server card ([`crate::routes::card`]) publishes the
+/// same two strings: a discovery document that renamed the server would describe
+/// an endpoint a client cannot then identify.
+pub(crate) const SERVER_NAME: &str = "chansondufenua";
+pub(crate) const SERVER_TITLE: &str = "Chanson du fenua";
 
 /// The newest revision of the protocol this server implements.
 const LATEST_PROTOCOL: &str = "2025-06-18";
@@ -70,7 +74,11 @@ const LATEST_PROTOCOL: &str = "2025-06-18";
 /// decide whether it can go on. The three differ in ways this server does not
 /// use — SSE resumability, batch support, sampling — so the same handlers are
 /// correct for all of them.
-const SUPPORTED_PROTOCOLS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+///
+/// `pub(crate)`: the server card lists these as the versions the advertised
+/// endpoint supports, and a card that promised a revision the handshake would
+/// refuse is the one failure a discovery document can cause on its own.
+pub(crate) const SUPPORTED_PROTOCOLS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
 
 /// The header a client sends after `initialize` to pin the negotiated revision.
 const PROTOCOL_HEADER: &str = "mcp-protocol-version";
@@ -318,14 +326,35 @@ fn initialize(params: Option<&Value>) -> Value {
 
     json!({
         "protocolVersion": version,
-        "capabilities": { "tools": { "listChanged": false } },
-        "serverInfo": {
-            "name": SERVER_NAME,
-            "title": SERVER_TITLE,
-            "version": VERSION,
-        },
+        "capabilities": capabilities(),
+        "serverInfo": server_info(),
         "instructions": INSTRUCTIONS,
     })
+}
+
+/// What this server says about itself: the name a client keys on, the title it
+/// shows a person, and the version.
+///
+/// `pub(crate)` because the server card ([`crate::routes::card`]) publishes
+/// exactly this object. The extension requires a card not to contradict the live
+/// handshake — but the card is fetched *before* the client connects, so the only
+/// way to keep the promise is for both surfaces to be the same code, which is
+/// what this function is.
+pub(crate) fn server_info() -> Value {
+    json!({
+        "name": SERVER_NAME,
+        "title": SERVER_TITLE,
+        "version": VERSION,
+    })
+}
+
+/// The primitives this server declares, shared with the server card for the same
+/// reason [`server_info`] is: one object, two surfaces that cannot disagree.
+///
+/// `tools` alone. There are no resources, no prompts and no logging here, and a
+/// capability declared but not implemented is a client's next timeout.
+pub(crate) fn capabilities() -> Value {
+    json!({ "tools": { "listChanged": false } })
 }
 
 /// `tools/list` — the two reads.
@@ -618,6 +647,15 @@ mod tests {
         assert!(result["capabilities"].get("resources").is_none());
         assert!(result["capabilities"].get("prompts").is_none());
         assert!(result["capabilities"].get("logging").is_none());
+
+        // And they are the *shared* objects, not copies. The server card
+        // (`src/routes/card.rs`) publishes `server_info()` and `capabilities()`
+        // before a client connects; if the handshake ever grew its own literals
+        // again, the card would be describing a different server, and this is
+        // the assertion that would notice.
+        assert_eq!(result["serverInfo"], server_info());
+        assert_eq!(result["capabilities"], capabilities());
+        assert_eq!(server_info()["title"], SERVER_TITLE);
     }
 
     /// Two tools, both reads, named exactly as the dispatcher knows them.
