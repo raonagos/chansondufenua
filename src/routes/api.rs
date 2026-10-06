@@ -25,6 +25,15 @@
 //! * **A missing song is a JSON 404**, not the site's HTML one. The error body
 //!   is part of the surface: a caller that asked for JSON should not have to
 //!   parse a document to find out it was wrong.
+//! * **The catalogue takes an optional selection.** `?s={slug}` repeated is the
+//!   multi-lyric page's own URL (`pages::pluriel`), and asking this endpoint for
+//!   it answers the same songs in the order the query named them, **with their
+//!   lyrics** — that page's whole content is the lyrics, so its JSON form has
+//!   nothing to say without them. A selection that names an unpublished song is
+//!   the same 404 as a missing id: the page does not serve a selection with a
+//!   hole in it, and neither does this. The parameter is read by
+//!   `pluriel::selection`, so the page and this read cannot disagree about which
+//!   query string is a selection.
 //!
 //! Nothing here writes. The only writable route on the site is the create-song
 //! form, and `robots.txt` keeps crawlers out of it.
@@ -38,6 +47,7 @@ use topcoat::{
         Body, HeaderValue, StatusCode,
         content::Json,
         header, path_param,
+        request::uri,
         response::{IntoResponse, Response},
         route,
     },
@@ -46,6 +56,7 @@ use topcoat::{
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
 use crate::domain::song::SITE_URL;
+use crate::pages::pluriel;
 use crate::state;
 
 /// The catalogue.
@@ -169,19 +180,56 @@ async fn health(cx: &Cx) -> Result<Json<serde_json::Value>> {
     })))
 }
 
-/// `GET /api/songs` — the published catalogue, newest first.
+/// `GET /api/songs` — the published catalogue, newest first, or one selection.
 ///
-/// The order is the index's, so a caller paging through the two sees the same
-/// thing. The envelope carries the count as well as the list: a program that
-/// wants to know whether it has them all should not have to count them.
+/// The catalogue's order is the index's, so a caller paging through the two sees
+/// the same thing. The envelope carries the count as well as the list: a program
+/// that wants to know whether it has them all should not have to count them.
+///
+/// `?s={slug}`, repeated, is the multi-lyric page's URL: the same songs in the
+/// order the query named them, each with its lyric, and a 404 for a selection
+/// that names no published song. Two shapes, one path, for the same reason the
+/// site has one multi-lyric page: a selection is a way of reading the catalogue,
+/// not a second resource.
 #[route(GET "/api/songs")]
-async fn catalogue(cx: &Cx) -> Result<Json<serde_json::Value>> {
+async fn catalogue(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
+    let selected = pluriel::selection(uri(cx).query().unwrap_or(""));
+
+    if !selected.is_empty() {
+        let query = pluriel::query(&selected);
+        return Ok(
+            match pluriel::resolve(state::db(cx).pool(), &selected).await? {
+                Some(sheets) => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "count": sheets.len(),
+                        "songs": sheets.iter().map(SongJson::full).collect::<Vec<_>>(),
+                    })),
+                ),
+                // The message names the selection rather than the offending segment:
+                // the read is `pages::pluriel`'s and it answers with the whole
+                // selection's fate by design, so naming one segment here would mean
+                // resolving them a second time in this file.
+                None => (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({
+                        "error": "not_found",
+                        "message": format!("no published song for the selection {query:?}"),
+                    })),
+                ),
+            },
+        );
+    }
+
     let listed = db::songs(state::db(cx).pool(), SongOrder::Newest, None).await?;
 
-    Ok(Json(serde_json::json!({
-        "count": listed.len(),
-        "songs": listed.iter().map(SongJson::summary).collect::<Vec<_>>(),
-    })))
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "count": listed.len(),
+            "songs": listed.iter().map(SongJson::summary).collect::<Vec<_>>(),
+        })),
+    ))
 }
 
 /// `GET /api/songs/{id}` — one song, with its lyric as Markdown.
@@ -261,18 +309,35 @@ fn openapi_document() -> Value {
     })
 }
 
-/// `GET /api/songs` — the catalogue.
+/// `GET /api/songs` — the catalogue, or one selection of it.
 fn catalogue_operation() -> Value {
     json!({
         "operationId": "listSongs",
-        "summary": "Every published song, newest first",
-        "description": "The same list the index page shows, from the same read. Drafts are not published and are not in it.",
+        "summary": "Every published song, newest first — or the songs a selection names",
+        "description": "The same list the index page shows, from the same read. Drafts are not published and are not in it. With `s` repeated, the answer is the multi-lyric page's own URL: those songs, in the order the query named them, each with its lyrics, and the same 404 an unknown id gets when one of them is not published.",
+        "parameters": [{
+            "name": "s",
+            "in": "query",
+            "required": false,
+            "description": "A song's slug, once per chosen song. Repeating it selects several songs in reading order — the same query string `/himene/pluriel` serves as a page. Two segments that name one song are one selection; a segment that names no published song is the 404.",
+            "schema": { "type": "array", "items": { "type": "string" } },
+            "style": "form",
+            "explode": true
+        }],
         "responses": {
             "200": {
-                "description": "The published catalogue",
+                "description": "The published catalogue, or the songs the selection named",
                 "content": {
                     "application/json": {
                         "schema": { "$ref": "#/components/schemas/Catalogue" }
+                    }
+                }
+            },
+            "404": {
+                "description": "The selection names no published song",
+                "content": {
+                    "application/json": {
+                        "schema": { "$ref": "#/components/schemas/Error" }
                     }
                 }
             }
@@ -491,6 +556,50 @@ mod tests {
         assert!(VERSION.starts_with('4'));
     }
 
+    /// The catalogue's selection read answers the same rows the page serves, in
+    /// the query's own order — and a hole in the selection is the 404 rather than
+    /// a shortened list.
+    ///
+    /// The read is `pages::pluriel`'s, which is the point of this test: the page
+    /// and the API cannot answer a selection differently, because there is one
+    /// implementation of "which songs does this URL name".
+    #[tokio::test]
+    async fn a_selection_is_the_pages_own_read() {
+        let db = Db::open_in_memory().await.expect("in-memory database");
+        fixtures::seed(db.pool()).await.expect("seed fixtures");
+
+        let second = fixtures::SONGS[1].slug.to_owned();
+        let first = fixtures::SONGS[0].slug.to_owned();
+        let selected = vec![second, first];
+
+        let sheets = pluriel::resolve(db.pool(), &selected)
+            .await
+            .expect("the read")
+            .expect("both are published");
+        assert_eq!(sheets.len(), 2);
+
+        let body = serde_json::json!({
+            "count": sheets.len(),
+            "songs": sheets.iter().map(SongJson::full).collect::<Vec<_>>(),
+        });
+        assert_eq!(body["songs"][0]["id"], fixtures::SONGS[1].id);
+        assert_eq!(body["songs"][1]["id"], fixtures::SONGS[0].id);
+        // The lyric is the reason this read exists: the multi-lyric page's JSON
+        // form has nothing to say without it.
+        assert!(
+            body["songs"][0]["lyrics_markdown"].is_string(),
+            "the selection read left the lyric out"
+        );
+
+        assert!(
+            pluriel::resolve(db.pool(), &["no-such-song".to_owned()])
+                .await
+                .expect("the read")
+                .is_none(),
+            "a hole in the selection would have been served as a shorter list"
+        );
+    }
+
     /// The description names the paths the routes serve, and every one of them is
     /// a `GET`. The single-song template is the one string with a second copy
     /// (the route attribute has to be a literal), so it is pinned here.
@@ -513,13 +622,25 @@ mod tests {
             }
         }
 
-        // The single-song read is the one operation with a parameter and a
-        // second answer.
+        // The single-song read takes the id its path template names; the
+        // catalogue takes the selection, which is the multi-lyric page's query
+        // string and not a path segment at all. Both have a second answer.
         assert_eq!(
             paths[SONG_PATH]["get"]["parameters"][0]["name"], "id",
             "the path template has no matching parameter"
         );
         assert!(paths[SONG_PATH]["get"]["responses"]["404"].is_object());
+
+        let selection = &paths[PATH]["get"]["parameters"][0];
+        assert_eq!(selection["name"], "s");
+        assert_eq!(selection["in"], "query");
+        assert_eq!(selection["schema"]["type"], "array");
+        assert_eq!(selection["explode"], true);
+        assert!(paths[PATH]["get"]["responses"]["404"].is_object());
+        assert_eq!(
+            selection["name"], "s",
+            "the parameter name is the one `pages::pluriel` reads"
+        );
     }
 
     /// The document is OpenAPI by the specification's own requirements, and it

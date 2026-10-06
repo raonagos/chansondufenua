@@ -47,7 +47,7 @@ use topcoat::{
 };
 
 use crate::i18n::{self, Lang, Language};
-use crate::pages::{editor, home, songs};
+use crate::pages::{editor, home, pluriel, songs};
 use crate::routes::negotiation;
 
 /// The layer. A unit value: it holds no state, and the request context is where
@@ -127,7 +127,9 @@ impl Layer for LanguageLayer {
 ///
 /// **This is the list step 22 was told two files would need, and it is one.**
 /// A new page (pagination's `/himene/page/N`, an artist's `/artiste/{id}`) is
-/// added here, next to the route that declares it.
+/// added here, next to the route that declares it — `/himene/pluriel` is there
+/// for step 26, and `negotiation::song_segment` has to know the same name for a
+/// different reason (it must not mistake the page for a song).
 fn page_of(path: &str) -> Option<(&str, Option<Lang>)> {
     match split_prefix(path) {
         Some((lang, page)) => {
@@ -144,6 +146,7 @@ fn is_page(path: &str) -> bool {
         || path == home::AEPA_PATH
         || path == songs::PATH
         || path == editor::PATH
+        || path == pluriel::PATH
         || negotiation::song_segment(path).is_some()
 }
 
@@ -262,7 +265,7 @@ fn redirect(target: &str, remember: Option<Lang>) -> Response {
 mod tests {
     use super::*;
     use crate::i18n::Lang;
-    use crate::pages::{editor, home, songs};
+    use crate::pages::{editor, home, pluriel, songs};
 
     /// The reader that decides whether a path is a page, and in what language.
     ///
@@ -290,10 +293,24 @@ mod tests {
         assert_eq!(page_of("/xx/himene"), None);
         assert_eq!(page_of("/himene/a/b"), None);
 
-        // The pages themselves, unprefixed.
-        for path in [home::PATH, home::AEPA_PATH, songs::PATH, editor::PATH] {
+        // The pages themselves, unprefixed — including the multi-lyric page,
+        // whose selection lives in a query string and whose *path* is therefore
+        // a page like any other: `/fr/himene/pluriel?s=…` has to strip to
+        // `/himene/pluriel?s=…` or the page 404s in every language but the
+        // default.
+        for path in [
+            home::PATH,
+            home::AEPA_PATH,
+            songs::PATH,
+            editor::PATH,
+            pluriel::PATH,
+        ] {
             assert!(page_of(path).is_some(), "{path}");
         }
+        assert_eq!(
+            page_of("/ty/himene/pluriel"),
+            Some(("/himene/pluriel", Some(Lang::Ty)))
+        );
     }
 
     /// `?lang=` is read out of the query and the rest of the query is kept, so

@@ -21,9 +21,12 @@
 //!
 //! **Which pages have a Markdown form** is one list, spelled in the private
 //! `document` below: a song, the front page (`/`, and the `/aepa` duplicate of
-//! it), and the index. `links` is the same list read the other way round — a
-//! page with two representations names the one a given response is not — so a
-//! header promising a variant this layer does not serve cannot be written.
+//! it), the index, and a selection on the multi-lyric page. `links` is the same
+//! list read the other way round — a page with two representations names the one
+//! a given response is not — so a header promising a variant this layer does not
+//! serve cannot be written. A *form* is on neither list: the create-song page and
+//! the multi-lyric page's picker are the same kind of thing, and neither has a
+//! second representation to promise.
 //!
 //! **The language is the request's, and this layer now knows it.** The Markdown
 //! form used to be written in the default language, because the language came
@@ -88,6 +91,7 @@ use crate::pages::{
     // `#[page("/…")]` declares them in — because the layout matches the request
     // path against the same two constants to decide the document head.
     home::{AEPA_PATH as AEPA, PATH as HOME},
+    pluriel,
     songs,
 };
 use crate::routes::{api, card, catalog, llms, sitemap};
@@ -127,6 +131,10 @@ impl Layer for Negotiation {
     fn handle<'a>(&'a self, cx: &'a Cx, body: Body, next: Next<'a>) -> LayerFuture<'a> {
         Box::pin(async move {
             let path = uri(cx).path();
+            // The query, read once: a selection lives in it, so the Markdown form
+            // and the `Link` headers both have to name the same one the reader
+            // sent. `?tr=` is read out of it by the two functions that need it.
+            let query = uri(cx).query().unwrap_or("");
             let wanted = header(cx, header::ACCEPT);
             // The language the request named in its URL, carried here by
             // `routes::language`; the default when it named none.
@@ -160,7 +168,7 @@ impl Layer for Negotiation {
             if prefers_markdown(wanted.as_deref())
                 && let Some(text) = document(cx, lang, path, addressed.as_ref()).await?
             {
-                queue_links(cx, path, true, lang, addressed.as_ref())?;
+                queue_links(cx, path, true, lang, query, addressed.as_ref())?;
                 return markdown(cx, text);
             }
 
@@ -170,7 +178,7 @@ impl Layer for Negotiation {
             // `robots.txt` and the served stylesheet all pass through here too,
             // and none of them is described by them.
             if is_html(&response) {
-                queue_links(cx, path, false, lang, addressed.as_ref())?;
+                queue_links(cx, path, false, lang, query, addressed.as_ref())?;
             }
 
             Ok(response)
@@ -212,9 +220,9 @@ fn header(cx: &Cx, name: header::HeaderName) -> Option<String> {
 ///
 /// One segment below the prefix and nothing else. `/himene/{slug}/anything` is
 /// nobody's page; `/himene/sitemap.xml` *is* one segment and is a route of its
-/// own, and so is the create-song page — the router prefers a literal segment to
-/// a parameter, so both reach their own handlers and never
-/// `#[page("/himene/{slug}")]`. They are excluded here rather than left for the
+/// own, and so are the create-song page and the multi-lyric page — the router
+/// prefers a literal segment to a parameter, so each of them reaches its own
+/// handler and never `#[page("/himene/{slug}")]`. They are excluded here rather than left for the
 /// database read to reject, because the read is not the only caller: [`links`]
 /// writes promises from this answer, and a page advertising a Markdown form it
 /// does not have is a header lying about the response it arrived on.
@@ -222,13 +230,18 @@ fn header(cx: &Cx, name: header::HeaderName) -> Option<String> {
 /// `pub(crate)` because the layout asks the same question: it decides the
 /// document head from the path, and a song URL that names no published song
 /// becomes the 404's head. Two answers to "is this a song URL" would be a page
-/// and its `<head>` disagreeing about which pages exist.
+/// and its `<head>` disagreeing about which pages exist. For the same reason the
+/// three literal paths are excluded here rather than left to the read: the
+/// document head and the Markdown form are both decided from this answer, and a
+/// create-song page or a selection advertised as a song would be a `<head>`
+/// written for a page that does not exist.
 pub(crate) fn song_segment(path: &str) -> Option<&str> {
     let segment = path.strip_prefix(SONG_PREFIX)?;
     let is_song = !segment.is_empty()
         && !segment.contains('/')
         && path != crate::pages::editor::PATH
-        && path != sitemap::SONGS_PATH;
+        && path != sitemap::SONGS_PATH
+        && path != pluriel::PATH;
 
     is_song.then_some(segment)
 }
@@ -238,9 +251,9 @@ pub(crate) fn song_segment(path: &str) -> Option<&str> {
 /// This is the list the module docs promise, in one place, and it is the same
 /// list [`links`] reads when it decides whether a page has an `alternate`. A
 /// path that is not in it answers `None` — the API, the two sitemaps,
-/// `robots.txt`, `llms.txt`, the create-song form and the served stylesheet are
-/// configured data and forms, not prose, and none of them has a Markdown form to
-/// serve.
+/// `robots.txt`, `llms.txt`, the create-song form, the multi-lyric page's picker
+/// and the served stylesheet are configured data and forms, not prose, and none
+/// of them has a Markdown form to serve.
 ///
 /// The reads happen here, in the branch that needs them, and only there: a
 /// request for HTML — which is every browser — never reaches this function.
@@ -272,6 +285,24 @@ async fn document(
 
     if path == songs::PATH {
         return index_document(cx, lang).await.map(Some);
+    }
+
+    // The multi-lyric page. A *selection* is prose and has a document — every
+    // chosen lyric, in the reading order the URL names it in. The picker is a
+    // form and has none, the same rule the create-song page follows: the reader
+    // of that page gets the HTML or nothing, and the `Link` headers say the same
+    // (see [`links`]).
+    //
+    // A selection that does not resolve answers `None`, so a request for Markdown
+    // on it falls through to the router and becomes the site's 404 — the page's
+    // own answer, for the page's own reason.
+    if path == pluriel::PATH {
+        let segments = pluriel::selection(uri(cx).query().unwrap_or(""));
+        if segments.is_empty() {
+            return Ok(None);
+        }
+        let sheets = pluriel::resolve(state::db(cx).pool(), &segments).await?;
+        return Ok(sheets.map(|sheets| selection_document(&sheets, lang, &segments)));
     }
 
     Ok(None)
@@ -365,6 +396,55 @@ pub(crate) fn song_document(sheet: &Song, lang: Lang, offset: i32) -> String {
         "\n\nSource: {}\n",
         i18n::url(lang, &sheet.get_path())
     ));
+
+    out
+}
+
+/// The chosen songs as one Markdown document — `/himene/pluriel?s=…`.
+///
+/// The pieces are [`song_document`]'s, once per song and in the reading order the
+/// URL named: a `##` heading that is a link to the sheet that owns the song, the
+/// credits on their own line in emphasis, and the whole lyric with its chords
+/// inline at the author's own spelling — no `?tr=` here, because the page has no
+/// transposition control and the document must describe the page it arrived
+/// beside.
+///
+/// The heading is `##` rather than `#` because the document has a title of its
+/// own: one `#` for the selection, one heading per song under it. A reader who
+/// follows one of those links lands on the sheet, which has the same lyric and
+/// its own canonical URL.
+///
+/// The source line names the *selection*, not the first song: this document is
+/// about a URL, and a Markdown file quoted into a chat should say which URL it
+/// came from.
+fn selection_document(sheets: &[Song], lang: Lang, segments: &[String]) -> String {
+    let mut out = format!("# {}\n\n", i18n::text(lang, Key::PlurielTitle));
+
+    for sheet in sheets {
+        let title = link_text(&sheet.get_title());
+        out.push_str(&format!(
+            "## [{title}]({})\n\n",
+            i18n::url(lang, &sheet.get_path())
+        ));
+
+        let artists = sheet
+            .get_artists()
+            .iter()
+            .map(|artist| artist.get_fullname())
+            .collect::<Vec<String>>()
+            .join(", ");
+        if !artists.is_empty() {
+            out.push_str(&format!("_{artists}_\n\n"));
+        }
+
+        out.push_str(&format!("{}\n\n", sheet.lyrics_markdown()));
+    }
+
+    let url = i18n::url(
+        lang,
+        &format!("{}?{}", pluriel::PATH, pluriel::query(segments)),
+    );
+    out.push_str(&format!("Source: {url}\n"));
 
     out
 }
@@ -548,9 +628,10 @@ fn queue_links(
     path: &str,
     markdown: bool,
     lang: Lang,
+    query: &str,
     addressed: Option<&db::Addressed>,
 ) -> Result<()> {
-    for value in links(path, markdown, lang, addressed) {
+    for value in links(path, markdown, lang, query, addressed) {
         response_headers(cx).append(header::LINK, header::HeaderValue::from_str(&value)?);
     }
 
@@ -585,6 +666,11 @@ fn queue_links(
 ///   named by a slug, and the two are not interchangeable.
 /// * The song index names the catalogue, which is the machine-readable form of
 ///   the same list.
+/// * A **selection** on the multi-lyric page names its own JSON read under
+///   `describedby` and its Markdown form under `alternate`, and both carry the
+///   query string: the promise is about *this* selection, and a link built from
+///   the path alone would name the picker — a different document, and one with
+///   neither of those two forms.
 /// * The home page describes the MCP server: `service-desc` is the registered
 ///   relation for a resource that describes a service, and the card at
 ///   [`crate::routes::card::PATH`] is that description. It is one link, on the
@@ -601,6 +687,7 @@ fn links(
     path: &str,
     served_markdown: bool,
     lang: Lang,
+    query: &str,
     addressed: Option<&db::Addressed>,
 ) -> Vec<String> {
     let sitemap_link = format!("<{SITE_URL}{}>; rel=\"sitemap\"", sitemap::PATH);
@@ -626,6 +713,24 @@ fn links(
                 sheet.get_id()
             ),
             alternate(i18n::url(lang, &sheet.get_path())),
+        ];
+    }
+
+    // The multi-lyric page has two states, and the headers differ between them.
+    // A selection has both of the other forms; the picker has neither, and
+    // promises only the sitemap — the same single link the create-song page
+    // gets, for the same reason: a form is not a document.
+    if path == pluriel::PATH {
+        let segments = pluriel::selection(query);
+        if segments.is_empty() {
+            return vec![sitemap_link];
+        }
+
+        let chosen = pluriel::query(&segments);
+        return vec![
+            sitemap_link,
+            format!("<{SITE_URL}{}?{chosen}>; rel=\"describedby\"", api::PATH),
+            alternate(i18n::url(lang, &format!("{}?{chosen}", pluriel::PATH))),
         ];
     }
 
@@ -775,7 +880,7 @@ mod tests {
             chrono::Utc::now(),
         );
         let addressed = db::Addressed::new(sheet, true);
-        let song = links("/himene/te-here", false, Lang::Fr, Some(&addressed));
+        let song = links("/himene/te-here", false, Lang::Fr, "", Some(&addressed));
         assert_eq!(song.len(), 3);
         assert_eq!(
             song[0],
@@ -798,16 +903,16 @@ mod tests {
 
         // Serving Markdown flips the alternate to the HTML document, because the
         // other representation is now the one the caller did not get.
-        let as_markdown = links("/himene/te-here", true, Lang::Fr, Some(&addressed));
+        let as_markdown = links("/himene/te-here", true, Lang::Fr, "", Some(&addressed));
         assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
         assert_eq!(as_markdown[0], song[0]);
 
         // A song URL that names no published song promises nothing: a draft is
         // not served, so there is nothing to describe.
-        assert_eq!(links("/himene/te-here", false, Lang::Fr, None).len(), 1);
+        assert_eq!(links("/himene/te-here", false, Lang::Fr, "", None).len(), 1);
 
         // The index names the catalogue and its own Markdown form.
-        let index = links(songs::PATH, false, Lang::Fr, None);
+        let index = links(songs::PATH, false, Lang::Fr, "", None);
         assert_eq!(index.len(), 3);
         assert_eq!(index[0], song[0]);
         assert_eq!(
@@ -828,7 +933,7 @@ mod tests {
         // is the same page under another URL names its Markdown form but does not
         // repeat the site-level links, because they describe the site and one
         // link on one URL is the whole promise.
-        let home = links(HOME, false, Lang::Fr, None);
+        let home = links(HOME, false, Lang::Fr, "", None);
         assert_eq!(home.len(), 5);
         assert_eq!(home[0], song[0]);
         assert_eq!(
@@ -865,7 +970,7 @@ mod tests {
         );
         assert_eq!(home[4], describedby_link());
 
-        let aepa = links(AEPA, false, Lang::Fr, None);
+        let aepa = links(AEPA, false, Lang::Fr, "", None);
         assert_eq!(aepa.len(), 2);
         assert_eq!(
             aepa[1],
@@ -877,9 +982,123 @@ mod tests {
 
         // A path with no Markdown form promises nothing but the sitemap.
         assert_eq!(
-            links(crate::pages::editor::PATH, false, Lang::Fr, None).len(),
+            links(crate::pages::editor::PATH, false, Lang::Fr, "", None).len(),
             1
         );
+    }
+
+    /// The multi-lyric page's two states, read out of the headers: a selection
+    /// promises its JSON read and its Markdown form, **both carrying the
+    /// query** — the promise is about *this* selection, and a link built from
+    /// the path alone would name the picker, which is a different document with
+    /// neither of those forms. The picker promises nothing but the sitemap, the
+    /// same single `Link` the create-song page gets, because a form is not a
+    /// document.
+    #[test]
+    fn a_selection_names_its_own_json_and_markdown_forms() {
+        let chosen = links(pluriel::PATH, false, Lang::Fr, "s=a&s=b", None);
+        assert_eq!(chosen.len(), 3);
+        assert_eq!(
+            chosen[0],
+            format!("<{SITE_URL}{}>; rel=\"sitemap\"", sitemap::PATH)
+        );
+        assert_eq!(
+            chosen[1],
+            format!("<{SITE_URL}{}?s=a&s=b>; rel=\"describedby\"", api::PATH)
+        );
+        assert_eq!(
+            chosen[2],
+            format!(
+                "<{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
+                i18n::url(Lang::Fr, "/himene/pluriel?s=a&s=b")
+            )
+        );
+
+        // Serving Markdown flips the alternate to the HTML document and keeps
+        // the query, in the reader's language.
+        let as_markdown = links(pluriel::PATH, true, Lang::Ty, "s=a&s=b", None);
+        assert!(as_markdown[2].contains("/ty/himene/pluriel?s=a&s=b"));
+        assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
+
+        // The picker: a path with no selection, and a query that is not one.
+        for query in ["", "s=", "tr=3", "page=2"] {
+            assert_eq!(
+                links(pluriel::PATH, false, Lang::Fr, query, None).len(),
+                1,
+                "{query:?}"
+            );
+        }
+    }
+
+    /// The Markdown form of a selection: a title, one heading per song with its
+    /// title a link to the sheet, the credits, the lyric with its chords inline
+    /// in the canonical spelling, and a source line that names the *selection*
+    /// rather than the first song.
+    #[test]
+    fn the_selection_document_holds_every_chosen_lyric_in_order() {
+        let sheet = |id: &str, slug: &str, title: &str, lyrics: &str| {
+            Song::new(
+                id.to_owned(),
+                Some(slug.to_owned()),
+                title.to_owned(),
+                lyrics.to_owned(),
+                1,
+                Vec::new(),
+                true,
+                chrono::Utc::now(),
+                chrono::Utc::now(),
+            )
+        };
+
+        let first = sheet(
+            "8nntgjk4rl5dbp67c6en",
+            "te-here",
+            "Te here",
+            "<div>Hina'a<sup>Eb</sup>ro</div>",
+        );
+        let second = sheet(
+            "4cfl27ia9hndgetgr1o7",
+            "ahani-e",
+            "Ahani e",
+            "<div>Ua noa</div>",
+        );
+        let segments = vec!["te-here".to_owned(), "ahani-e".to_owned()];
+        let text = selection_document(&[first, second], Lang::Fr, &segments);
+
+        assert!(text.starts_with("# Plusieurs chansons\n\n"), "{text}");
+        // The order is the URL's, not the catalogue's.
+        let first_at = text.find("## [Te here](").expect("the first song");
+        let second_at = text.find("## [Ahani e](").expect("the second song");
+        assert!(first_at < second_at, "{text}");
+        assert!(text.contains("Hina'a[Eb]ro"), "{text}");
+        assert!(
+            text.contains(&format!(
+                "## [Te here]({})",
+                i18n::url(Lang::Fr, "/himene/te-here")
+            )),
+            "{text}"
+        );
+        assert!(text.ends_with(&format!(
+            "Source: {}\n",
+            i18n::url(Lang::Fr, "/himene/pluriel?s=te-here&s=ahani-e")
+        )));
+
+        // Chrome, so it follows the language; the lyrics do not.
+        let in_english = selection_document(
+            &[sheet(
+                "8nntgjk4rl5dbp67c6en",
+                "te-here",
+                "Te here",
+                "<div>Hina'a<sup>Eb</sup>ro</div>",
+            )],
+            Lang::En,
+            &["te-here".to_owned()],
+        );
+        assert!(
+            in_english.starts_with("# Several songs\n\n"),
+            "{in_english}"
+        );
+        assert!(in_english.contains("Hina'a[Eb]ro"), "{in_english}");
     }
 
     /// The document is Markdown a reader can use: an `# ` title, then the lyric

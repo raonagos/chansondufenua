@@ -46,7 +46,7 @@ use topcoat::{
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
 use crate::i18n::{self, Key};
-use crate::pages::song as sheet;
+use crate::pages::{pluriel, song as sheet};
 use crate::state;
 use crate::ui::theme;
 
@@ -116,6 +116,15 @@ pub async fn songs(cx: &Cx) -> Result<impl View> {
                     </tbody>
                 </table>
             </div>
+            // The index's own next step: a reader who has just scanned the
+            // catalogue can choose several songs and read them together. A plain
+            // link rather than a control of its own, and the page it opens is
+            // `noindex` — see `pages::pluriel`.
+            <p class=(theme::PLURIEL_ENTRY)>
+                <a href=(i18n::link(cx, pluriel::PATH)) class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))>
+                    (i18n::text(lang, Key::PlurielOpen))
+                </a>
+            </p>
         </div>
     })
 }

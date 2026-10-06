@@ -14,6 +14,7 @@
 
 pub mod editor;
 pub mod home;
+pub mod pluriel;
 pub mod song;
 pub mod songs;
 

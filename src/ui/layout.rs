@@ -44,7 +44,7 @@ use crate::i18n::{self, Key, Lang};
 use crate::pages::{
     editor,
     home::{self, AEPA_PATH, PATH as HOME},
-    songs,
+    pluriel, songs,
 };
 use crate::routes::{negotiation, og};
 use crate::state;
@@ -277,6 +277,25 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
         );
     }
 
+    // The multi-lyric page — a chosen set of songs, or the picker that builds
+    // one. `noindex`, and **no canonical**, decided together and deliberately
+    // (see `pages::pluriel`): the URL space is every ordered subset of the
+    // catalogue, so an index full of selections would be duplicate content built
+    // out of the sheets it quotes, and a canonical URL would name a preferred
+    // address for a page a crawler is being told not to index. What the title
+    // says is what the page is, and the songs inside it are the sheets' own
+    // pages — linked, canonical, and indexable.
+    if path == pluriel::PATH {
+        return DocumentHead {
+            title: format!("{} | {TITLE}", i18n::text(lang, Key::PlurielTitle)),
+            description: None,
+            canonical: None,
+            noindex: true,
+            social: None,
+            jsonld: None,
+        };
+    }
+
     // The create-song page is the one page here that is not written to be found:
     // it holds a form. It says what it is for, which is what a `<title>` is for,
     // and it is the only page that is kept out of an index.
@@ -302,6 +321,28 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
         noindex: false,
         social: None,
         jsonld: None,
+    }
+}
+
+/// The request's path as *this page's* identity: what its `hreflang` cluster and
+/// its `x-default` name.
+///
+/// For every page but one that is the path alone. A query string is a view of a
+/// document rather than a second document — that is the rule `?tr=` on a sheet
+/// follows, which is why a transposed sheet declares the untransposed URL as its
+/// canonical and its alternates name the same sheet in the other two languages.
+///
+/// The multi-lyric page is the exception, and it is what makes the rule visible:
+/// there the query **is** the page — `/himene/pluriel` with no selection is the
+/// picker, and a selection is a different document — so dropping it would make
+/// every selection declare the picker in three languages as its own alternate.
+fn addressed_path(cx: &Cx) -> String {
+    let request = uri(cx);
+    let path = request.path();
+
+    match request.query() {
+        Some(query) if path == pluriel::PATH => format!("{path}?{query}"),
+        _ => path.to_owned(),
     }
 }
 
@@ -350,7 +391,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let head = document_head(cx, lang).await;
     let home_link = href!(home::home);
-    let path = uri(cx).path();
+    let path = addressed_path(cx);
     // The 404's way home carries the reader's language too, and the closure
     // below cannot borrow `cx` to build it, so it is resolved here.
     let home_href = i18n::link(cx, &home_link.resolve(cx));
@@ -410,10 +451,10 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     <link
                         rel="alternate"
                         hreflang=(alternate.code())
-                        href=(i18n::url(alternate, path))
+                        href=(i18n::url(alternate, &path))
                     />
                 }
-                <link rel="alternate" hreflang="x-default" href=(i18n::absolute(path))/>
+                <link rel="alternate" hreflang="x-default" href=(i18n::absolute(&path))/>
                 // The social tags, only on a song page. v3 declared them on the
                 // song route, so the home page has never carried them.
                 match head.social {
@@ -610,17 +651,19 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
 /// reader which of the three they are on when the underline is not enough.
 ///
 /// The three URLs are [`Lang::ALL`] under their own prefixes — the same list the
-/// document head writes `hreflang` from, so the two cannot disagree.
+/// document head writes `hreflang` from, and the same `addressed_path`, so the
+/// switcher and the cluster cannot disagree about which page is being switched:
+/// a reader who chooses a language on a selection keeps the selection.
 #[component]
 pub async fn language_switcher(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
-    let path = uri(cx).path();
+    let path = addressed_path(cx);
 
     Ok(view! {
         <nav class=(theme::LANGUAGE_SWITCH) aria-label=(i18n::text(lang, Key::Language))>
             for target in Lang::ALL {
                 <a
-                    href=(i18n::at(target, path))
+                    href=(i18n::at(target, &path))
                     hreflang=(target.code())
                     lang=(target.code())
                     aria-current=((target == lang).then_some("true"))

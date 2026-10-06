@@ -367,6 +367,31 @@ pub async fn song_at(pool: &SqlitePool, segment: &str) -> DbResult<Option<Addres
     Ok(Some(Addressed { song, canonical }))
 }
 
+/// The songs a list of URL segments names — one entry per segment, in order.
+///
+/// The bulk form of [`song_at`], for the multi-lyric page (`/himene/pluriel`):
+/// the same rule (slug, then id, then a retired slug) applied to a list. Written
+/// as a loop over [`song_at`] rather than as one `IN (…)` on purpose — "a slug,
+/// else an id, else a slug it used to have" is not a predicate SQL can be handed
+/// for a *list*, and a second implementation of it is exactly the drift
+/// [`song_at`]'s own doc comment warns about.
+///
+/// `None` where a segment names nothing. That is not an error here: the caller
+/// decides what a selection with a hole in it means, and both callers
+/// (`pages::pluriel` and the JSON read) answer it with the 404 rather than
+/// dropping the song.
+///
+/// Drafts come back with everything else, for [`song`]'s reason: this is the
+/// read, not the policy.
+pub async fn songs_at(pool: &SqlitePool, segments: &[String]) -> DbResult<Vec<Option<Addressed>>> {
+    let mut out: Vec<Option<Addressed>> = Vec::with_capacity(segments.len());
+    for segment in segments {
+        out.push(song_at(pool, segment).await?);
+    }
+
+    Ok(out)
+}
+
 /// The slug a title earns, made unique against every slug the site has ever
 /// used.
 ///
@@ -868,6 +893,46 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    /// A list of segments resolves the way the single one does — the same order
+    /// out as in, a hole where a segment names nothing, and the canonical flag
+    /// carried per row so the caller can tell an id URL from an address.
+    ///
+    /// This is the read behind `/himene/pluriel`: the page's own order is the
+    /// reader's reading order, so an implementation that sorted or deduped here
+    /// would be reordering a selection the reader made.
+    #[tokio::test]
+    async fn a_list_of_segments_keeps_its_order_and_its_holes() {
+        let db = seeded().await;
+        let first = &fixtures::SONGS[0];
+        let second = &fixtures::SONGS[1];
+
+        let segments = vec![
+            second.slug.to_owned(),
+            "does-not-exist".to_owned(),
+            first.id.to_owned(),
+            first.slug.to_owned(),
+        ];
+        let found = songs_at(db.pool(), &segments).await.unwrap();
+        assert_eq!(found.len(), segments.len());
+
+        assert_eq!(
+            found[0].as_ref().map(|row| row.song().get_id()),
+            Some(second.id.to_owned())
+        );
+        assert!(found[1].is_none(), "a segment that names nobody is a hole");
+        assert_eq!(
+            found[2].as_ref().map(|row| row.song().get_id()),
+            Some(first.id.to_owned())
+        );
+        assert!(
+            !found[2].as_ref().unwrap().is_canonical(),
+            "an id URL is not the song's address, even in a selection"
+        );
+        assert!(found[3].as_ref().unwrap().is_canonical());
+
+        assert!(songs_at(db.pool(), &[]).await.unwrap().is_empty());
     }
 
     /// Seeding leaves the fixtures with the slugs the rule produces for their

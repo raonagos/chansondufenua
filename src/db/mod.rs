@@ -16,7 +16,7 @@ pub mod queries;
 pub use import::{Dump, ImportReport, ImportedArtist, ImportedSong, import_dump};
 pub use queries::{
     Addressed, Counts, SongOrder, artists, backfill_slugs, counts, create_song,
-    increment_view_count, search_artists, song, song_at, songs, songs_page,
+    increment_view_count, search_artists, song, song_at, songs, songs_at, songs_page,
 };
 
 /// Where the database lives when `DATABASE_URL` is not set.

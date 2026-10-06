@@ -311,11 +311,23 @@ pub enum Key {
     /// where the reader is, which is what a pause does, and "stop" is the word
     /// the two other catalogs already have for a control that is not moving.
     ScrollStop,
+    /// The heading of `/himene/pluriel` — the page that reads several songs one
+    /// after another, and the picker that builds the selection.
+    PlurielTitle,
+    /// What the picker asks for: tick the songs, then read them together.
+    PlurielHint,
+    /// The picker's submit button.
+    PlurielRead,
+    /// The index's link to the picker.
+    ///
+    /// A word of its own rather than [`PlurielTitle`](Self::PlurielTitle): a
+    /// heading names a page, and a link has to say what following it does.
+    PlurielOpen,
 }
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 25] = [
+    pub const ALL: [Key; 29] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -341,6 +353,10 @@ impl Key {
         Key::ScrollSpeed,
         Key::ScrollStart,
         Key::ScrollStop,
+        Key::PlurielTitle,
+        Key::PlurielHint,
+        Key::PlurielRead,
+        Key::PlurielOpen,
     ];
 
     /// The French words. v3's, byte for byte.
@@ -373,6 +389,10 @@ impl Key {
             Key::ScrollSpeed => "Vitesse",
             Key::ScrollStart => "Démarrer",
             Key::ScrollStop => "Arrêter",
+            Key::PlurielTitle => "Plusieurs chansons",
+            Key::PlurielHint => "Choisissez des chansons pour lire leurs paroles à la suite.",
+            Key::PlurielRead => "Lire la sélection",
+            Key::PlurielOpen => "Lire plusieurs chansons",
         }
     }
 
@@ -405,6 +425,10 @@ impl Key {
             Key::ScrollSpeed => "Tere",
             Key::ScrollStart => "Haere",
             Key::ScrollStop => "Nofo",
+            Key::PlurielTitle => "Te mau hīmene rau",
+            Key::PlurielHint => "Ma'iti i te mau hīmene no te hi'o i te parau hīmene.",
+            Key::PlurielRead => "Hi'o i te mau hīmene",
+            Key::PlurielOpen => "Hi'o i te mau hīmene rau",
         }
     }
 
@@ -437,6 +461,10 @@ impl Key {
             Key::ScrollSpeed => "Speed",
             Key::ScrollStart => "Start",
             Key::ScrollStop => "Stop",
+            Key::PlurielTitle => "Several songs",
+            Key::PlurielHint => "Pick songs to read their lyrics one after another.",
+            Key::PlurielRead => "Read the selection",
+            Key::PlurielOpen => "Read several songs",
         }
     }
 }
@@ -490,10 +518,11 @@ mod tests {
     }
 
     /// **The French chrome, frozen at step 21.** Step 23 added the English
-    /// strings and the language switcher, step 24 the transposition control and
-    /// step 25 the auto-scroll control; none of them may put a different word in
-    /// a French page than the one step 21 shipped, and a translation that
-    /// quietly "improved" the French is exactly the change this table catches.
+    /// strings and the language switcher, step 24 the transposition control,
+    /// step 25 the auto-scroll control and step 26 the multi-lyric page; none of
+    /// them may put a different word in a French page than the one step 21
+    /// shipped, and a translation that quietly "improved" the French is exactly
+    /// the change this table catches.
     ///
     /// The catalog is allowed to grow — a new control's own label is new chrome,
     /// not a new translation of old chrome — so the table also pins *which* keys
@@ -530,11 +559,12 @@ mod tests {
             assert_eq!(text(Lang::Fr, key), words, "{key:?} moved");
         }
 
-        // Eight keys have been added since: the switcher's own label (step 23),
+        // Twelve keys have been added since: the switcher's own label (step 23),
         // the transposition control's label and its two step links (step 24),
-        // and the auto-scroll control's four words (step 25). Every one of them
-        // is a new control, not a reworded old one.
-        const ADDED_SINCE: [Key; 8] = [
+        // the auto-scroll control's four words (step 25), and the multi-lyric
+        // page's four (step 26). Every one of them is a new control or a new
+        // page, not a reworded old line.
+        const ADDED_SINCE: [Key; 12] = [
             Key::Language,
             Key::Transpose,
             Key::TransposeDown,
@@ -543,6 +573,10 @@ mod tests {
             Key::ScrollSpeed,
             Key::ScrollStart,
             Key::ScrollStop,
+            Key::PlurielTitle,
+            Key::PlurielHint,
+            Key::PlurielRead,
+            Key::PlurielOpen,
         ];
 
         assert_eq!(Key::ALL.len(), FRENCH_AT_STEP_21.len() + ADDED_SINCE.len());
