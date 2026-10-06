@@ -23,6 +23,11 @@
 //! The copy is v3's, byte for byte. It lives in [`copy`] as constants rather than
 //! as literals in the markup so that the `<meta name="description">` the layout
 //! emits for this page is provably the same string the page shows.
+//!
+//! The page has a second representation: `routes/negotiation.rs` answers
+//! `Accept: text/markdown` with the same prose and the same two tables as one
+//! Markdown document, and builds it from [`copy`] and `ROWS` rather than from a
+//! second copy of either.
 
 use topcoat::{
     Result,
@@ -102,7 +107,11 @@ pub mod copy {
 }
 
 /// How many songs each table lists. v3 asked both for five.
-const ROWS: i64 = 5;
+///
+/// `pub(crate)` because the same page has a second representation: the Markdown
+/// document in `routes/negotiation.rs` shows the same two tables, and a second
+/// table size would make the two forms of one page disagree about it.
+pub(crate) const ROWS: i64 = 5;
 
 /// `/` — the front page.
 #[page("/")]

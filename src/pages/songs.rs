@@ -22,6 +22,10 @@
 //! rather than v3's smaller heading, because that is what the v4 typography
 //! direction is for.
 //!
+//! The index has a second representation: `routes/negotiation.rs` answers
+//! `Accept: text/markdown` with the same list as one Markdown document, from the
+//! same unbounded read — every published song, newest first.
+//!
 //! (Note the phrasing: v3's heading size is *described*, not spelled. Tailwind
 //! scans the crate's source text for class names, and a utility named in a doc
 //! comment is emitted into the stylesheet whether or not anything uses it.)
