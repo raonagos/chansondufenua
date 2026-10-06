@@ -263,7 +263,12 @@ pub enum Key {
     Language,
     /// The 404's heading.
     NotFoundTitle,
-    /// The 404's explanation.
+    /// The 404's explanation — the line under the heading, and the one the joke
+    /// lives in. It has to be true of every way a reader reaches a 404 (a song
+    /// that is missing or unpublished, a page of the index that is out of
+    /// range, a multi-lyric selection with a hole, or a URL no route knows), so
+    /// it names the two ways a page goes missing rather than this reader's
+    /// particular mistake.
     NotFoundBody,
     /// The 404's button back to the front page.
     NotFoundCta,
@@ -366,7 +371,9 @@ impl Key {
             Key::NavSongs => "Chanson",
             Key::Language => "Langue",
             Key::NotFoundTitle => "La page n'existe pas.",
-            Key::NotFoundBody => "Cette page n'existe pas, ou n'existe plus.",
+            Key::NotFoundBody => {
+                "Rien à lire ici — l'adresse s'est peut-être perdue en chemin, ou la chanson a pris le large."
+            }
             Key::NotFoundCta => "Retour à l'accueil",
             Key::AddLyrics => "Ajouter des paroles",
             Key::IndexTitle => "Toutes les chansons",
@@ -404,7 +411,12 @@ impl Key {
             Key::NavSongs => "Hīmene",
             Key::Language => "Reo",
             Key::NotFoundTitle => "'Aita te 'api",
-            Key::NotFoundBody => "'Aita teie 'api e vai ra.",
+            // The joke in one clause rather than two: French and English can
+            // send a wrong *address* astray, but Tahitian has no word here for
+            // "address" that would not be invention. The image it keeps — the
+            // song gone out to sea — is the half that carries without slang.
+            // Still a first pass, awaiting a native speaker.
+            Key::NotFoundBody => "'Aita e mea e hi'o i reira — ua reva paha te hīmene i te moana.",
             Key::NotFoundCta => "Ho'i i te fa'aea",
             Key::AddLyrics => "Tāpiri i te parau hīmene",
             Key::IndexTitle => "Te mau hīmene ato'a",
@@ -440,7 +452,9 @@ impl Key {
             Key::NavSongs => "Songs",
             Key::Language => "Language",
             Key::NotFoundTitle => "This page does not exist.",
-            Key::NotFoundBody => "This page does not exist, or no longer does.",
+            Key::NotFoundBody => {
+                "Nothing to read here — the address may have lost its way, or the song has gone to sea."
+            }
             Key::NotFoundCta => "Back to the front page",
             Key::AddLyrics => "Add the lyrics",
             Key::IndexTitle => "All the songs",
@@ -524,19 +538,19 @@ mod tests {
     /// shipped, and a translation that quietly "improved" the French is exactly
     /// the change this table catches.
     ///
+    /// Step 28 is the one deliberate exception: the 404's body was rewritten on
+    /// purpose, so it moves out of this table and is pinned in its own, in all
+    /// three languages. Everything else here is still frozen at step 21.
+    ///
     /// The catalog is allowed to grow — a new control's own label is new chrome,
     /// not a new translation of old chrome — so the table also pins *which* keys
     /// were added rather than only the words that were not.
     #[test]
     fn adding_chrome_did_not_change_a_word_of_french() {
-        const FRENCH_AT_STEP_21: [(Key, &str); 17] = [
+        const FRENCH_AT_STEP_21: [(Key, &str); 16] = [
             (Key::NavHome, "Accueil"),
             (Key::NavSongs, "Chanson"),
             (Key::NotFoundTitle, "La page n'existe pas."),
-            (
-                Key::NotFoundBody,
-                "Cette page n'existe pas, ou n'existe plus.",
-            ),
             (Key::NotFoundCta, "Retour à l'accueil"),
             (Key::AddLyrics, "Ajouter des paroles"),
             (Key::IndexTitle, "Toutes les chansons"),
@@ -579,7 +593,36 @@ mod tests {
             Key::PlurielOpen,
         ];
 
-        assert_eq!(Key::ALL.len(), FRENCH_AT_STEP_21.len() + ADDED_SINCE.len());
+        // Step 28's own work, and the only French in this test that is not
+        // step 21's: the 404's body, the one line the "funny 404" step rewrote
+        // on purpose. Pinned in all three languages because the joke is the
+        // deliverable — a later run may move it, but only deliberately.
+        const NOT_FOUND_AT_STEP_28: [(Lang, &str); 3] = [
+            (
+                Lang::Fr,
+                "Rien à lire ici — l'adresse s'est peut-être perdue en chemin, ou la chanson a pris le large.",
+            ),
+            (
+                Lang::Ty,
+                "'Aita e mea e hi'o i reira — ua reva paha te hīmene i te moana.",
+            ),
+            (
+                Lang::En,
+                "Nothing to read here — the address may have lost its way, or the song has gone to sea.",
+            ),
+        ];
+
+        for (lang, words) in NOT_FOUND_AT_STEP_28 {
+            assert_eq!(text(lang, Key::NotFoundBody), words, "the 404 moved");
+        }
+
+        // The 404's body is one key pinned in every language, so it counts once
+        // towards the catalog even though the table has one row per language.
+        assert_eq!(NOT_FOUND_AT_STEP_28.len(), Lang::ALL.len());
+        assert_eq!(
+            Key::ALL.len(),
+            FRENCH_AT_STEP_21.len() + ADDED_SINCE.len() + 1
+        );
         for added in ADDED_SINCE {
             assert!(
                 !FRENCH_AT_STEP_21.iter().any(|(key, _)| *key == added),
