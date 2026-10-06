@@ -18,7 +18,7 @@ topcoat = { version = "0.10.0", features = [
     # binary rather than fetched from a CDN. See `src/ui/fonts.rs`.
     "font-fontsource",
 ] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 # Embedded SQLite. `sqlite` bundles libsqlite3 (via libsqlite3-sys) so nothing
 # needs installing on the host; `macros` is only for `sqlx::migrate!` and the
 # `FromRow` derive — the compile-time-checked `query!` family is deliberately
@@ -49,6 +49,11 @@ epaint_default_fonts = "0.36.2"
 # `topcoat::router::Body` is built from `Bytes`, not from `Vec<u8>`, and an
 # image is not a `String`. Already in the tree under the HTTP stack.
 bytes = "1"
+# `size_hint` — the access log's byte count (`src/log.rs`) — is a method of this
+# trait, not of Topcoat's `Body` wrapper, so the trait needs a name in scope.
+# `http-body-util` already compiles it for the router; naming it here declares a
+# dependency without adding one to the build.
+http-body = "1"
 
 # `tailwind` on the build dependency only: `BuildConfig::render()` runs in
 # build.rs to scan the sources and emit the stylesheet as an asset.

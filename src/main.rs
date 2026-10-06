@@ -3,46 +3,94 @@
 //! v4 is a single-binary rewrite: Topcoat for server-rendered HTML, an embedded
 //! SQLite database, and no WASM or client build step.
 //!
-//! The binary does three things and nothing else: open the database, say what it
-//! found, and serve [`chansondufenua::router`]. The shell and the pages are
-//! library items so that `tests/` and the layout can name them.
+//! The binary opens the database, says what it found and where it is listening,
+//! and serves [`chansondufenua::router`]. The shell and the pages are library
+//! items so that `tests/` and the layout can name them.
+//!
+//! Every line below goes through [`chansondufenua::log`], so the boot sequence
+//! and the per-request access log share one format and one `RUST_LOG` filter.
+//! Nothing is written to stderr except a panic: a healthy process has one story,
+//! and it is on stdout, where `journalctl` finds it with no environment set.
 
 use chansondufenua::db::{self, Db, SongOrder};
+use chansondufenua::log;
 
 #[tokio::main]
 async fn main() {
-    let db = bootstrap_database().await;
-    report(&db).await;
+    log::init();
 
-    topcoat::start(chansondufenua::router(db)).await.unwrap();
+    let url = database_url();
+    let db = bootstrap_database(&url).await;
+    let (songs, artists) = counts(&db).await;
+
+    log::info(format_args!(
+        "boot version={} database={} migrations={} songs={} artists={}",
+        env!("CARGO_PKG_VERSION"),
+        url,
+        db::migration_count(),
+        songs,
+        artists,
+    ));
+
+    let listener = listen().await;
+    log::info(format_args!(
+        "listening addr={}",
+        listener
+            .local_addr()
+            .expect("a bound listener has a local address")
+    ));
+
+    topcoat::serve(listener, chansondufenua::router(db))
+        .await
+        .expect("serving");
 }
 
-/// Open (and migrate) the database described by `DATABASE_URL`.
+/// The database to open: `DATABASE_URL`, or the application's own default.
+fn database_url() -> String {
+    std::env::var("DATABASE_URL").unwrap_or_else(|_| db::DEFAULT_URL.to_owned())
+}
+
+/// Open (and migrate) the database.
 ///
 /// Failing loudly is right here: a renderer without its database serves 500s,
 /// and a process that refuses to start is far easier to notice than one that
 /// boots and lies.
-async fn bootstrap_database() -> Db {
-    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| db::DEFAULT_URL.to_owned());
-    Db::open(&url)
+async fn bootstrap_database(url: &str) -> Db {
+    Db::open(url)
         .await
         .unwrap_or_else(|error| panic!("cannot open database {url}: {error}"))
 }
 
-/// Say what the database holds, before the first request is served.
+/// What the database holds, for the boot event.
 ///
-/// Two counts on stderr rather than a health endpoint. A fresh clone serves an
-/// empty site, and `0 songs, 0 artists` on boot is the quickest way to notice
-/// that the data was never imported — much quicker than reading the empty page.
-async fn report(db: &Db) {
+/// Two counts, so a fresh clone that was never imported says `0 songs, 0
+/// artists` on the first line it ever prints — much quicker to notice than an
+/// empty page, and it survives the deployment where nobody watches the site.
+async fn counts(db: &Db) -> (usize, usize) {
     let songs = db::songs(db.pool(), SongOrder::Newest, None)
         .await
         .expect("reading songs");
     let artists = db::artists(db.pool()).await.expect("reading artists");
-    eprintln!(
-        "chansondufenua v{} — {} songs, {} artists",
-        env!("CARGO_PKG_VERSION"),
-        songs.len(),
-        artists.len()
-    );
+
+    (songs.len(), artists.len())
+}
+
+/// Bind the socket, so the log can name the address the OS actually gave us.
+///
+/// `topcoat::start` would read `HOST`/`PORT` and bind for us, but it reports no
+/// address — and with `PORT=0` the address it binds is not the one that was
+/// asked for. Binding here keeps the framework's two variables and its defaults
+/// (`127.0.0.1:3000`) and lets the `listening` line be evidence rather than a
+/// restatement of the request: it is printed only once the socket is real, so
+/// its absence is a failure and not a missing log line.
+async fn listen() -> tokio::net::TcpListener {
+    let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_owned());
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_owned());
+    let port: u16 = port
+        .parse()
+        .unwrap_or_else(|error| panic!("PORT must be a port number, not {port:?}: {error}"));
+
+    tokio::net::TcpListener::bind((host.as_str(), port))
+        .await
+        .unwrap_or_else(|error| panic!("cannot bind {host}:{port}: {error}"))
 }

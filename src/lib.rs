@@ -18,6 +18,7 @@
 pub mod db;
 pub mod domain;
 pub mod i18n;
+pub mod log;
 pub mod pages;
 pub mod routes;
 pub mod state;
@@ -52,14 +53,18 @@ use crate::routes::negotiation;
 /// one back when a visitor asks for a language by name — without the layer,
 /// `cookies(cx)` panics rather than quietly returning nothing.
 ///
-/// `.layer(...)` registers the one layer the site has, and it is registered by
-/// hand rather than discovered. `#[layer]` always carries a path; this one is
-/// *pathless* on purpose, because it has to see a request before the router has
-/// matched it — it is what answers `Accept: text/markdown` with a Markdown
-/// document instead of the page, and what puts the `Link` headers on the HTML
-/// responses it passes through. See [`routes::negotiation`]. It is registered
-/// rather than left out because a site that advertises a Markdown form has to
-/// serve one.
+/// `.layer(...)` registers the two layers the site has, by hand rather than
+/// discovered. `#[layer]` always carries a path; both of these are *pathless* on
+/// purpose, and neither is a route:
+///
+/// * [`negotiation::Negotiation`] answers `Accept: text/markdown` with a Markdown
+///   document instead of the page, and puts the `Link` headers on the HTML
+///   responses it passes through. Registered because a site that advertises a
+///   Markdown form has to serve one.
+/// * [`log::AccessLog`] writes one access line per request. Registered *after*
+///   the negotiator, and that ordering is the point — among layers sharing a
+///   path the later one runs first, so the log sits outside the negotiation and
+///   can report which of the three representations was actually served.
 pub fn router(db: Db) -> Router {
     Router::builder()
         .discover()
@@ -67,5 +72,6 @@ pub fn router(db: Db) -> Router {
         .assets(AssetBundle::load().unwrap())
         .app_context(db)
         .layer(negotiation::Negotiation)
+        .layer(log::AccessLog)
         .build()
 }

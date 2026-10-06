@@ -64,6 +64,7 @@ use serde::Deserialize;
 use crate::db::{self, DbError};
 use crate::domain::{AppError, Artist, sanitise_lyrics};
 use crate::i18n::{self, Key};
+use crate::log;
 use crate::state;
 use crate::ui::theme;
 
@@ -147,7 +148,11 @@ pub async fn editor(cx: &Cx, body: Body) -> Result<impl View> {
                 // The reason is deliberately not shown. `Song::validate` writes
                 // it for a log line (`expected 100..=6000 characters, got 42`),
                 // and the page names the two fields a person can fix instead.
-                eprintln!("create-song rejected: {cause}");
+                //
+                // To the journal, not to the response: the access layer logs the
+                // `400`, and this line is the *why* behind it — which no status
+                // code carries.
+                log::warn(format_args!("create-song rejected: {cause}"));
                 input = posted;
                 rejected = true;
             }

@@ -73,6 +73,17 @@ pub type DbResult<T> = Result<T, DbError>;
 /// binary self-contained: a deployment is one executable plus the SQLite file.
 static MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
+/// How many migrations this binary embeds — and, once [`Db::open`] has returned,
+/// how many are applied: `open` runs all of them or fails before it hands back a
+/// handle, so the two are the same number by the time anyone asks.
+///
+/// Reported at boot (`src/main.rs`), because "the schema is three migrations
+/// behind what the binary expects" is the kind of thing that should be visible in
+/// the journal rather than inferred from a failed query.
+pub fn migration_count() -> usize {
+    MIGRATIONS.iter().count()
+}
+
 /// A handle to the database.
 ///
 /// `Clone` because it is just a pool handle — cloning is how it gets into

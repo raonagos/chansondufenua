@@ -234,6 +234,7 @@ dependencies = [
  "chrono",
  "epaint_default_fonts",
  "fontdue",
+ "http-body",
  "png",
  "regex-lite",
  "serde",
