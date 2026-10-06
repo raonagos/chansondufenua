@@ -106,7 +106,12 @@ pub(crate) struct SongJson {
     title: String,
     /// Every credited artist's full name, in credit order.
     artists: Vec<String>,
-    /// The song's canonical URL, on the canonical host.
+    /// The song page's address, on the canonical host.
+    ///
+    /// The language-neutral one: the slug with no language prefix, which is what
+    /// `x-default` names and what the bare URL serves. A page's *canonical* URL
+    /// carries its language prefix ([`crate::i18n::url`]); this document is not a
+    /// page and does not pick a language.
     url: String,
     view_count: u32,
     created_at: String,
@@ -341,7 +346,7 @@ fn schemas() -> Value {
                 "id": { "type": "string", "description": "The stable key: 20 characters of [0-9a-z]. It is not the page's address — `url` is." },
                 "title": { "type": "string" },
                 "artists": { "type": "array", "items": { "type": "string" } },
-                "url": { "type": "string", "format": "uri", "description": "The song page's canonical URL: the slug form. `/himene/{id}` answers a 301 to it." },
+                "url": { "type": "string", "format": "uri", "description": "The song page's language-neutral address: the slug form, no language prefix (the page's canonical URL carries one). `/himene/{id}` answers a 301 to it." },
                 "view_count": { "type": "integer" },
                 "created_at": { "type": "string", "format": "date-time" },
                 "updated_at": { "type": "string", "format": "date-time" },
@@ -420,9 +425,11 @@ mod tests {
         );
     }
 
-    /// The URL a caller is handed is the one the page and the sitemap use, on
-    /// the canonical host. Three spellings of a song's address would be three
-    /// things to keep in step.
+    /// The URL a caller is handed is the page's language-neutral address, on the
+    /// canonical host: the slug as the page, the sitemap and `llms.txt` spell it.
+    /// Three spellings of a song's address would be three things to keep in
+    /// step; the page's own `<link rel="canonical">` is the language-prefixed
+    /// form, and this document is not a page.
     #[test]
     fn the_url_is_the_song_pages_own() {
         use crate::domain::song::SITE_URL;

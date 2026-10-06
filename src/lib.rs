@@ -26,12 +26,11 @@ pub mod ui;
 
 use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
-    cookie::RouterBuilderCookieExt,
     router::{OriginPolicy, Router, RouterBuilderDiscoverExt},
 };
 
 use crate::db::Db;
-use crate::routes::{mcp, negotiation};
+use crate::routes::{language, mcp, negotiation};
 
 /// Build the application router.
 ///
@@ -48,23 +47,31 @@ use crate::routes::{mcp, negotiation};
 /// `cargo build && topcoat asset bundle && ./target/debug/chansondufenua`.
 /// `cargo run` alone panics here.
 ///
-/// `.cookies()` registers the request-scoped cookie jar. It is what
-/// [`i18n::resolve`] reads a remembered language choice from, and what writes
-/// one back when a visitor asks for a language by name — without the layer,
-/// `cookies(cx)` panics rather than quietly returning nothing.
+/// The cookie jar is deliberately **not** registered. It used to be: v4 read a
+/// remembered language out of it on every request. The language now lives in the
+/// URL, and the one request that carries a cookie decision —
+/// [`language::LanguageLayer`]'s bare-URL redirect — runs *outside* the jar, so
+/// it reads the request's own `Cookie` header and writes `Set-Cookie` itself.
+/// Registering a jar nothing reads would be wiring kept for a decision that
+/// moved.
 ///
-/// `.layer(...)` registers the two layers the site has, by hand rather than
-/// discovered. `#[layer]` always carries a path; both of these are *pathless* on
-/// purpose, and neither is a route:
+/// `.layer(...)` registers the three layers the site has, by hand rather than
+/// discovered. `#[layer]` always carries a path; all of these are *pathless* on
+/// purpose, and none is a route:
 ///
 /// * [`negotiation::Negotiation`] answers `Accept: text/markdown` with a Markdown
 ///   document instead of the page, and puts the `Link` headers on the HTML
 ///   responses it passes through. Registered because a site that advertises a
 ///   Markdown form has to serve one.
+/// * [`language::LanguageLayer`] makes `/fr/…`, `/ty/…` and `/en/…` work: a
+///   prefixed request is handled internally at the bare path with the language
+///   carried in the request context, and an explicit choice is redirected to the
+///   prefixed URL. It runs *outside* the negotiator, so the negotiator only ever
+///   sees a bare path and the language comes from the context.
 /// * [`log::AccessLog`] writes one access line per request. Registered *after*
-///   the negotiator, and that ordering is the point — among layers sharing a
-///   path the later one runs first, so the log sits outside the negotiation and
-///   can report which of the three representations was actually served.
+///   the other two, and that ordering is the point — among layers sharing a path
+///   the later one runs first, so the log sits outside the language rewrite and
+///   reports the URL the reader asked for, once, with the final status.
 ///
 /// `.origin_policy(...)` keeps the default (state-changing browser requests from
 /// other origins are refused) and exempts [`mcp::PATH`]. A browser-based MCP
@@ -74,11 +81,11 @@ use crate::routes::{mcp, negotiation};
 pub fn router(db: Db) -> Router {
     Router::builder()
         .discover()
-        .cookies()
         .assets(AssetBundle::load().unwrap())
         .app_context(db)
         .origin_policy(OriginPolicy::new().exempt_paths([mcp::PATH]))
         .layer(negotiation::Negotiation)
+        .layer(language::LanguageLayer)
         .layer(log::AccessLog)
         .build()
 }

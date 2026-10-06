@@ -128,8 +128,13 @@ pub async fn songs(cx: &Cx) -> Result<impl View> {
 #[component]
 pub async fn song_row(cx: &Cx, song: Song) -> Result<impl View> {
     // The route's own parameter, so `/himene/` is spelled in one file: the index
-    // and the home page both link through `pages::song`'s `#[page]` path.
-    let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
+    // and the home page both link through `pages::song`'s `#[page]` path. The
+    // resolved address is then put through the request's language, so a reader
+    // on `/ty/himene` stays in Tahitian when they open a song.
+    let url = i18n::link(
+        cx,
+        &href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx),
+    );
     let title = song.get_title();
     let artists = song
         .get_artists()

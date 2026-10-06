@@ -171,7 +171,12 @@ impl Song {
         format!("/himene/{}", self.get_segment())
     }
 
-    /// The song's canonical URL.
+    /// The song's URL with no language prefix — the `x-default` form of it.
+    ///
+    /// Not what a page publishes: a canonical URL carries its language's prefix
+    /// ([`crate::i18n::url`]). This is kept for the places that describe the URL
+    /// *space* rather than a response — a test comparing two spellings, or a
+    /// redirect target that the negotiation layer then prefixes.
     pub fn get_url(&self) -> String {
         format!("{SITE_URL}{}", self.get_path())
     }
@@ -295,7 +300,13 @@ impl Song {
     }
 
     /// Convert the song into schema.org structure data markup.
-    pub fn to_jsonld(&self) -> String {
+    ///
+    /// `url` is the canonical URL of the page this markup describes — the caller
+    /// decides it, because the same song is served at a URL per language and
+    /// only the request knows which one this is. Structure data that named a
+    /// different address from the page's `<link rel="canonical">` would be two
+    /// competing canonicals in one `<head>`.
+    pub fn to_jsonld(&self, url: &str) -> String {
         use serde_json::json;
 
         let lyrics = json!({
@@ -314,8 +325,6 @@ impl Song {
             })
             .collect::<Vec<_>>();
 
-        let url = self.get_url();
-
         let schema_music = json!({
             "@context": "https://schema.org/",
             "@type": "MusicComposition",
@@ -330,7 +339,11 @@ impl Song {
     }
 
     /// Everything the page needs to fill `<head>`.
-    pub fn get_meta_data(&self) -> MetaSongData {
+    ///
+    /// `url` is the canonical URL of the page, as [`Song::to_jsonld`] takes it:
+    /// `og:url` and the structure data have to name the address the page is
+    /// published at in the language it is being served in.
+    pub fn get_meta_data(&self, url: &str) -> MetaSongData {
         let mut page_title = "Chanson du fenua".to_owned();
 
         let artists_name = self
@@ -356,7 +369,7 @@ impl Song {
         let meta_description = description.clone();
         let meta_og_description = description;
 
-        let meta_og_url = self.get_url();
+        let meta_og_url = url.to_owned();
         let uat = self.get_uat_timestamp();
         // The two card URLs stay keyed by `id`. They are not addresses of a
         // document — they are the cache key of a PNG, asked for by this page and
@@ -366,7 +379,7 @@ impl Song {
         let meta_img_url_og = format!("{SITE_URL}/drive/genog/{uat}/himene/{}", self.id);
         let meta_img_url_tw = format!("{SITE_URL}/drive/gentw/{uat}/himene/{}", self.id);
         let meta_og_img_alt = format!("Lyrics for {}", page_title);
-        let meta_jsonld = self.to_jsonld();
+        let meta_jsonld = self.to_jsonld(url);
 
         MetaSongData {
             page_title,
@@ -937,7 +950,7 @@ mod tests {
     fn song_metadata_without_artist() {
         let song = song_with("Song Lyrics");
 
-        let meta_data = song.get_meta_data();
+        let meta_data = song.get_meta_data(&song.get_url());
         assert_eq!(meta_data.page_title, "Song Title | Chanson du fenua");
         assert_eq!(
             meta_data.meta_description,
@@ -966,7 +979,7 @@ mod tests {
             Utc::now(),
         );
 
-        let meta_data = song.get_meta_data();
+        let meta_data = song.get_meta_data(&song.get_url());
         assert_eq!(
             meta_data.page_title,
             "Song Title - Artist Name | Chanson du fenua"
@@ -999,7 +1012,7 @@ mod tests {
     #[test]
     fn the_description_leads_with_the_title_and_fits_a_snippet() {
         let song = song_with(REAL_LYRICS);
-        let meta = song.get_meta_data();
+        let meta = song.get_meta_data(&song.get_url());
 
         assert!(
             meta.meta_description.starts_with("Song Title"),
@@ -1035,7 +1048,7 @@ mod tests {
             ));
         }
 
-        let meta = song.get_meta_data();
+        let meta = song.get_meta_data(&song.get_url());
         assert!(
             meta.meta_description
                 .contains("paroles et accords de 2B Brothers Tahiti, T'Angelo"),
@@ -1061,7 +1074,7 @@ mod tests {
             Utc::now(),
         );
 
-        let description = song.get_meta_data().meta_description;
+        let description = song.get_meta_data(&song.get_url()).meta_description;
         assert_eq!(description.chars().count(), DESCRIPTION_MAX);
         assert!(description.ends_with(", à retrouver sur Chanson du fenua."));
         assert!(description.contains('…'));
@@ -1071,7 +1084,8 @@ mod tests {
     #[test]
     fn jsonld_is_a_musiccomposition_with_the_clean_text() {
         let song = song_with("<div>Line and more</div>");
-        let jsonld: serde_json::Value = serde_json::from_str(&song.to_jsonld()).unwrap();
+        let jsonld: serde_json::Value =
+            serde_json::from_str(&song.to_jsonld(&song.get_url())).unwrap();
 
         assert_eq!(jsonld["@type"], "MusicComposition");
         assert_eq!(jsonld["name"], "Song Title");
@@ -1109,7 +1123,8 @@ mod tests {
         let mut song = song_with("Song Lyrics");
         song.artists.push(artist);
 
-        let jsonld: serde_json::Value = serde_json::from_str(&song.to_jsonld()).unwrap();
+        let jsonld: serde_json::Value =
+            serde_json::from_str(&song.to_jsonld(&song.get_url())).unwrap();
         assert_eq!(jsonld["composer"][0]["name"], "2B Brothers Tahiti");
     }
 

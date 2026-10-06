@@ -18,6 +18,7 @@
 pub mod api;
 pub mod card;
 pub mod catalog;
+pub mod language;
 pub mod llms;
 pub mod mcp;
 pub mod negotiation;

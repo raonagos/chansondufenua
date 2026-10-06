@@ -169,6 +169,11 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
     let latest = db::songs(pool, SongOrder::Newest, Some(ROWS)).await?;
     let most_viewed = db::songs(pool, SongOrder::MostViewed, Some(ROWS)).await?;
     let songs_link = href!(songs::songs);
+    // The chrome's links carry the request's language: a reader on `/ty` who
+    // clicks "Découvrir les chansons" lands on `/ty/himene`, not on the French
+    // index by a longer road.
+    let songs_href = i18n::link(cx, &songs_link.resolve(cx));
+    let editor_href = i18n::link(cx, crate::pages::editor::PATH);
 
     Ok(view! {
         <div class=(theme::PAGE)>
@@ -176,7 +181,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
                 <h1 class=(theme::HERO_TITLE)>(copy::HERO_TITLE)</h1>
                 <p class=(theme::HERO_SUBTITLE)>(copy::HERO_SUBTITLE)</p>
                 <a
-                    href=(songs_link)
+                    href=(songs_href)
                     class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))
                 >
                     (i18n::text(lang, Key::HomeDiscover))
@@ -240,7 +245,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
                     // create-song page. That page arrives in step 9; until then
                     // the layout's branded 404 catches the gap.
                     <a
-                        href="/himene/api"
+                        href=(editor_href)
                         class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))
                     >
                         (i18n::text(lang, Key::HomeStart))
@@ -266,9 +271,13 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
 /// optional for that: resolving a parameterised `href` needs the request.
 #[component]
 pub async fn song_row(cx: &Cx, song: Song, #[default] inverse: bool) -> Result<impl View> {
-    // The address of the sheet, from the route's own parameter: the slug, or the
-    // id for a song whose title earned no slug.
-    let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
+    // The address of the sheet, from the route's own parameter — the slug, or the
+    // id for a song whose title earned no slug — put through the request's
+    // language, so the three list surfaces link within their own language.
+    let url = i18n::link(
+        cx,
+        &href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx),
+    );
     let title = song.get_title();
     let lyrics = song.clean_lyrics();
 

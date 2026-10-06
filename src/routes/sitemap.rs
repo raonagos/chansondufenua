@@ -23,6 +23,16 @@
 //!
 //! `/aepa` is not listed. It is the home page under a second URL and its own
 //! canonical link says so; a sitemap lists canonical URLs.
+//!
+//! **"Canonical" means the language-prefixed form.** A page's canonical URL is
+//! `/fr/…`, `/ty/…` or `/en/…` ([`crate::i18n::url`]); the bare URL is the
+//! language-neutral `x-default` that serves the default and names the prefixed
+//! form. A sitemap that listed the bare URL would hand a crawler a URL whose own
+//! `<link rel="canonical">` pointed somewhere else — the one thing this module's
+//! `/aepa` rule exists to avoid. So both sitemaps list
+//! [`Lang::DEFAULT`](crate::i18n::Lang::DEFAULT)'s addresses; the other two
+//! languages are discovered from each page's `hreflang` cluster, which is what
+//! that cluster is for.
 
 use topcoat::{
     Result,
@@ -34,8 +44,8 @@ use topcoat::{
 };
 
 use crate::db::{SongOrder, songs};
-use crate::domain::song::SITE_URL;
-use crate::pages::songs as index;
+use crate::i18n::{self, Lang};
+use crate::pages::{home, songs as index};
 use crate::state;
 
 /// The fixed-pages sitemap.
@@ -58,8 +68,8 @@ async fn fixed_pages(cx: &Cx) -> Result<Sitemap> {
     let updated = newest_update(cx).await?;
 
     Ok(Sitemap::new()
-        .url(entry(SITE_URL.to_owned(), updated).priority(1.0))
-        .url(entry(format!("{SITE_URL}{}", index::PATH), updated)))
+        .url(entry(i18n::url(Lang::DEFAULT, home::PATH), updated).priority(1.0))
+        .url(entry(i18n::url(Lang::DEFAULT, index::PATH), updated)))
 }
 
 /// `GET /himene/sitemap.xml` — every published song.
@@ -76,9 +86,12 @@ async fn song_pages(cx: &Cx) -> Result<Sitemap> {
     let listed = songs(state::db(cx).pool(), SongOrder::Newest, None).await?;
 
     Ok(Sitemap::new().urls(listed.iter().map(|song| {
-        entry(song.get_url(), Some(song.get_updated_at()))
-            .change_frequency(ChangeFrequency::Weekly)
-            .priority(0.9)
+        entry(
+            i18n::url(Lang::DEFAULT, &song.get_path()),
+            Some(song.get_updated_at()),
+        )
+        .change_frequency(ChangeFrequency::Weekly)
+        .priority(0.9)
     })))
 }
 

@@ -146,7 +146,12 @@ pub async fn editor(cx: &Cx, body: Body) -> Result<impl View> {
             // author lands on the URL the song is published at rather than being
             // sent through a second redirect from the id.
             Ok(song) => {
-                let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
+                // The author's own language stays with them: a submission from
+                // `/en/himene/api` lands on `/en/himene/{slug}`.
+                let url = i18n::link(
+                    cx,
+                    &href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx),
+                );
                 return Err(see_other(url).into());
             }
             Err(DbError::Domain(cause @ AppError::Invalid { .. })) => {
@@ -214,7 +219,7 @@ pub async fn form_body(
                 </p>
             }
 
-            <form method="post" action=(PATH) class=(theme::FORM_PANEL)>
+            <form method="post" action=(i18n::link(cx, PATH)) class=(theme::FORM_PANEL)>
                 <div class=(theme::FORM_FIELD)>
                     <label for="song-title" class=(theme::FORM_LABEL)>
                         (i18n::text(lang, Key::IndexColumnTitle))

@@ -118,7 +118,7 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                     }
                 </div>
                 <a
-                    href="/himene/api"
+                    href=(i18n::link(cx, crate::pages::editor::PATH))
                     class=(class!(theme::BUTTON_SMALL, theme::FOCUS))
                 >
                     (i18n::text(lang, Key::AddLyrics))

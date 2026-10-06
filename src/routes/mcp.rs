@@ -47,6 +47,7 @@ use topcoat::{
 
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
+use crate::i18n::Lang;
 use crate::log;
 use crate::routes::api::{SongJson, VERSION};
 use crate::routes::negotiation::song_document;
@@ -369,7 +370,7 @@ fn tools() -> Value {
                 "name": LIST_TOOL,
                 "title": "List songs",
                 "description": "One page of the published catalogue, newest first. \
-                    Each entry carries the id, title, credited artists, canonical URL \
+                    Each entry carries the id, title, credited artists, URL \
                     and view count. Pass an id to get_song to read the lyrics.",
                 "inputSchema": {
                     "type": "object",
@@ -537,7 +538,7 @@ async fn get_song(cx: &Cx, arguments: &Value) -> std::result::Result<Value, RpcE
         .filter(Song::is_published);
 
     Ok(match found {
-        Some(sheet) => text_result(song_document(&sheet)),
+        Some(sheet) => text_result(song_document(&sheet, Lang::DEFAULT)),
         None => error_result(format!(
             "No published song with id or slug {id:?}. Use {LIST_TOOL} to find one."
         )),

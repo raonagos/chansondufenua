@@ -25,6 +25,13 @@
 //! page with two representations names the one a given response is not — so a
 //! header promising a variant this layer does not serve cannot be written.
 //!
+//! **The language is the request's, and this layer now knows it.** The Markdown
+//! form used to be written in the default language, because the language came
+//! from a cookie the jar holds *inside* this layer; `routes::language` carries
+//! it in the request context instead, and `i18n::resolve` reads it. So the
+//! Markdown and HTML forms of one address are written in one language, which is
+//! what they were always supposed to be.
+//!
 //! **Why this is a layer and not a page.** A `#[page]` renders a view, and every
 //! layout whose path is a prefix of the page's wraps it; the site's layout sits
 //! at `/`. So a page *cannot* return a document that is not the HTML chrome — and
@@ -92,18 +99,6 @@ const MARKDOWN: &str = "text/markdown; charset=utf-8";
 /// name a type rather than set one: [`links`]' `alternate` values.
 const MARKDOWN_TYPE: &str = "text/markdown";
 
-/// The language a Markdown document is written in.
-///
-/// The default one, always. This layer answers outside the cookie layer — the
-/// jar is installed *inside* it, so [`crate::i18n::resolve`], which reads it,
-/// would panic here — and the language the Markdown form is written in is
-/// therefore the site's default. What that costs is small and bounded: the
-/// lyrics are the content and are never translated, the front page's prose is
-/// French in every language, and the handful of labels the documents quote are
-/// chrome. The language-in-the-URL step is what closes the gap: once `/ty/…`
-/// exists, the language is a prefix of the path this layer already reads.
-const MARKDOWN_LANG: Lang = Lang::Fr;
-
 /// The song page's own prefix, and the one place this layer looks for a song.
 ///
 /// `pages::song` declares the same path with `#[page("/himene/{id}")]`. The two
@@ -132,6 +127,9 @@ impl Layer for Negotiation {
         Box::pin(async move {
             let path = uri(cx).path();
             let wanted = header(cx, header::ACCEPT);
+            // The language the request named in its URL, carried here by
+            // `routes::language`; the default when it named none.
+            let lang = i18n::resolve(cx);
 
             // The song this URL names, if it names one, resolved once for all
             // three decisions below: whether the URL has to move, whether the
@@ -152,13 +150,16 @@ impl Layer for Negotiation {
             if let Some(found) = &addressed
                 && !found.is_canonical()
             {
-                return Ok(moved_permanently(&found.song().get_path()));
+                // The language stays: a reader on `/ty/himene/{id}` is sent to
+                // that song's address *in Tahitian*, not to the French one.
+                let target = i18n::at(lang, &found.song().get_path());
+                return Ok(moved_permanently(&target));
             }
 
             if prefers_markdown(wanted.as_deref())
-                && let Some(text) = document(cx, path, addressed.as_ref()).await?
+                && let Some(text) = document(cx, lang, path, addressed.as_ref()).await?
             {
-                queue_links(cx, path, true, addressed.as_ref())?;
+                queue_links(cx, path, true, lang, addressed.as_ref())?;
                 return markdown(cx, text);
             }
 
@@ -168,7 +169,7 @@ impl Layer for Negotiation {
             // `robots.txt` and the served stylesheet all pass through here too,
             // and none of them is described by them.
             if is_html(&response) {
-                queue_links(cx, path, false, addressed.as_ref())?;
+                queue_links(cx, path, false, lang, addressed.as_ref())?;
             }
 
             Ok(response)
@@ -248,22 +249,23 @@ pub(crate) fn song_segment(path: &str) -> Option<&str> {
 /// would 404 the Markdown form of every song on the site.
 async fn document(
     cx: &Cx,
+    lang: Lang,
     path: &str,
     addressed: Option<&db::Addressed>,
 ) -> Result<Option<String>> {
     if song_segment(path).is_some() {
-        return Ok(addressed.map(|found| song_document(found.song())));
+        return Ok(addressed.map(|found| song_document(found.song(), lang)));
     }
 
     // `/aepa` is the front page under a second URL, and the same document:
     // everything but the canonical URL is identical, and the document names the
     // canonical host either way.
     if path == HOME || path == AEPA {
-        return home_document(cx).await.map(Some);
+        return home_document(cx, lang).await.map(Some);
     }
 
     if path == songs::PATH {
-        return index_document(cx).await.map(Some);
+        return index_document(cx, lang).await.map(Some);
     }
 
     Ok(None)
@@ -332,7 +334,10 @@ fn is_html(response: &Response) -> bool {
 /// `pub(crate)` because the MCP server (`src/routes/mcp.rs`) answers `get_song`
 /// with exactly this document: an agent reading a song over MCP and an agent
 /// reading it with `Accept: text/markdown` must not get two different sheets.
-pub(crate) fn song_document(sheet: &Song) -> String {
+/// MCP has no language — it is not a page — so it asks for
+/// [`Lang::DEFAULT`](crate::i18n::Lang::DEFAULT)'s document, which is what the
+/// bare song URL serves too.
+pub(crate) fn song_document(sheet: &Song, lang: Lang) -> String {
     let artists = sheet
         .get_artists()
         .iter()
@@ -345,7 +350,10 @@ pub(crate) fn song_document(sheet: &Song) -> String {
         out.push_str(&format!("_{artists}_\n\n"));
     }
     out.push_str(&sheet.lyrics_markdown());
-    out.push_str(&format!("\n\nSource: {}\n", sheet.get_url()));
+    out.push_str(&format!(
+        "\n\nSource: {}\n",
+        i18n::url(lang, &sheet.get_path())
+    ));
 
     out
 }
@@ -364,7 +372,7 @@ pub(crate) fn song_document(sheet: &Song) -> String {
 /// make this an anthology rather than a front page. Each title is a link, and
 /// every one of those links has its own Markdown form with the whole lyric in
 /// it — which is where a reader who wants the words is going anyway.
-async fn home_document(cx: &Cx) -> Result<String> {
+async fn home_document(cx: &Cx, lang: Lang) -> Result<String> {
     let pool = state::db(cx).pool();
     let latest = db::songs(pool, SongOrder::Newest, Some(home::ROWS)).await?;
     let most_viewed = db::songs(pool, SongOrder::MostViewed, Some(home::ROWS)).await?;
@@ -372,9 +380,9 @@ async fn home_document(cx: &Cx) -> Result<String> {
     let mut out = format!("# {}\n\n", home::copy::HERO_TITLE);
     out.push_str(&format!("_{}_\n\n", home::copy::HERO_SUBTITLE));
     out.push_str(&format!(
-        "[{}]({SITE_URL}{})\n\n",
-        i18n::text(MARKDOWN_LANG, Key::HomeDiscover),
-        songs::PATH
+        "[{}]({})\n\n",
+        i18n::text(lang, Key::HomeDiscover),
+        i18n::url(lang, songs::PATH)
     ));
 
     for (title, text) in home::copy::CARDS {
@@ -383,20 +391,20 @@ async fn home_document(cx: &Cx) -> Result<String> {
 
     out.push_str(&format!("{}\n\n", home::copy::SYNOPSIS));
     out.push_str(&format!("## {}\n\n", home::copy::TABLE_LATEST));
-    out.push_str(&song_list(&latest));
+    out.push_str(&song_list(&latest, lang));
     out.push_str(&format!("\n\n## {}\n\n", home::copy::TABLE_MOST_VIEWED));
-    out.push_str(&song_list(&most_viewed));
+    out.push_str(&song_list(&most_viewed, lang));
     out.push_str(&format!("\n\n## {}\n\n", home::copy::FOOT_TITLE));
     out.push_str(&format!("{}\n\n", home::copy::FOOT_TEXT));
     // The two closing buttons. The first is a brand name and is not translated;
     // the second is the create-song page's label.
     out.push_str(&format!(
-        "[{}](https://facebook.com/chansondufenua) · [{}]({SITE_URL}{})\n",
+        "[{}](https://facebook.com/chansondufenua) · [{}]({})\n",
         home::copy::FOOT_FACEBOOK,
-        i18n::text(MARKDOWN_LANG, Key::HomeStart),
-        crate::pages::editor::PATH
+        i18n::text(lang, Key::HomeStart),
+        i18n::url(lang, crate::pages::editor::PATH)
     ));
-    out.push_str(&format!("\nSource: {SITE_URL}\n"));
+    out.push_str(&format!("\nSource: {}\n", i18n::url(lang, home::PATH)));
 
     Ok(out)
 }
@@ -407,17 +415,17 @@ async fn home_document(cx: &Cx) -> Result<String> {
 /// and from the same unbounded read: an index that promises every song has to
 /// list every song in both of its representations. The heading is chrome, and so
 /// is the line an empty catalogue gets.
-async fn index_document(cx: &Cx) -> Result<String> {
+async fn index_document(cx: &Cx, lang: Lang) -> Result<String> {
     let listed = db::songs(state::db(cx).pool(), SongOrder::Newest, None).await?;
 
-    let mut out = format!("# {}\n\n", i18n::text(MARKDOWN_LANG, Key::IndexTitle));
+    let mut out = format!("# {}\n\n", i18n::text(lang, Key::IndexTitle));
     if listed.is_empty() {
-        out.push_str(&format!("{}\n", i18n::text(MARKDOWN_LANG, Key::IndexEmpty)));
+        out.push_str(&format!("{}\n", i18n::text(lang, Key::IndexEmpty)));
     } else {
-        out.push_str(&song_list(&listed));
+        out.push_str(&song_list(&listed, lang));
         out.push('\n');
     }
-    out.push_str(&format!("\nSource: {SITE_URL}{}\n", songs::PATH));
+    out.push_str(&format!("\nSource: {}\n", i18n::url(lang, songs::PATH)));
 
     Ok(out)
 }
@@ -428,7 +436,7 @@ async fn index_document(cx: &Cx) -> Result<String> {
 /// site publishes is: a Markdown document is the thing most likely to be quoted
 /// away from the response it arrived on, and a root-relative link in an agent's
 /// context resolves against nothing.
-fn song_list(listed: &[Song]) -> String {
+fn song_list(listed: &[Song], lang: Lang) -> String {
     listed
         .iter()
         .map(|song| {
@@ -439,7 +447,7 @@ fn song_list(listed: &[Song]) -> String {
                 .collect::<Vec<String>>()
                 .join(", ");
             let title = link_text(&song.get_title());
-            let url = song.get_url();
+            let url = i18n::url(lang, &song.get_path());
 
             if artists.is_empty() {
                 format!("- [{title}]({url})")
@@ -528,9 +536,10 @@ fn queue_links(
     cx: &Cx,
     path: &str,
     markdown: bool,
+    lang: Lang,
     addressed: Option<&db::Addressed>,
 ) -> Result<()> {
-    for value in links(path, markdown, addressed) {
+    for value in links(path, markdown, lang, addressed) {
         response_headers(cx).append(header::LINK, header::HeaderValue::from_str(&value)?);
     }
 
@@ -547,6 +556,13 @@ fn queue_links(
 /// `addressed` is the song the path names, already resolved by the caller — a
 /// `Link` header is a promise about a row, and this function has no business
 /// reading one of its own.
+///
+/// `lang` is the language the response is being written in, carried by
+/// [`crate::routes::language`] in the request context. The URLs a `Link` header
+/// promises are the page's canonical, prefixed form, exactly the URL its
+/// `<link rel="canonical">` names — a header pointing at a second spelling of
+/// the same page would be a promise of the duplicate this layer exists to
+/// prevent.
 ///
 /// * Every document names the sitemap.
 /// * Every page with a Markdown form names the other of its two representations
@@ -570,7 +586,12 @@ fn queue_links(
 ///   and both are therefore on `/` alone, like the card.
 /// * Nothing else: nothing else on this site has a machine-readable form that a
 ///   `Link` to something absent would describe.
-fn links(path: &str, served_markdown: bool, addressed: Option<&db::Addressed>) -> Vec<String> {
+fn links(
+    path: &str,
+    served_markdown: bool,
+    lang: Lang,
+    addressed: Option<&db::Addressed>,
+) -> Vec<String> {
     let sitemap_link = format!("<{SITE_URL}{}>; rel=\"sitemap\"", sitemap::PATH);
 
     // The representation a caller did not get. `alternate` is the registered
@@ -593,7 +614,7 @@ fn links(path: &str, served_markdown: bool, addressed: Option<&db::Addressed>) -
                 api::PATH,
                 sheet.get_id()
             ),
-            alternate(sheet.get_url()),
+            alternate(i18n::url(lang, &sheet.get_path())),
         ];
     }
 
@@ -601,15 +622,15 @@ fn links(path: &str, served_markdown: bool, addressed: Option<&db::Addressed>) -
         songs::PATH => vec![
             sitemap_link,
             format!("<{SITE_URL}{}>; rel=\"describedby\"", api::PATH),
-            alternate(format!("{SITE_URL}{}", songs::PATH)),
+            alternate(i18n::url(lang, songs::PATH)),
         ],
         // `/aepa` is the front page under a second URL, so it has the same two
         // representations; it does not repeat the card link, which describes
         // the site and is promised once, on `/`.
-        AEPA => vec![sitemap_link, alternate(format!("{SITE_URL}{AEPA}"))],
+        AEPA => vec![sitemap_link, alternate(i18n::url(lang, AEPA))],
         HOME => vec![
             sitemap_link,
-            alternate(format!("{SITE_URL}{HOME}")),
+            alternate(i18n::url(lang, HOME)),
             card_link(),
             catalog_link(),
             describedby_link(),
@@ -743,7 +764,7 @@ mod tests {
             chrono::Utc::now(),
         );
         let addressed = db::Addressed::new(sheet, true);
-        let song = links("/himene/te-here", false, Some(&addressed));
+        let song = links("/himene/te-here", false, Lang::Fr, Some(&addressed));
         assert_eq!(song.len(), 3);
         assert_eq!(
             song[0],
@@ -758,21 +779,24 @@ mod tests {
         );
         assert_eq!(
             song[2],
-            format!("<{SITE_URL}/himene/te-here>; rel=\"alternate\"; type=\"text/markdown\"")
+            format!(
+                "<{}>; rel=\"alternate\"; type=\"text/markdown\"",
+                i18n::url(Lang::Fr, "/himene/te-here")
+            )
         );
 
         // Serving Markdown flips the alternate to the HTML document, because the
         // other representation is now the one the caller did not get.
-        let as_markdown = links("/himene/te-here", true, Some(&addressed));
+        let as_markdown = links("/himene/te-here", true, Lang::Fr, Some(&addressed));
         assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
         assert_eq!(as_markdown[0], song[0]);
 
         // A song URL that names no published song promises nothing: a draft is
         // not served, so there is nothing to describe.
-        assert_eq!(links("/himene/te-here", false, None).len(), 1);
+        assert_eq!(links("/himene/te-here", false, Lang::Fr, None).len(), 1);
 
         // The index names the catalogue and its own Markdown form.
-        let index = links(songs::PATH, false, None);
+        let index = links(songs::PATH, false, Lang::Fr, None);
         assert_eq!(index.len(), 3);
         assert_eq!(index[0], song[0]);
         assert_eq!(
@@ -782,8 +806,8 @@ mod tests {
         assert_eq!(
             index[2],
             format!(
-                "<{SITE_URL}{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
-                songs::PATH
+                "<{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
+                i18n::url(Lang::Fr, songs::PATH)
             )
         );
 
@@ -793,12 +817,15 @@ mod tests {
         // is the same page under another URL names its Markdown form but does not
         // repeat the site-level links, because they describe the site and one
         // link on one URL is the whole promise.
-        let home = links(HOME, false, None);
+        let home = links(HOME, false, Lang::Fr, None);
         assert_eq!(home.len(), 5);
         assert_eq!(home[0], song[0]);
         assert_eq!(
             home[1],
-            format!("<{SITE_URL}{HOME}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"")
+            format!(
+                "<{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
+                i18n::url(Lang::Fr, HOME)
+            )
         );
         assert_eq!(
             home[2],
@@ -827,15 +854,21 @@ mod tests {
         );
         assert_eq!(home[4], describedby_link());
 
-        let aepa = links(AEPA, false, None);
+        let aepa = links(AEPA, false, Lang::Fr, None);
         assert_eq!(aepa.len(), 2);
         assert_eq!(
             aepa[1],
-            format!("<{SITE_URL}{AEPA}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"")
+            format!(
+                "<{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
+                i18n::url(Lang::Fr, AEPA)
+            )
         );
 
         // A path with no Markdown form promises nothing but the sitemap.
-        assert_eq!(links(crate::pages::editor::PATH, false, None).len(), 1);
+        assert_eq!(
+            links(crate::pages::editor::PATH, false, Lang::Fr, None).len(),
+            1
+        );
     }
 
     /// The document is Markdown a reader can use: an `# ` title, then the lyric
@@ -854,12 +887,15 @@ mod tests {
             chrono::Utc::now(),
         );
 
-        let text = song_document(&sheet);
+        let text = song_document(&sheet, Lang::Fr);
         let mut lines = text.lines();
 
         assert_eq!(lines.next(), Some("# Te here"));
         assert!(text.contains("Hina'a[Eb]ro"), "{text}");
-        assert!(text.ends_with(&format!("Source: {}\n", sheet.get_url())));
+        assert!(text.ends_with(&format!(
+            "Source: {}\n",
+            i18n::url(Lang::Fr, &sheet.get_path())
+        )));
         // No artist line for an uncredited song — the same rule the sheet keeps.
         assert!(!text.contains("\n_\n"), "{text}");
     }
@@ -908,8 +944,11 @@ mod tests {
             chrono::Utc::now(),
         );
 
-        let listed = song_list(std::slice::from_ref(&song));
-        assert_eq!(listed, format!("- [Te here]({})", song.get_url()));
+        let listed = song_list(std::slice::from_ref(&song), Lang::Fr);
+        assert_eq!(
+            listed,
+            format!("- [Te here]({})", i18n::url(Lang::Fr, &song.get_path()))
+        );
         assert!(listed.contains(SITE_URL), "{listed}");
     }
 }

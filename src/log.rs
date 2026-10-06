@@ -57,8 +57,10 @@ use std::{
 use topcoat::{
     context::Cx,
     router::{
-        Body, Layer, LayerFuture, Method, Next, Path, StatusCode, header,
-        request::{method, uri},
+        Body, Layer, LayerFuture, Method, Next, Path, StatusCode,
+        error::RewriteError,
+        header,
+        request::{method, original_uri},
         response::{IntoResponse, Response},
     },
 };
@@ -238,8 +240,14 @@ impl Layer for AccessLog {
         Box::pin(async move {
             // Both borrows live as long as `cx`, which outlives the request, so
             // the common path allocates nothing to name the request.
+            //
+            // The path is the one the reader asked for, not the one being
+            // handled: a language-prefixed request is handled internally at the
+            // bare path, and a log line naming `/himene` for a request to
+            // `/ty/himene` would be a line about the router's day, not the
+            // reader's.
             let method = method(cx);
-            let path = uri(cx).path();
+            let path = original_uri(cx).path();
             let started = Instant::now();
 
             match next.run(cx, body).await {
@@ -248,6 +256,12 @@ impl Layer for AccessLog {
                     report(method, path, status, &representation, bytes, None, started);
                     Ok(response)
                 }
+                // A rewrite is not an outcome: the router dispatches the request
+                // again at the carried path, and *that* dispatch produces the
+                // response this layer logs. Logging the rewrite would report a
+                // 500 for every prefixed page, and would report the same request
+                // twice.
+                Err(error) if error.downcast_ref::<RewriteError>().is_some() => Err(error),
                 Err(error) => {
                     let (status, representation, bytes) = error
                         .clone()

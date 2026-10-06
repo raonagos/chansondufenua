@@ -91,15 +91,18 @@ struct SocialCards {
     twitter_title: String,
     twitter_description: String,
     twitter_image: String,
-    /// `og:locale` and its alternate, for the language the page is served in.
+    /// `og:locale` and its alternates, for the language the page is served in.
     ///
     /// v3 wrote `ty_PF` and `fr_FR` as constants, Tahitian first. Step 8 makes
     /// them follow the resolved language instead: a card for a page served in
     /// French should say so, which is what `og:locale` is for. The default page
     /// therefore carries `fr_FR` where v3 carried `ty_PF`; `?lang=ty` restores
     /// v3's pair exactly.
+    ///
+    /// Three languages make it an array: every language that is not the one
+    /// served gets its own `og:locale:alternate` tag.
     locale: &'static str,
-    locale_alternate: &'static str,
+    locale_alternates: [&'static str; 2],
 }
 
 impl SocialCards {
@@ -123,7 +126,7 @@ impl SocialCards {
             twitter_description: meta.meta_og_description.clone(),
             twitter_image: meta.meta_img_url_tw.clone(),
             locale: lang.og_locale(),
-            locale_alternate: lang.other().og_locale(),
+            locale_alternates: lang.others().map(Lang::og_locale),
         }
     }
 
@@ -153,7 +156,7 @@ impl SocialCards {
             twitter_description: description.to_owned(),
             twitter_image: image,
             locale: lang.og_locale(),
-            locale_alternate: lang.other().og_locale(),
+            locale_alternates: lang.others().map(Lang::og_locale),
         }
     }
 }
@@ -204,8 +207,16 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
 }
 
 /// The `<head>` of a song page, from the song's own metadata.
+///
+/// The canonical URL is the one this response is served at: the slug, under the
+/// request's language prefix. A song's page is the same document in every
+/// language — the lyric is never translated, only the chrome around it changes —
+/// but each of the three addresses is the canonical of *that* page, and the
+/// alternates are what tie them together. The id and the retired-slug forms are
+/// not addresses at all; `routes::negotiation` has already sent them here.
 fn song_head(song: &Song, lang: Lang) -> DocumentHead {
-    let meta = song.get_meta_data();
+    let canonical = i18n::url(lang, &song.get_path());
+    let meta = song.get_meta_data(&canonical);
 
     DocumentHead {
         title: meta.page_title.clone(),
@@ -213,9 +224,8 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
         noindex: false,
         // The song's canonical URL and its `og:url` are the same thing, which is
         // what v3 emitted — and what the identity rule in `fixing-metadata`
-        // asks for. It carries no language parameter: the canonical URL is the
-        // page, and the language is a variant of it.
-        canonical: Some(meta.meta_og_url.clone()),
+        // asks for.
+        canonical: Some(canonical),
         jsonld: Some(meta.meta_jsonld.clone()),
         social: Some(SocialCards::for_song(&meta, lang)),
     }
@@ -235,6 +245,12 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
 /// condition. `/aepa` is the exception that proves the shape: it is the front
 /// page under a second URL, so it shares the description and the canonical that
 /// points home, and differs in the one field where two URLs must differ.
+///
+/// **The canonical URL carries the language prefix.** `/himene` and `/ty/himene`
+/// are one page in two languages, and the prefixed form is the one that is
+/// canonical; the bare URL is the `x-default` and says so. That is the trade the
+/// scope names explicitly: one canonical per page, and the bare URL declaring
+/// it rather than competing with it.
 fn site_head(path: &str, lang: Lang) -> DocumentHead {
     // `/` and `/aepa` are one page under two URLs. v3 declared `/aepa` the
     // duplicate, and its canonical URL carries no trailing slash — that is the
@@ -246,14 +262,14 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
             TITLE.to_owned()
         };
 
-        return page_head(title, home::copy::DESCRIPTION, SITE_URL, lang);
+        return page_head(title, home::copy::DESCRIPTION, &i18n::url(lang, HOME), lang);
     }
 
     if path == songs::PATH {
         return page_head(
             format!("{} | {TITLE}", i18n::text(lang, Key::IndexTitle)),
             songs::DESCRIPTION,
-            &format!("{SITE_URL}{}", songs::PATH),
+            &i18n::url(lang, songs::PATH),
             lang,
         );
     }
@@ -331,7 +347,10 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let head = document_head(cx, lang).await;
     let home_link = href!(home::home);
-    let path = i18n::path(cx);
+    let path = uri(cx).path();
+    // The 404's way home carries the reader's language too, and the closure
+    // below cannot borrow `cx` to build it, so it is resolved here.
+    let home_href = i18n::link(cx, &home_link.resolve(cx));
 
     Ok(view! {
         <!DOCTYPE html>
@@ -373,25 +392,25 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     true => <meta name="robots" content="noindex, follow"/>,
                     false => "",
                 }
-                // The language alternates. Every URL on this site exists in
-                // both languages, and the parameter is the only difference:
-                // so each page names all of them, itself included, which is
-                // what a `hreflang` cluster is and what tells a search engine
-                // that the two URLs are one page rather than duplicates
+                // The language alternates. Every page exists in all three
+                // languages at a prefix of its own, and the prefix is the only
+                // difference: so each page names all of them, itself included,
+                // which is what a `hreflang` cluster is and what tells a search
+                // engine that the three URLs are one page rather than duplicates
                 // competing for the same query.
                 //
                 // The URLs are origin-qualified because a search engine reads
                 // them out of context, and `x-default` points at the page with
-                // no parameter — the form a reader who has expressed no
-                // preference should land on.
+                // no prefix — the form a reader who has expressed no preference
+                // should land on, and the one Cloudflare may cache for everyone.
                 for alternate in Lang::ALL {
                     <link
                         rel="alternate"
                         hreflang=(alternate.code())
-                        href=(format!("{SITE_URL}{path}?lang={}", alternate.code()))
+                        href=(i18n::url(alternate, path))
                     />
                 }
-                <link rel="alternate" hreflang="x-default" href=(format!("{SITE_URL}{path}"))/>
+                <link rel="alternate" hreflang="x-default" href=(i18n::absolute(path))/>
                 // The social tags, only on a song page. v3 declared them on the
                 // song route, so the home page has never carried them.
                 match head.social {
@@ -400,7 +419,9 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         <meta property="fb:pages" content="109134754150923"/>
                         <meta property="og:type" content=(cards.og_type)/>
                         <meta property="og:locale" content=(cards.locale)/>
-                        <meta property="og:locale:alternate" content=(cards.locale_alternate)/>
+                        for alternate in cards.locale_alternates {
+                            <meta property="og:locale:alternate" content=(alternate)/>
+                        }
                         <meta property="og:title" content=(cards.og_title)/>
                         <meta property="og:description" content=(cards.og_description)/>
                         <meta property="og:url" content=(cards.og_url)/>
@@ -473,7 +494,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                                     <p class=(theme::LEAD)>
                                         (i18n::text(lang, Key::NotFoundBody))
                                     </p>
-                                    <a href=(home_link) class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))>
+                                    <a href=(home_href) class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))>
                                         (i18n::text(lang, Key::NotFoundCta))
                                     </a>
                                 </section>
@@ -508,11 +529,19 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
     // so both light up for it.
     let on_accueil = on_aepa || on_home;
 
+    // Every link the chrome emits is the canonical, language-prefixed form of
+    // the page: a reader on `/` who clicks "Chanson" lands on `/fr/himene`, which
+    // is the address that page is published at. `is_current` is asked of the
+    // route rather than of the URL, so the highlight survives the prefix.
+    let home_href = i18n::link(cx, &home_link.resolve(cx));
+    let aepa_href = i18n::link(cx, &aepa_link.resolve(cx));
+    let songs_href = i18n::link(cx, &songs_link.resolve(cx));
+
     Ok(view! {
         <header class=(theme::HEADER)>
             <div class=(theme::HEADER_INNER)>
                 <div>
-                    <a href=(home_link) class=(class!(theme::FOCUS))>
+                    <a href=(home_href) class=(class!(theme::FOCUS))>
                         <img
                             class=(theme::LOGO)
                             src=(assets::LOGO)
@@ -534,7 +563,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                 <nav id="navigation" class=(theme::NAV)>
                     <span class=(theme::NAV_SPACER)></span>
                     <a
-                        href=(aepa_link)
+                        href=(aepa_href)
                         aria-current=(on_accueil.then_some("page"))
                         class=(class!(
                             theme::NAV_LINK,
@@ -545,7 +574,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                         (i18n::text(lang, Key::NavHome))
                     </a>
                     <a
-                        href=(songs_link)
+                        href=(songs_href)
                         aria-current=(on_songs.then_some("page"))
                         class=(class!(
                             theme::NAV_LINK,
@@ -654,7 +683,10 @@ mod tests {
         let home = site_head(HOME, Lang::Fr);
         let aepa = site_head(AEPA_PATH, Lang::Fr);
 
-        assert_eq!(home.canonical.as_deref(), Some(SITE_URL));
+        assert_eq!(
+            home.canonical.as_deref(),
+            Some(i18n::url(Lang::Fr, HOME).as_str())
+        );
         assert_eq!(home.canonical, aepa.canonical);
         assert_eq!(home.description, aepa.description);
         assert_ne!(home.title, aepa.title);
@@ -666,8 +698,40 @@ mod tests {
     fn the_index_canonicalises_to_its_own_path() {
         let head = site_head(songs::PATH, Lang::Fr);
 
-        assert_eq!(head.canonical, Some(format!("{SITE_URL}{}", songs::PATH)));
-        assert_ne!(head.canonical, Some(SITE_URL.to_owned()));
+        assert_eq!(
+            head.canonical,
+            Some(i18n::url(Lang::Fr, songs::PATH).to_owned())
+        );
+        assert_ne!(head.canonical, Some(format!("{SITE_URL}{}", songs::PATH)));
+    }
+
+    /// **One canonical per page, and it is the prefixed URL.** The bare URL is
+    /// the `x-default`, not a second canonical, and the three languages each
+    /// name themselves.
+    #[test]
+    fn every_page_canonicalises_to_its_own_language_prefix() {
+        for lang in Lang::ALL {
+            for path in [HOME, AEPA_PATH, songs::PATH] {
+                let head = site_head(path, lang);
+                let canonical = head.canonical.expect("a canonical URL");
+
+                // `/aepa` is the front page under a second URL: it canonicalises
+                // to the front page, in the language it was served in.
+                let canonical_path = if path == AEPA_PATH { HOME } else { path };
+                assert_eq!(
+                    canonical,
+                    i18n::url(lang, canonical_path),
+                    "{path} in {}",
+                    lang.code()
+                );
+                assert!(
+                    i18n::at(lang, canonical_path).starts_with(lang.prefix()),
+                    "{path} in {}: {canonical}",
+                    lang.code()
+                );
+                assert_eq!(head.social.expect("cards").og_url, canonical);
+            }
+        }
     }
 
     /// The create-song page is the one page kept out of an index; everything else

@@ -1,4 +1,5 @@
-//! The site's two languages, and the strings in the chrome that depend on them.
+//! The site's three languages, the strings in the chrome that depend on them,
+//! and the URLs they are addressed by.
 //!
 //! Topcoat 0.10 has no localization support — it is on the project's roadmap,
 //! not in the crate — so this module is homegrown and dependency-free beyond
@@ -23,7 +24,7 @@
 //! of it, and splitting it into catalog fragments would leave both languages
 //! ungrammatical. It stays exactly as v3 wrote it, English words and all.
 //!
-//! # Reo Tahiti
+//! # Reo Tahiti, and English
 //!
 //! The Tahitian catalog is a first pass, written without a native speaker to
 //! check it. The vocabulary is deliberately small and conservative — `hīmene`
@@ -32,27 +33,32 @@
 //! are short enough to correct in place without touching any code. A native
 //! review is the next action, not a prerequisite for the plumbing.
 //!
-//! # Resolution
+//! The English catalog is a first pass too, and plainer than the other two on
+//! purpose: the site's French is warm and idiomatic and its English has no
+//! settled tone yet, so these are the shortest words that say the same thing.
+//! Refining them is writing, and it is a separate decision from the plumbing.
 //!
-//! The order: an explicit `?lang=` wins, then the `lang` cookie, then the
-//! request's `Accept-Language`, then French. Only the two languages the site
-//! speaks are ever selected: a reader whose browser asks for `en-US` gets
-//! French, which is what the site's own chrome is written in.
+//! # Where the language comes from
 //!
-//! An explicit `?lang=` is written back as a cookie. Without that the choice
-//! would last exactly one page, because no link in the chrome carries the
-//! parameter — `?lang=ty` on `/` would be Tahitian, and the first click would
-//! be French again.
+//! The **URL**, and nothing else. Every page exists at `/fr/…`, `/ty/…` and
+//! `/en/…`; the bare URL serves [`Lang::DEFAULT`] and names the prefixed URL as
+//! its canonical. That is the whole resolution.
+//!
+//! The rule an earlier version of this module broke: **one URL, one response**.
+//! v4 negotiated the language from `?lang=`, then the cookie, then
+//! `Accept-Language`, which made `/` answer differently to two readers of the
+//! same address. Cloudflare would cache whichever language it saw first and
+//! serve it to everyone. So the sniffing is gone: `?lang=` is a *redirect* to
+//! the prefixed URL (`routes::language`), the cookie remembers that choice, and
+//! neither reaches a page's rendering. `Accept-Language` is not read at all —
+//! deliberately, and this module's tests pin it.
 
-use serde::Deserialize;
 use topcoat::{
-    context::Cx,
-    cookie::{Cookie, Cookies, SameSite, cookies, time},
-    router::{
-        header, parse_query_params,
-        request::{headers, uri},
-    },
+    context::{Cx, try_request_context},
+    router::request::uri,
 };
+
+use crate::domain::song::SITE_URL;
 
 /// The name of the cookie an explicit language choice is kept in.
 pub const COOKIE: &str = "lang";
@@ -64,6 +70,8 @@ pub enum Lang {
     Fr,
     /// Tahitian, *Reo Tahiti*.
     Ty,
+    /// English.
+    En,
 }
 
 impl Lang {
@@ -71,7 +79,13 @@ impl Lang {
     ///
     /// Used to write the `hreflang` alternates, so the set of alternates and
     /// the set of languages are the same list and cannot drift apart.
-    pub const ALL: [Lang; 2] = [Lang::Fr, Lang::Ty];
+    pub const ALL: [Lang; 3] = [Lang::Fr, Lang::Ty, Lang::En];
+
+    /// The language the bare URL serves.
+    ///
+    /// Not negotiable, and not a preference: the bare URL is one address with
+    /// one response, and this is it. See the module docs.
+    pub const DEFAULT: Lang = Lang::Fr;
 
     /// The tag the language is named by: `html lang`, `hreflang`, `?lang=`, and
     /// the cookie's value.
@@ -79,6 +93,19 @@ impl Lang {
         match self {
             Lang::Fr => "fr",
             Lang::Ty => "ty",
+            Lang::En => "en",
+        }
+    }
+
+    /// The URL prefix every one of this language's pages carries.
+    ///
+    /// The prefix *is* the address: `/fr/himene` and `/himene` are one page
+    /// with one canonical URL, and it is the prefixed one.
+    pub const fn prefix(self) -> &'static str {
+        match self {
+            Lang::Fr => "/fr",
+            Lang::Ty => "/ty",
+            Lang::En => "/en",
         }
     }
 
@@ -86,37 +113,121 @@ impl Lang {
     ///
     /// `ty_PF` and `fr_FR` are v3's values. The region is the one the language
     /// is written *for*, not the region the reader is in — the site is Tahitian
-    /// and Polynesian French, and it says so in its cards.
+    /// and Polynesian French, and it says so in its cards. `en_US` is the
+    /// conventional default for a language with no region of its own; the
+    /// spelling of the chrome is neutral.
     pub const fn og_locale(self) -> &'static str {
         match self {
             Lang::Fr => "fr_FR",
             Lang::Ty => "ty_PF",
+            Lang::En => "en_US",
         }
     }
 
-    /// The other language — the `hreflang` alternate and `og:locale:alternate`.
-    pub const fn other(self) -> Self {
+    /// The languages that are not this one, in [`ALL`](Self::ALL)'s order.
+    ///
+    /// The `og:locale:alternate` set. Two languages would have allowed a single
+    /// [`Lang`] here; three do not.
+    pub const fn others(self) -> [Lang; 2] {
         match self {
-            Lang::Fr => Lang::Ty,
-            Lang::Ty => Lang::Fr,
+            Lang::Fr => [Lang::Ty, Lang::En],
+            Lang::Ty => [Lang::Fr, Lang::En],
+            Lang::En => [Lang::Fr, Lang::Ty],
         }
     }
 
     /// Reads a language out of a tag: `fr`, `fr-FR`, `ty_PF`, `TY`.
     ///
     /// Only the primary subtag is examined — where a reader is changes nothing
-    /// about which of the site's two languages they should get — and anything
-    /// the site does not speak is [`None`], so that the next source in the
-    /// resolution order is tried. `?lang=en` is therefore not an error: it just
-    /// does not choose, exactly as `Accept-Language: en-US` would not.
+    /// about which of the site's languages they should get — and anything the
+    /// site does not speak is [`None`].
     pub fn from_tag(tag: &str) -> Option<Self> {
         let primary = tag.trim().split(['-', '_']).next()?.to_ascii_lowercase();
 
-        match primary.as_str() {
+        Self::from_code(&primary)
+    }
+
+    /// Reads a language out of a URL segment: the `/ty` of `/ty/himene`.
+    ///
+    /// Exact, unlike [`from_tag`](Self::from_tag): a path segment is one of the
+    /// three prefixes or it is not a language, and `ty-PF` is not a directory.
+    pub fn from_code(segment: &str) -> Option<Self> {
+        match segment {
             "fr" => Some(Lang::Fr),
             "ty" => Some(Lang::Ty),
+            "en" => Some(Lang::En),
             _ => None,
         }
+    }
+}
+
+/// The language a request is being served in, carried through an internal
+/// rewrite by [`crate::routes::language`].
+///
+/// A newtype rather than a bare [`Lang`] because the request context is
+/// type-keyed: a `Lang` in it would be one bare enum value with no way to say
+/// what put it there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Language(pub Lang);
+
+/// The language the request asked for in its URL, if it named one.
+///
+/// The bare URL names none, and answers in [`Lang::DEFAULT`] — which is why
+/// this is an `Option` and [`resolve`] is not.
+pub fn requested(cx: &Cx) -> Option<Lang> {
+    try_request_context::<Language>(cx).map(|carried| carried.0)
+}
+
+/// The language to serve this request in.
+///
+/// Cheap enough to call wherever it is needed and called from the layout and
+/// from each page that has a label, rather than being threaded down as a
+/// parameter. It reads one request-context value and nothing else: no query
+/// string, no header, no cookie. See the module docs for why that is the whole
+/// rule.
+pub fn resolve(cx: &Cx) -> Lang {
+    requested(cx).unwrap_or(Lang::DEFAULT)
+}
+
+/// `path` as it is addressed in `lang`: the prefix, then the path.
+///
+/// The root is the prefix alone — `/fr`, not `/fr/` — because that is the form
+/// every link, canonical and sitemap entry uses, and a page with two spellings
+/// is the thing this module exists to avoid.
+pub fn at(lang: Lang, path: &str) -> String {
+    match path {
+        "/" => lang.prefix().to_owned(),
+        path => format!("{}{path}", lang.prefix()),
+    }
+}
+
+/// The absolute URL of `path` in `lang`.
+pub fn url(lang: Lang, path: &str) -> String {
+    format!("{SITE_URL}{}", at(lang, path))
+}
+
+/// The absolute URL of `path` with no language prefix — what `x-default` names.
+pub fn absolute(path: &str) -> String {
+    match path {
+        "/" => SITE_URL.to_owned(),
+        path => format!("{SITE_URL}{path}"),
+    }
+}
+
+/// `path` as it is addressed in this request's language: every link the chrome
+/// emits goes through here.
+pub fn link(cx: &Cx, path: &str) -> String {
+    at(resolve(cx), path)
+}
+
+/// The request's path, with the query string.
+///
+/// What [`crate::routes::language`] rewrites from and what it redirects to.
+pub fn path_and_query(cx: &Cx) -> String {
+    let uri = uri(cx);
+    match uri.query() {
+        Some(query) => format!("{}?{query}", uri.path()),
+        None => uri.path().to_owned(),
     }
 }
 
@@ -229,136 +340,77 @@ impl Key {
             Key::AddChord => "Tāpiri i teie accord",
         }
     }
+
+    /// The English words. See the module docs: a first pass, plain on purpose,
+    /// and short enough to correct here alone.
+    fn en(self) -> &'static str {
+        match self {
+            Key::NavHome => "Home",
+            Key::NavSongs => "Songs",
+            Key::NotFoundTitle => "This page does not exist.",
+            Key::NotFoundBody => "This page does not exist, or no longer does.",
+            Key::NotFoundCta => "Back to the front page",
+            Key::AddLyrics => "Add the lyrics",
+            Key::IndexTitle => "All the songs",
+            Key::IndexColumnTitle => "Title",
+            Key::IndexColumnArtist => "Artist",
+            Key::IndexEmpty => "No songs",
+            Key::HomeDiscover => "Discover the songs",
+            Key::HomeStart => "Let's go!",
+            Key::FieldLyrics => "Lyrics",
+            Key::Save => "Save",
+            Key::SaveError => "The song was not saved. Check the title and the lyrics.",
+            Key::RemoveArtist => "Remove this artist",
+            Key::AddChord => "Add this chord",
+        }
+    }
 }
 
 /// The words for `key` in `lang`.
 ///
-/// The two matches inside [`Key`] are over the whole key enum, so adding a key
-/// is a compile error until both languages have a string for it. This function
-/// is the only way to read the catalog.
+/// The three matches inside [`Key`] are over the whole key enum, so adding a
+/// key is a compile error until every language has a string for it. This
+/// function is the only way to read the catalog.
 pub fn text(lang: Lang, key: Key) -> &'static str {
     match lang {
         Lang::Fr => key.fr(),
         Lang::Ty => key.ty(),
+        Lang::En => key.en(),
     }
-}
-
-/// The language to serve this request in.
-///
-/// Cheap enough to call wherever it is needed — it parses a query string and
-/// reads two headers — and called from the layout and from each page that has
-/// a label, rather than being threaded down as a parameter. Nothing here
-/// touches the database or the network.
-pub fn resolve(cx: &Cx) -> Lang {
-    let explicit = parse_query_params::<Query>(cx)
-        .ok()
-        .and_then(|query| query.lang.as_deref().and_then(Lang::from_tag));
-
-    let jar = cookies(cx);
-    let stored = jar
-        .get(COOKIE)
-        .and_then(|cookie| Lang::from_tag(cookie.value()));
-
-    let accept = headers(cx)
-        .get(header::ACCEPT_LANGUAGE)
-        .and_then(|value| value.to_str().ok());
-
-    let lang = explicit
-        .or(stored)
-        .or_else(|| accept.and_then(preferred))
-        .unwrap_or(Lang::Fr);
-
-    // Remember an explicit choice. Skipped when the cookie already says the
-    // same thing, so clicking a `?lang=` link twice does not restate the
-    // cookie, and a page that calls `resolve` more than once — the layout, the
-    // header, the page — still writes it once. `Path=/` matters: without it a
-    // choice made on `/himene/x` would not reach `/`.
-    if let Some(chosen) = explicit
-        && stored != Some(chosen)
-    {
-        jar.add(
-            Cookie::build((COOKIE, chosen.code()))
-                .path("/")
-                .max_age(time::Duration::days(365))
-                .same_site(SameSite::Lax)
-                .build(),
-        );
-    }
-
-    lang
-}
-
-/// The `lang` parameter, as `?lang=ty` writes it.
-///
-/// Deliberately a `String` and not a [`Lang`]: an unsupported tag has to be
-/// distinguishable from an absent one, because only the latter is a reason to
-/// consult the cookie. Both end up as "no language chosen", but the *first* is
-/// also "do not write a cookie", which `Option<Lang>` could not say.
-#[derive(Deserialize)]
-struct Query {
-    lang: Option<String>,
-}
-
-/// The best of the site's languages from an `Accept-Language` header.
-///
-/// Quality values are honoured (`ty;q=0.9` loses to `fr;q=1.0`), the leftmost
-/// entry wins a tie, and anything with `q=0` — "explicitly not acceptable" —
-/// is skipped. Entries the site cannot serve are skipped rather than scored, so
-/// `en;q=1.0, ty;q=0.5` is Tahitian and not, as a naive first-match would say,
-/// French.
-fn preferred(accept: &str) -> Option<Lang> {
-    let mut best: Option<(f32, Lang)> = None;
-
-    for entry in accept.split(',') {
-        let mut fields = entry.split(';');
-        let Some(tag) = fields.next() else { continue };
-        let Some(lang) = Lang::from_tag(tag) else {
-            continue;
-        };
-
-        let quality = fields
-            .find_map(|field| field.trim().strip_prefix("q="))
-            .and_then(|value| value.trim().parse::<f32>().ok())
-            .unwrap_or(1.0);
-
-        if quality <= 0.0 {
-            continue;
-        }
-
-        // Strictly greater, so an earlier entry keeps a tie.
-        if best.is_none_or(|(best_quality, _)| quality > best_quality) {
-            best = Some((quality, lang));
-        }
-    }
-
-    best.map(|(_, lang)| lang)
-}
-
-/// The path the request asked for, without its query string.
-///
-/// The language alternates are built from this: every URL on the site exists in
-/// both languages, and the parameter is the only thing that distinguishes them.
-pub fn path(cx: &Cx) -> &str {
-    uri(cx).path()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Every key has a string in both languages, and the two are not the same
-    /// string. The first half the compiler already guarantees through the two
-    /// matches; the second half is what catches a key that was given its French
-    /// words and a Tahitian placeholder equal to them.
+    /// Every key has a string in every language, and no two languages say the
+    /// same thing. The first half the compiler already guarantees through the
+    /// three matches; the second half is what catches a key that was given its
+    /// French words and a placeholder equal to them.
     #[test]
     fn every_key_is_translated_and_actually_differs() {
         for key in Key::ALL {
-            let fr = text(Lang::Fr, key);
-            let ty = text(Lang::Ty, key);
+            for lang in Lang::ALL {
+                assert!(
+                    !text(lang, key).trim().is_empty(),
+                    "{key:?} has no words in {}",
+                    lang.code()
+                );
+            }
 
-            assert!(!fr.trim().is_empty(), "{key:?} has no French words");
-            assert!(!ty.trim().is_empty(), "{key:?} has no Tahitian words");
-            assert_ne!(fr, ty, "{key:?} says the same thing in both languages");
+            for (first, second) in [
+                (Lang::Fr, Lang::Ty),
+                (Lang::Fr, Lang::En),
+                (Lang::Ty, Lang::En),
+            ] {
+                assert_ne!(
+                    text(first, key),
+                    text(second, key),
+                    "{key:?} says the same thing in {} and {}",
+                    first.code(),
+                    second.code()
+                );
+            }
         }
     }
 
@@ -374,8 +426,10 @@ mod tests {
             ("FR", Some(Lang::Fr)),
             (" ty_PF ", Some(Lang::Ty)),
             ("ty", Some(Lang::Ty)),
-            ("en", None),
-            ("en-US", None),
+            ("en", Some(Lang::En)),
+            ("en-US", Some(Lang::En)),
+            ("EN", Some(Lang::En)),
+            ("pt", None),
             ("", None),
             ("-", None),
         ] {
@@ -383,34 +437,75 @@ mod tests {
         }
     }
 
-    /// The alternate is a swap, and every language is in [`Lang::ALL`] — the
-    /// list the layout writes `hreflang` from.
+    /// A URL segment is exact: the three prefixes, or nothing. `ty-PF` is not a
+    /// directory, and neither is a song slug that happens to look like one.
     #[test]
-    fn the_other_language_is_the_one_not_chosen() {
-        assert_eq!(Lang::Fr.other(), Lang::Ty);
-        assert_eq!(Lang::Ty.other(), Lang::Fr);
-        assert_eq!(Lang::ALL.len(), 2);
-        assert!(Lang::ALL.contains(&Lang::Fr) && Lang::ALL.contains(&Lang::Ty));
+    fn a_path_segment_names_one_of_the_three_or_nothing() {
+        for (segment, expected) in [
+            ("fr", Some(Lang::Fr)),
+            ("ty", Some(Lang::Ty)),
+            ("en", Some(Lang::En)),
+            ("FR", None),
+            ("ty-PF", None),
+            ("ahani-e", None),
+            ("", None),
+        ] {
+            assert_eq!(Lang::from_code(segment), expected, "segment {segment:?}");
+        }
     }
 
-    /// Quality values decide, and an entry the site cannot serve is skipped
-    /// rather than treated as a fallback — the difference between honouring
-    /// `Accept-Language` and ignoring it.
+    /// The other languages are exactly the ones not chosen, and every language
+    /// is in [`Lang::ALL`] — the list the layout writes `hreflang` from.
     #[test]
-    fn accept_language_is_ranked_by_quality() {
-        assert_eq!(
-            preferred("ty-PF,ty;q=0.9,fr;q=0.8,en;q=0.7"),
-            Some(Lang::Ty)
-        );
-        assert_eq!(preferred("fr;q=0.8,ty;q=0.9"), Some(Lang::Ty));
-        assert_eq!(preferred("en;q=1.0, ty;q=0.5"), Some(Lang::Ty));
-        assert_eq!(preferred("en-US,en;q=0.9"), None);
-        assert_eq!(preferred("fr,ty"), Some(Lang::Fr), "a tie goes leftmost");
-        assert_eq!(
-            preferred("ty;q=0,fr"),
-            Some(Lang::Fr),
-            "q=0 is not a choice"
-        );
-        assert_eq!(preferred(""), None);
+    fn the_others_are_the_two_not_chosen() {
+        assert_eq!(Lang::Fr.others(), [Lang::Ty, Lang::En]);
+        assert_eq!(Lang::Ty.others(), [Lang::Fr, Lang::En]);
+        assert_eq!(Lang::En.others(), [Lang::Fr, Lang::Ty]);
+        assert_eq!(Lang::ALL.len(), 3);
+
+        for lang in Lang::ALL {
+            assert!(!lang.others().contains(&lang));
+            assert_eq!(lang.others().len(), Lang::ALL.len() - 1);
+        }
+    }
+
+    /// The default has to be *in* the list, or the bare URL would be a language
+    /// with no canonical URL and no `hreflang`.
+    #[test]
+    fn the_default_language_is_one_of_them() {
+        assert!(Lang::ALL.contains(&Lang::DEFAULT));
+    }
+
+    /// The address of a page: the prefix, then the path — and the root is the
+    /// prefix alone, which is the form every link and sitemap entry uses.
+    #[test]
+    fn a_page_in_a_language_is_addressed_by_its_prefix() {
+        assert_eq!(at(Lang::Fr, "/"), "/fr");
+        assert_eq!(at(Lang::Ty, "/"), "/ty");
+        assert_eq!(at(Lang::En, "/himene"), "/en/himene");
+        assert_eq!(at(Lang::Ty, "/himene/ahani-e"), "/ty/himene/ahani-e");
+        assert_eq!(at(Lang::Fr, "/aepa"), "/fr/aepa");
+
+        assert_eq!(url(Lang::Ty, "/himene"), format!("{SITE_URL}/ty/himene"));
+        assert_eq!(absolute("/"), SITE_URL);
+        assert_eq!(absolute("/himene"), format!("{SITE_URL}/himene"));
+    }
+
+    /// No language's prefix is a prefix of another's, so stripping one can
+    /// never leave another behind — the property `routes::language` relies on.
+    #[test]
+    fn no_prefix_is_a_prefix_of_another() {
+        for first in Lang::ALL {
+            for second in Lang::ALL {
+                if first != second {
+                    assert!(
+                        !second.prefix().starts_with(first.prefix()),
+                        "{} contains {}",
+                        second.prefix(),
+                        first.prefix()
+                    );
+                }
+            }
+        }
     }
 }
