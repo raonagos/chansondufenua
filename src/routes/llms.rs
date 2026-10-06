@@ -47,7 +47,8 @@ fn body() -> String {
 
 ## Where the content is
 
-- [Song index]({SITE_URL}{songs}): every published song, newest first.
+- [Song index]({SITE_URL}{songs}): every published song, newest first,
+  twenty to a page. Later pages are `/himene/page/{{n}}`.
 - [One song]({SITE_URL}/himene/{{slug}}): the lyric with its chords. The slug is
   the song's address, as the catalogue's `url` field spells it. The page is also
   published in the chrome of each language — `/ty/himene/{{slug}}` and

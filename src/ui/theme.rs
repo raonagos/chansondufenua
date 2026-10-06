@@ -710,6 +710,42 @@ pub const PLURIEL_PICK_BOX: StaticClass = class!("size-4 flex-none accent-tahiti
 pub const PLURIEL_PICK_ARTISTS: StaticClass = class!("text-sm text-mist-500");
 
 // ---------------------------------------------------------------------------
+// Pagination
+// ---------------------------------------------------------------------------
+
+/// The pagination nav under the index table.
+///
+/// A row of page numbers, centred under the table it pages through. Hidden on
+/// paper for the reason the header and the footer are: a printed catalogue does
+/// not have a page 2 to turn to, and a row of links in the margin of a songbook
+/// is chrome that has stopped meaning anything.
+pub const PAGINATION: StaticClass =
+    class!("mt-6 flex flex-wrap items-center justify-center gap-2 print:hidden");
+
+/// One page number in the nav — a link to a page that is not the one served.
+///
+/// A rounded outline rather than a bare number, so the numbers read as a row of
+/// controls instead of a stray column of digits; the colour is the muted one the
+/// nav links use, and the accent appears on hover only.
+pub const PAGINATION_LINK: StaticClass = class!(
+    "inline-flex items-center justify-center rounded-full border border-ink-600 px-3 py-1 \
+     text-sm font-semibold text-mist-300 transition-colors hover:border-tahiti-400 \
+     hover:text-tahiti-300"
+);
+
+/// The page the reader is on.
+///
+/// Not a link, and deliberately not composed with [`PAGINATION_LINK`]: a page
+/// that linked to itself would be a link that goes nowhere new, and the two
+/// tokens would then compete over the same properties — the trap the nav's own
+/// state pair is written around. `aria-current` is what tells a screen reader
+/// which number this is, the same way it does in the language switcher.
+pub const PAGINATION_CURRENT: StaticClass = class!(
+    "inline-flex items-center justify-center rounded-full border border-tahiti-400 bg-ink-800 \
+     px-3 py-1 text-sm font-semibold text-tahiti-200"
+);
+
+// ---------------------------------------------------------------------------
 // Create-song form
 // ---------------------------------------------------------------------------
 
@@ -924,6 +960,9 @@ mod tests {
         AUTOSCROLL_BUTTON,
         PLURIEL_ITEM,
         PLURIEL_ENTRY,
+        PAGINATION,
+        PAGINATION_LINK,
+        PAGINATION_CURRENT,
         PLURIEL_PICK_ROW,
         PLURIEL_PICK_BOX,
         PLURIEL_PICK_ARTISTS,
@@ -1128,6 +1167,9 @@ mod tests {
             // spacing-and-break rule, which must add to the panel rather than
             // fight it.
             ("chosen sheet", &SONG_SHEET, &PLURIEL_ITEM),
+            // The pagination nav and its links: the container owns the layout
+            // and the print hide, each link owns its own box.
+            ("pagination nav", &PAGINATION, &PAGINATION_LINK),
         ];
 
         for (label, one, other) in pairs {
@@ -1163,6 +1205,7 @@ mod tests {
         assert!(rendered(&FOOTER).contains("print:hidden"));
         assert!(rendered(&TRANSPOSE).contains("print:hidden"));
         assert!(rendered(&AUTOSCROLL).contains("print:hidden"));
+        assert!(rendered(&PAGINATION).contains("print:hidden"));
         let shell = rendered(&SHELL);
         assert!(shell.contains("print:bg-white"));
         assert!(shell.contains("print:text-black"));

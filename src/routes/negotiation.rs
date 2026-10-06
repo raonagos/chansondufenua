@@ -6,7 +6,8 @@
 //! site's chrome. Asked for `text/markdown` it answers with the same page as one
 //! Markdown document: for a song the title, the credits, the lyric with its
 //! chords inline as `[Eb]`, and the canonical URL; for the front page and the
-//! index the same prose and the same catalogue, every title a link. That is the
+//! index the same prose and the same list of songs, every title a link, and the
+//! index's pages one page at a time with their numbers named. That is the
 //! difference between an agent reading the content and an agent scraping it out
 //! of markup.
 //!
@@ -165,10 +166,27 @@ impl Layer for Negotiation {
                 return Ok(moved_permanently(&target));
             }
 
+            // The index is the one other URL with two spellings. Page 1 is
+            // published at `/himene` and nowhere else, so `/himene/page/1` is the
+            // id form of a song over again — and it gets the same answer, before
+            // the representation is chosen, so neither spelling can be served,
+            // cached or indexed.
+            if songs::page_number(path) == Some(1) {
+                return Ok(moved_permanently(&i18n::at(lang, songs::PATH)));
+            }
+
+            // The page of the index this URL names, if it names one, resolved
+            // once for the three decisions below — the Markdown form, the `Link`
+            // headers, and the 404 a number the catalogue does not have is
+            // answered with. One read of the catalogue's size, in one place,
+            // because three answers to "does this page exist" would be three
+            // chances to disagree.
+            let page = page_of_index(cx, path).await?;
+
             if prefers_markdown(wanted.as_deref())
-                && let Some(text) = document(cx, lang, path, addressed.as_ref()).await?
+                && let Some(text) = document(cx, lang, path, addressed.as_ref(), page).await?
             {
-                queue_links(cx, path, true, lang, query, addressed.as_ref())?;
+                queue_links(cx, path, true, lang, query, addressed.as_ref(), page)?;
                 return markdown(cx, text);
             }
 
@@ -178,7 +196,7 @@ impl Layer for Negotiation {
             // `robots.txt` and the served stylesheet all pass through here too,
             // and none of them is described by them.
             if is_html(&response) {
-                queue_links(cx, path, false, lang, query, addressed.as_ref())?;
+                queue_links(cx, path, false, lang, query, addressed.as_ref(), page)?;
             }
 
             Ok(response)
@@ -246,6 +264,36 @@ pub(crate) fn song_segment(path: &str) -> Option<&str> {
     is_song.then_some(segment)
 }
 
+/// The page of the index a path names, and how many pages the catalogue has.
+///
+/// `None` when the path is not the index at all. `Some((number, pages))` when it
+/// is — including a number the catalogue does not have, which is `Some` on
+/// purpose: "page 7 of 3" is a page URL, and what to do about it is the 404's
+/// business, not this reader's. Page 1 is page 1 whether it arrived as `/himene`
+/// or as `/himene/page/1`, the second of which is 301'd before anything reads
+/// this.
+///
+/// One function and one read of the catalogue's size, because three answers are
+/// built from it: the 301, the Markdown document, and the `Link` headers. Two of
+/// them disagreeing about whether a page exists is a page whose Markdown twin
+/// 404s while its HTML promises it.
+async fn page_of_index(cx: &Cx, path: &str) -> Result<Option<(u32, u32)>> {
+    if path != songs::PATH && songs::page_segment(path).is_none() {
+        return Ok(None);
+    }
+
+    let pages = songs::page_count(db::counts(state::db(cx).pool()).await?.songs);
+    // A segment that will not parse is `0` rather than an error: it cannot be a
+    // page, and the handler's own `path_param!` is what turns it into the 404.
+    let number = if path == songs::PATH {
+        1
+    } else {
+        songs::page_number(path).unwrap_or(0)
+    };
+
+    Ok(Some((number, pages)))
+}
+
 /// The Markdown form of a path, if the path has one.
 ///
 /// This is the list the module docs promise, in one place, and it is the same
@@ -266,6 +314,7 @@ async fn document(
     lang: Lang,
     path: &str,
     addressed: Option<&db::Addressed>,
+    page: Option<(u32, u32)>,
 ) -> Result<Option<String>> {
     if song_segment(path).is_some() {
         // The page's own step, from the page's own URL. A song is the one
@@ -283,8 +332,17 @@ async fn document(
         return home_document(cx, lang).await.map(Some);
     }
 
-    if path == songs::PATH {
-        return index_document(cx, lang).await.map(Some);
+    // The index and its later pages: `/himene` is page 1 and `/himene/page/{n}`
+    // is page *n*. Which numbers exist is the caller's answer, read from the same
+    // catalogue size the `Link` headers were built from — and a number the
+    // catalogue does not have is not a document, so a request for Markdown on one
+    // falls through to the router and becomes the same 404 the HTML gets.
+    if let Some((number, pages)) = page {
+        if !(1..=pages).contains(&number) {
+            return Ok(None);
+        }
+
+        return index_document(cx, lang, number, pages).await.map(Some);
     }
 
     // The multi-lyric page. A *selection* is prose and has a document — every
@@ -500,14 +558,25 @@ async fn home_document(cx: &Cx, lang: Lang) -> Result<String> {
     Ok(out)
 }
 
-/// The song index as one Markdown document — `/himene`.
+/// The song index as one Markdown document — `/himene`, and `/himene/page/{n}`.
 ///
-/// Every published song, newest first, in the order the HTML table shows them
-/// and from the same unbounded read: an index that promises every song has to
-/// list every song in both of its representations. The heading is chrome, and so
-/// is the line an empty catalogue gets.
-async fn index_document(cx: &Cx, lang: Lang) -> Result<String> {
-    let listed = db::songs(state::db(cx).pool(), SongOrder::Newest, None).await?;
+/// One **page** of the catalogue, newest first, in the order the HTML table shows
+/// them and from the same window: `/himene` is page 1, so a document that listed
+/// the whole catalogue under the index's own URL would no longer be the twin of
+/// the page it represents, and the `Vary: Accept` between them would be a lie.
+///
+/// The heading is chrome, the line an empty catalogue gets is chrome, and so is
+/// the `Pages:` line — which is the same navigation the HTML nav is, because a
+/// reader with no HTML still has to be able to reach page 3. The page the
+/// document *is* is left unlinked there, the same rule the nav follows.
+async fn index_document(cx: &Cx, lang: Lang, number: u32, pages: u32) -> Result<String> {
+    let listed = db::songs_page(
+        state::db(cx).pool(),
+        SongOrder::Newest,
+        songs::PAGE_SIZE,
+        songs::offset(number),
+    )
+    .await?;
 
     let mut out = format!("# {}\n\n", i18n::text(lang, Key::IndexTitle));
     if listed.is_empty() {
@@ -516,9 +585,34 @@ async fn index_document(cx: &Cx, lang: Lang) -> Result<String> {
         out.push_str(&song_list(&listed, lang));
         out.push('\n');
     }
-    out.push_str(&format!("\nSource: {}\n", i18n::url(lang, songs::PATH)));
+
+    if pages > 1 {
+        out.push_str(&format!("\nPages: {}\n", page_line(lang, number, pages)));
+    }
+    out.push_str(&format!(
+        "\nSource: {}\n",
+        i18n::url(lang, &songs::page_path(number))
+    ));
 
     Ok(out)
+}
+
+/// The index's page numbers, as one Markdown line.
+///
+/// Numbers rather than words, like the nav above them: a page number needs no
+/// translation, and the page the document *is* is emphasised rather than linked,
+/// for the reason the nav marks it instead of linking it.
+fn page_line(lang: Lang, number: u32, pages: u32) -> String {
+    (1..=pages)
+        .map(|n| {
+            if n == number {
+                format!("**{n}**")
+            } else {
+                format!("[{}]({})", n, i18n::url(lang, &songs::page_path(n)))
+            }
+        })
+        .collect::<Vec<String>>()
+        .join(" · ")
 }
 
 /// A list of songs, one line each: the title as a link, then its credits.
@@ -630,8 +724,9 @@ fn queue_links(
     lang: Lang,
     query: &str,
     addressed: Option<&db::Addressed>,
+    page: Option<(u32, u32)>,
 ) -> Result<()> {
-    for value in links(path, markdown, lang, query, addressed) {
+    for value in links(path, markdown, lang, query, addressed, page) {
         response_headers(cx).append(header::LINK, header::HeaderValue::from_str(&value)?);
     }
 
@@ -647,7 +742,10 @@ fn queue_links(
 ///
 /// `addressed` is the song the path names, already resolved by the caller — a
 /// `Link` header is a promise about a row, and this function has no business
-/// reading one of its own.
+/// reading one of its own. `page` is the same thing for a page of the index: the
+/// number the URL names and how many the catalogue has, read once by the caller
+/// for the same reason, because a page past the end is answered by the 404 and
+/// the 404 promises only the sitemap.
 ///
 /// `lang` is the language the response is being written in, carried by
 /// [`crate::routes::language`] in the request context. The URLs a `Link` header
@@ -664,8 +762,8 @@ fn queue_links(
 /// * A song names its JSON read under `describedby`. That URL is keyed by the
 ///   song's **id**, which is the API's stable key: the page it arrived on is
 ///   named by a slug, and the two are not interchangeable.
-/// * The song index names the catalogue, which is the machine-readable form of
-///   the same list.
+/// * The song index — and every page of it — names the catalogue, which is the
+///   machine-readable form of the list those pages are windows on.
 /// * A **selection** on the multi-lyric page names its own JSON read under
 ///   `describedby` and its Markdown form under `alternate`, and both carry the
 ///   query string: the promise is about *this* selection, and a link built from
@@ -689,6 +787,7 @@ fn links(
     lang: Lang,
     query: &str,
     addressed: Option<&db::Addressed>,
+    page: Option<(u32, u32)>,
 ) -> Vec<String> {
     let sitemap_link = format!("<{SITE_URL}{}>; rel=\"sitemap\"", sitemap::PATH);
 
@@ -734,12 +833,29 @@ fn links(
         ];
     }
 
-    match path {
-        songs::PATH => vec![
+    // A page of the index — `/himene` is page 1, `/himene/page/{n}` is page *n*.
+    // Each names the catalogue under `describedby` and its own Markdown twin
+    // under `alternate`. The JSON read is the whole catalogue rather than one
+    // page of it: the API takes no page parameter, and the catalogue is the
+    // machine-readable form of the list a page holds a window on — a promise it
+    // does not keep would be worse than no promise at all.
+    //
+    // A page the catalogue does not have is the 404 the page handler raises, and
+    // the 404 is described by nothing but the sitemap: an `alternate` for an
+    // address that serves no document is this module's oldest lie.
+    if let Some((number, pages)) = page {
+        if !(1..=pages).contains(&number) {
+            return vec![sitemap_link];
+        }
+
+        return vec![
             sitemap_link,
             format!("<{SITE_URL}{}>; rel=\"describedby\"", api::PATH),
-            alternate(i18n::url(lang, songs::PATH)),
-        ],
+            alternate(i18n::url(lang, &songs::page_path(number))),
+        ];
+    }
+
+    match path {
         // `/aepa` is the front page under a second URL, so it has the same two
         // representations; it does not repeat the card link, which describes
         // the site and is promised once, on `/`.
@@ -857,6 +973,50 @@ mod tests {
         assert_eq!(song_segment("/"), None);
     }
 
+    /// A page of the index joins the same triple the index does, at its own
+    /// URLs: the HTML names its Markdown twin, that twin names the HTML back, and
+    /// both name the catalogue. A page the catalogue does not have promises only
+    /// the sitemap — the response is the 404, and an `alternate` for an address
+    /// that serves no document is the lie this module exists to avoid.
+    #[test]
+    fn every_page_of_the_index_names_its_own_markdown_and_its_own_json() {
+        let second = links("/himene/page/2", false, Lang::Fr, "", None, Some((2, 3)));
+
+        assert_eq!(second.len(), 3);
+        assert_eq!(
+            second[1],
+            format!("<{SITE_URL}{}>; rel=\"describedby\"", api::PATH)
+        );
+        assert_eq!(
+            second[2],
+            format!(
+                "<{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
+                i18n::url(Lang::Fr, "/himene/page/2")
+            )
+        );
+
+        // The same page served as Markdown names the HTML form back — and the
+        // two forms name one URL, not two.
+        let as_markdown = links("/himene/page/2", true, Lang::Fr, "", None, Some((2, 3)));
+        assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
+        assert!(as_markdown[2].contains(i18n::url(Lang::Fr, "/himene/page/2").as_str()));
+
+        // The index itself is page 1 of the same series: same three links, at
+        // the index's own URL.
+        let first = links(songs::PATH, false, Lang::Fr, "", None, Some((1, 3)));
+        assert_eq!(first[0], second[0]);
+        assert_eq!(first[1], second[1]);
+        assert!(first[2].contains(i18n::url(Lang::Fr, songs::PATH).as_str()));
+
+        // Out of range, and a segment that is not a number: the 404's answer.
+        for page in [Some((9, 3)), Some((0, 3)), None] {
+            assert_eq!(
+                links("/himene/page/9", false, Lang::Fr, "", None, page).len(),
+                1
+            );
+        }
+    }
+
     /// Every document names the sitemap; a song names its JSON read and its
     /// other representation; the index names the catalogue; nothing else is
     /// described by anything.
@@ -880,7 +1040,14 @@ mod tests {
             chrono::Utc::now(),
         );
         let addressed = db::Addressed::new(sheet, true);
-        let song = links("/himene/te-here", false, Lang::Fr, "", Some(&addressed));
+        let song = links(
+            "/himene/te-here",
+            false,
+            Lang::Fr,
+            "",
+            Some(&addressed),
+            None,
+        );
         assert_eq!(song.len(), 3);
         assert_eq!(
             song[0],
@@ -903,16 +1070,26 @@ mod tests {
 
         // Serving Markdown flips the alternate to the HTML document, because the
         // other representation is now the one the caller did not get.
-        let as_markdown = links("/himene/te-here", true, Lang::Fr, "", Some(&addressed));
+        let as_markdown = links(
+            "/himene/te-here",
+            true,
+            Lang::Fr,
+            "",
+            Some(&addressed),
+            None,
+        );
         assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
         assert_eq!(as_markdown[0], song[0]);
 
         // A song URL that names no published song promises nothing: a draft is
         // not served, so there is nothing to describe.
-        assert_eq!(links("/himene/te-here", false, Lang::Fr, "", None).len(), 1);
+        assert_eq!(
+            links("/himene/te-here", false, Lang::Fr, "", None, None).len(),
+            1
+        );
 
         // The index names the catalogue and its own Markdown form.
-        let index = links(songs::PATH, false, Lang::Fr, "", None);
+        let index = links(songs::PATH, false, Lang::Fr, "", None, Some((1, 3)));
         assert_eq!(index.len(), 3);
         assert_eq!(index[0], song[0]);
         assert_eq!(
@@ -933,7 +1110,7 @@ mod tests {
         // is the same page under another URL names its Markdown form but does not
         // repeat the site-level links, because they describe the site and one
         // link on one URL is the whole promise.
-        let home = links(HOME, false, Lang::Fr, "", None);
+        let home = links(HOME, false, Lang::Fr, "", None, None);
         assert_eq!(home.len(), 5);
         assert_eq!(home[0], song[0]);
         assert_eq!(
@@ -970,7 +1147,7 @@ mod tests {
         );
         assert_eq!(home[4], describedby_link());
 
-        let aepa = links(AEPA, false, Lang::Fr, "", None);
+        let aepa = links(AEPA, false, Lang::Fr, "", None, None);
         assert_eq!(aepa.len(), 2);
         assert_eq!(
             aepa[1],
@@ -982,7 +1159,7 @@ mod tests {
 
         // A path with no Markdown form promises nothing but the sitemap.
         assert_eq!(
-            links(crate::pages::editor::PATH, false, Lang::Fr, "", None).len(),
+            links(crate::pages::editor::PATH, false, Lang::Fr, "", None, None).len(),
             1
         );
     }
@@ -996,7 +1173,7 @@ mod tests {
     /// document.
     #[test]
     fn a_selection_names_its_own_json_and_markdown_forms() {
-        let chosen = links(pluriel::PATH, false, Lang::Fr, "s=a&s=b", None);
+        let chosen = links(pluriel::PATH, false, Lang::Fr, "s=a&s=b", None, None);
         assert_eq!(chosen.len(), 3);
         assert_eq!(
             chosen[0],
@@ -1016,14 +1193,14 @@ mod tests {
 
         // Serving Markdown flips the alternate to the HTML document and keeps
         // the query, in the reader's language.
-        let as_markdown = links(pluriel::PATH, true, Lang::Ty, "s=a&s=b", None);
+        let as_markdown = links(pluriel::PATH, true, Lang::Ty, "s=a&s=b", None, None);
         assert!(as_markdown[2].contains("/ty/himene/pluriel?s=a&s=b"));
         assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
 
         // The picker: a path with no selection, and a query that is not one.
         for query in ["", "s=", "tr=3", "page=2"] {
             assert_eq!(
-                links(pluriel::PATH, false, Lang::Fr, query, None).len(),
+                links(pluriel::PATH, false, Lang::Fr, query, None, None).len(),
                 1,
                 "{query:?}"
             );

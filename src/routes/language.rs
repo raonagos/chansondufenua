@@ -126,10 +126,17 @@ impl Layer for LanguageLayer {
 /// not an address this layer invents a meaning for. It 404s.
 ///
 /// **This is the list step 22 was told two files would need, and it is one.**
-/// A new page (pagination's `/himene/page/N`, an artist's `/artiste/{id}`) is
-/// added here, next to the route that declares it — `/himene/pluriel` is there
-/// for step 26, and `negotiation::song_segment` has to know the same name for a
-/// different reason (it must not mistake the page for a song).
+/// A new page (an artist's `/artiste/{id}`, step 29) is added here, next to the
+/// route that declares it — `/himene/pluriel` is there for step 26, and
+/// `negotiation::song_segment` has to know the same name for a different reason
+/// (it must not mistake the page for a song).
+///
+/// Pagination's pages are here as a *shape* rather than as two paths, because
+/// their number is not this layer's business: `/himene/page/2`,
+/// `/himene/page/43` and `/himene/page/x` are all one page as far as language is
+/// concerned — a prefixed one has to be rewritten to it — and which numbers the
+/// catalogue has is decided by the page itself, in the language the URL named
+/// (`/ty/himene/page/x` is the same 404 as the unprefixed one, in Tahitian).
 fn page_of(path: &str) -> Option<(&str, Option<Lang>)> {
     match split_prefix(path) {
         Some((lang, page)) => {
@@ -147,6 +154,7 @@ fn is_page(path: &str) -> bool {
         || path == songs::PATH
         || path == editor::PATH
         || path == pluriel::PATH
+        || songs::page_segment(path).is_some()
         || negotiation::song_segment(path).is_some()
 }
 
@@ -311,6 +319,25 @@ mod tests {
             page_of("/ty/himene/pluriel"),
             Some(("/himene/pluriel", Some(Lang::Ty)))
         );
+
+        // A page of the index: the two-segment shape is a page, whatever number
+        // is in it and whether or not that number exists — which numbers exist is
+        // the page's own question, answered in the language the URL named.
+        assert_eq!(page_of("/himene/page/2"), Some(("/himene/page/2", None)));
+        assert_eq!(
+            page_of("/en/himene/page/2"),
+            Some(("/himene/page/2", Some(Lang::En)))
+        );
+        assert_eq!(
+            page_of("/ty/himene/page/x"),
+            Some(("/himene/page/x", Some(Lang::Ty)))
+        );
+        // One segment is not the paginated shape: `/himene/page` is a *song* URL
+        // as far as this layer is concerned — and a song called `page`, which no
+        // song is, so it is the 404's. A third segment is nobody's page at all.
+        assert_eq!(page_of("/himene/page"), Some(("/himene/page", None)));
+        assert_eq!(page_of("/himene/page/2/3"), None);
+        assert_eq!(page_of("/ty/himene/page/2/3"), None);
     }
 
     /// `?lang=` is read out of the query and the rest of the query is kept, so

@@ -203,10 +203,58 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
         // the page reads the same row and raises `NotFoundError`, which the
         // error boundary below answers with the branded 404. So a row that is
         // missing or unpublished is not the site's head — it is the 404's.
-        return missing_song_head(lang);
+        return not_found_head(lang);
+    }
+
+    // A page of the index — `/himene/page/{n}`. It gets a head of its own rather
+    // than the index's, because a series of pages that all answer with one title
+    // and one description is one page in a search engine's eyes — the duplicate
+    // cluster the scope names. The number is read here, and how many pages the
+    // catalogue has with it, so a number it does not have is not a page at all:
+    // it is the branded 404 the page handler raises, and it gets the 404's head.
+    if songs::page_segment(path).is_some() {
+        let pages = match db::counts(state::db(cx).pool()).await {
+            Ok(counts) => songs::page_count(counts.songs),
+            // The page's own read fails the same way, so the response is a 500
+            // with nothing of the catalogue in it: the site's head is the honest
+            // one, and the error is the page's to raise.
+            Err(_) => return site_head(path, lang),
+        };
+
+        return match songs::page_number(path).filter(|number| (2..=pages).contains(number)) {
+            Some(number) => index_head(number, pages, lang),
+            None => not_found_head(lang),
+        };
     }
 
     site_head(path, lang)
+}
+
+/// The `<head>` of one page of the index.
+///
+/// Its own title and its own description, and they differ from page 1's by
+/// exactly one thing: the number. There is no new *word* in either — a page
+/// number is a numeral, so the title is the index's own heading with `(2/3)`
+/// after it and the description is the catalogue's own sentence with the same
+/// — which is what keeps this from being a fourth French sentence to translate
+/// for a fact that has no words in it.
+///
+/// The canonical URL is the page's own path, never the index's and never page
+/// 1's: each page of a series consolidates to itself, which is the whole point
+/// of serving the numbers on real paths — see [`songs::page_path`].
+fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
+    let title = format!(
+        "{} ({number}/{pages}) | {TITLE}",
+        i18n::text(lang, Key::IndexTitle)
+    );
+    let description = format!("{} ({number}/{pages})", songs::DESCRIPTION);
+
+    page_head(
+        title,
+        &description,
+        &i18n::url(lang, &songs::page_path(number)),
+        lang,
+    )
 }
 
 /// The `<head>` of a song page, from the song's own metadata.
@@ -364,13 +412,15 @@ fn page_head(title: String, description: &str, url: &str, lang: Lang) -> Documen
     }
 }
 
-/// The `<head>` of a song URL that names no published song.
+/// The `<head>` of a URL that names no page: a song that is not published, or a
+/// page of the index the catalogue does not have.
 ///
 /// The page it lands on is the branded 404, so its title is the 404's own
 /// headline rather than the site's: an address a crawler may still hold from an
 /// old link must not answer with the front door's title, which is what made a
-/// missing song a duplicate of `/`.
-fn missing_song_head(lang: Lang) -> DocumentHead {
+/// missing song a duplicate of `/`. No canonical either — there is nothing here
+/// to consolidate, and the same rule the create-song page follows.
+fn not_found_head(lang: Lang) -> DocumentHead {
     DocumentHead {
         title: format!("{} | {TITLE}", i18n::text(lang, Key::NotFoundTitle)),
         description: None,
@@ -567,7 +617,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
 
     let on_aepa = aepa_link.is_current(cx);
     let on_home = home_link.is_current(cx);
-    let on_songs = songs_link.is_current(cx);
+    let on_songs = songs_link.is_current(cx) || names_the_index(uri(cx).path());
 
     // v3 linked "Accueil" at `/aepa` and nothing at `/`. Both are the same page,
     // so both light up for it.
@@ -680,7 +730,23 @@ pub async fn language_switcher(cx: &Cx) -> Result<impl View> {
     })
 }
 
-/// Site footer. v3's wording, kept, including the link to the maintainer's site.
+/// Whether a path is the song index — `/himene`, or one of its later pages.
+///
+/// Topcoat's `is_current` compares the **handler the router matched**, and a page
+/// of the index is a handler of its own, so `href!(songs::songs)` answers `false`
+/// on `/himene/page/2` and the nav would go dark on every page but the first.
+/// This is the widening the scope asks for, and it is asked of the *path* rather
+/// than of the handler because there is no handler for "the index" — there are
+/// two, and the pages they serve are one series.
+///
+/// The path here is the request's own, after the language layer has rewritten
+/// `/ty/himene/page/2` to `/himene/page/2`, so a prefixed page highlights its nav
+/// for the same reason the unprefixed one does.
+fn names_the_index(path: &str) -> bool {
+    path == songs::PATH || songs::page_segment(path).is_some()
+}
+
+/// The site footer. v3's wording, kept, including the link to the maintainer's site.
 #[component]
 pub async fn footer() -> Result<impl View> {
     Ok(view! {
@@ -795,6 +861,72 @@ mod tests {
         assert_ne!(head.canonical, Some(format!("{SITE_URL}{}", songs::PATH)));
     }
 
+    /// A page of the index is its own page: its own number in the title and the
+    /// description, and its own URL as the canonical — never the index's, which
+    /// would make page 2 a duplicate of page 1 and the series a cluster
+    /// competing with itself.
+    #[test]
+    fn a_page_of_the_index_names_its_own_number_and_its_own_url() {
+        let second = index_head(2, 3, Lang::Fr);
+
+        assert_eq!(second.title, format!("Toutes les chansons (2/3) | {TITLE}"));
+        assert!(
+            second
+                .description
+                .as_deref()
+                .expect("a description")
+                .ends_with("(2/3)")
+        );
+        assert_eq!(
+            second.canonical,
+            Some(i18n::url(Lang::Fr, "/himene/page/2"))
+        );
+        assert_eq!(
+            second.social.as_ref().expect("cards").og_url,
+            second.canonical.clone().expect("a canonical URL")
+        );
+        assert!(!second.noindex);
+
+        // Two pages of one series share no field a search engine leads with.
+        let third = index_head(3, 3, Lang::Fr);
+        assert_ne!(second.title, third.title);
+        assert_ne!(second.description, third.description);
+        assert_ne!(second.canonical, third.canonical);
+
+        // And page 1 is not one of these: its address is `/himene`, and it keeps
+        // the head it has always had — the index's title, with no number in it.
+        assert_eq!(songs::page_path(1), songs::PATH);
+        assert_eq!(
+            site_head(songs::PATH, Lang::Fr).title,
+            format!("Toutes les chansons | {TITLE}")
+        );
+    }
+
+    /// The nav's "Chanson" link is current on the index **and on its later
+    /// pages**. Topcoat compares the handler it matched, and a page of the index
+    /// is a handler of its own, so without this widening the nav would go dark
+    /// from page 2 on — the defect the scope names.
+    #[test]
+    fn the_header_stays_current_on_every_page_of_the_index() {
+        for path in [songs::PATH, "/himene/page/2", "/himene/page/43"] {
+            assert!(names_the_index(path), "{path}");
+        }
+
+        // A song under the same prefix is not the index, and neither is the
+        // multi-lyric page: the nav would be lying about which page the reader
+        // is on.
+        for path in [
+            HOME,
+            AEPA_PATH,
+            "/himene/ahani-e",
+            "/himene/pluriel",
+            "/himene/sitemap.xml",
+            editor::PATH,
+        ] {
+            assert!(!names_the_index(path), "{path}");
+        }
+    }
+
     /// **One canonical per page, and it is the prefixed URL.** The bare URL is
     /// the `x-default`, not a second canonical, and the three languages each
     /// name themselves.
@@ -896,14 +1028,14 @@ mod tests {
             );
         }
 
-        assert!(missing_song_head(Lang::Fr).noindex);
+        assert!(not_found_head(Lang::Fr).noindex);
     }
 
     /// A song URL that names no published song is answered by the branded 404, so
     /// its head is the 404's: its own headline, and not the front door's title.
     #[test]
     fn a_missing_song_gets_the_not_found_head() {
-        let head = missing_song_head(Lang::Fr);
+        let head = not_found_head(Lang::Fr);
 
         assert!(
             head.title

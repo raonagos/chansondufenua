@@ -94,7 +94,12 @@ const GET_TOOL: &str = "get_song";
 
 /// `list_songs` defaults and ceiling. The page is bounded because the answer is
 /// one text block and a client should not be handed 43 lyrics in a listing.
-const DEFAULT_PER_PAGE: i64 = 20;
+///
+/// The default is the index's own page size rather than a second twenty, because
+/// this tool's promise is that a client paging through it and a reader paging
+/// through `/himene` see the same thing — which is a promise about the *window*,
+/// and two constants are two windows waiting to drift apart.
+const DEFAULT_PER_PAGE: i64 = crate::pages::songs::PAGE_SIZE;
 const MAX_PER_PAGE: i64 = 100;
 
 // JSON-RPC 2.0 error codes. The five the spec defines; no others are invented.

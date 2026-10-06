@@ -255,7 +255,10 @@ pub async fn songs(pool: &SqlitePool, order: SongOrder, limit: Option<i64>) -> D
 /// between pages or spend two rows of the page on one song's credits.
 ///
 /// Read by the MCP catalogue (`src/routes/mcp.rs`), whose `list_songs` takes a
-/// page number. The site's own listing is not paged yet (v4.1 step 27).
+/// page number, and by the index's own pages (`pages::songs`, which owns
+/// [`PAGE_SIZE`](crate::pages::songs::PAGE_SIZE) and the offset both of them
+/// use). One read, two surfaces, so the page an MCP client gets and the page a
+/// reader gets are the same twenty songs.
 pub async fn songs_page(
     pool: &SqlitePool,
     order: SongOrder,
