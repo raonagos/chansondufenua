@@ -141,6 +141,15 @@ fn page_select(keys: &str) -> String {
     format!("SELECT s.id FROM song s WHERE s.published = 1 ORDER BY {keys} LIMIT ?1")
 }
 
+/// [`page_select`] with an offset, for the reads that page through the catalogue.
+///
+/// The same sub-select, because SQLite spells an offset and a limit in one
+/// clause and there is no `OFFSET` without a `LIMIT`. Still before the join, for
+/// [`page_select`]'s reason: the page must be chosen from songs.
+fn page_select_offset(keys: &str) -> String {
+    format!("SELECT s.id FROM song s WHERE s.published = 1 ORDER BY {keys} LIMIT ?1 OFFSET ?2")
+}
+
 /// Fold credit rows into songs, preserving both the row order and each song's
 /// credit order.
 fn assemble(rows: Vec<SongArtistRow>) -> DbResult<Vec<Song>> {
@@ -223,6 +232,35 @@ pub async fn songs(pool: &SqlitePool, order: SongOrder, limit: Option<i64>) -> D
     }
 
     assemble(query.fetch_all(pool).await?)
+}
+
+/// One page of the published catalogue, with its credits, in `order`.
+///
+/// `limit` counts songs, not credit rows, for [`songs`]'s reason — the offset is
+/// applied to the same ids-only sub-select, so the join can never move a song
+/// between pages or spend two rows of the page on one song's credits.
+///
+/// Read by the MCP catalogue (`src/routes/mcp.rs`), whose `list_songs` takes a
+/// page number. The site's own listing is not paged yet (v4.1 step 27).
+pub async fn songs_page(
+    pool: &SqlitePool,
+    order: SongOrder,
+    limit: i64,
+    offset: i64,
+) -> DbResult<Vec<Song>> {
+    let keys = order.song_keys();
+    let sql = format!(
+        "{SONGS_SELECT} WHERE s.id IN ({}) ORDER BY {keys}, sa.position",
+        page_select_offset(keys)
+    );
+
+    let rows = sqlx::query_as::<_, SongArtistRow>(&sql)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?;
+
+    assemble(rows)
 }
 
 /// One song by id, published or not — the page decides whether to 404, and the
@@ -653,6 +691,51 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(all.len(), fixtures::SONGS.len());
+    }
+
+    /// Paging is a partition: pages do not overlap, do not skip a song, and the
+    /// two-credit song still arrives whole.
+    ///
+    /// The offset lives in the ids-only sub-select, so a page is a set of songs
+    /// before the join decorates it — the same bug class as the `LIMIT` one
+    /// above, one level along.
+    #[tokio::test]
+    async fn paging_covers_the_catalogue_once_and_keeps_credits_whole() {
+        let db = seeded().await;
+        let all = songs(db.pool(), SongOrder::Newest, None).await.unwrap();
+        let per_page: i64 = 5;
+
+        let mut seen: Vec<String> = Vec::new();
+        let mut page: i64 = 0;
+        loop {
+            let got = songs_page(db.pool(), SongOrder::Newest, per_page, page * per_page)
+                .await
+                .unwrap();
+            if got.is_empty() {
+                break;
+            }
+            seen.extend(got.iter().map(Song::get_id));
+            page += 1;
+            assert!(page < 20, "paging did not terminate");
+        }
+
+        let expected: Vec<String> = all.iter().map(Song::get_id).collect();
+        assert_eq!(seen, expected, "the pages are not the catalogue, in order");
+
+        // Past the end is empty: not an error, and not a wrap back to the top.
+        assert!(
+            songs_page(db.pool(), SongOrder::Newest, per_page, 1_000)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        // A page of one still carries the busiest song's two credits.
+        let first = songs_page(db.pool(), SongOrder::MostViewed, 1, 0)
+            .await
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].get_artists().len(), 2);
     }
 
     #[tokio::test]

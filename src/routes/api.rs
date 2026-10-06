@@ -59,8 +59,12 @@ path_param!(id);
 /// different things from the same row: the entity's own fields are private and
 /// carry the raw HTML column, and this is a published shape that a caller can
 /// rely on.
+///
+/// Shared with the MCP catalogue (`src/routes/mcp.rs`), which is the same list
+/// read by a different protocol: two published shapes for one song would be two
+/// things to keep in step.
 #[derive(Debug, Serialize)]
-struct SongJson {
+pub(crate) struct SongJson {
     id: String,
     title: String,
     /// Every credited artist's full name, in credit order.
@@ -77,7 +81,7 @@ struct SongJson {
 
 impl SongJson {
     /// The row without the lyric: what `/api/songs` lists.
-    fn summary(sheet: &Song) -> Self {
+    pub(crate) fn summary(sheet: &Song) -> Self {
         Self::of(sheet, None)
     }
 

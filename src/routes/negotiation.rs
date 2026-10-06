@@ -187,7 +187,11 @@ fn is_html(response: &Response) -> bool {
 /// [`Song::lyrics_markdown`] writes it — chords kept inline at the offset the
 /// author put them — and the canonical URL, so a document quoted out of context
 /// still says where it came from.
-fn document(sheet: &Song) -> String {
+///
+/// `pub(crate)` because the MCP server (`src/routes/mcp.rs`) answers `get_song`
+/// with exactly this document: an agent reading a song over MCP and an agent
+/// reading it with `Accept: text/markdown` must not get two different sheets.
+pub(crate) fn song_document(sheet: &Song) -> String {
     let artists = sheet
         .get_artists()
         .iter()
@@ -219,7 +223,7 @@ fn markdown(cx: &Cx, sheet: &Song) -> Result<Response> {
             ),
             (header::VARY, header::HeaderValue::from_static("Accept")),
         ],
-        Body::from(document(sheet)),
+        Body::from(song_document(sheet)),
     )
         .into_response(cx)
 }
@@ -391,7 +395,7 @@ mod tests {
             chrono::Utc::now(),
         );
 
-        let text = document(&sheet);
+        let text = song_document(&sheet);
         let mut lines = text.lines();
 
         assert_eq!(lines.next(), Some("# Te here"));

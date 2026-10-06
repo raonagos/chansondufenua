@@ -27,11 +27,11 @@ pub mod ui;
 use topcoat::{
     asset::{AssetBundle, RouterBuilderAssetExt},
     cookie::RouterBuilderCookieExt,
-    router::{Router, RouterBuilderDiscoverExt},
+    router::{OriginPolicy, Router, RouterBuilderDiscoverExt},
 };
 
 use crate::db::Db;
-use crate::routes::negotiation;
+use crate::routes::{mcp, negotiation};
 
 /// Build the application router.
 ///
@@ -65,12 +65,19 @@ use crate::routes::negotiation;
 ///   the negotiator, and that ordering is the point — among layers sharing a
 ///   path the later one runs first, so the log sits outside the negotiation and
 ///   can report which of the three representations was actually served.
+///
+/// `.origin_policy(...)` keeps the default (state-changing browser requests from
+/// other origins are refused) and exempts [`mcp::PATH`]. A browser-based MCP
+/// client sends an `Origin`, and the default would answer its `POST` with a 403;
+/// the exemption is safe because `/mcp` is read-only — there is no state for a
+/// forged request to change. The create-song form's `POST` stays protected.
 pub fn router(db: Db) -> Router {
     Router::builder()
         .discover()
         .cookies()
         .assets(AssetBundle::load().unwrap())
         .app_context(db)
+        .origin_policy(OriginPolicy::new().exempt_paths([mcp::PATH]))
         .layer(negotiation::Negotiation)
         .layer(log::AccessLog)
         .build()
