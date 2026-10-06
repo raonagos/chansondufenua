@@ -298,11 +298,24 @@ pub enum Key {
     TransposeDown,
     /// The control's step-up link, read aloud.
     TransposeUp,
+    /// The song page's auto-scroll control — the speed bar's own name, read
+    /// aloud rather than drawn.
+    Scroll,
+    /// The word beside the speed bar: what the slider sets.
+    ScrollSpeed,
+    /// The auto-scroll button while the sheet is still.
+    ScrollStart,
+    /// The auto-scroll button while the sheet is moving.
+    ///
+    /// A stop rather than a pause in name only: pressing it again resumes from
+    /// where the reader is, which is what a pause does, and "stop" is the word
+    /// the two other catalogs already have for a control that is not moving.
+    ScrollStop,
 }
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 21] = [
+    pub const ALL: [Key; 25] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -324,6 +337,10 @@ impl Key {
         Key::Transpose,
         Key::TransposeDown,
         Key::TransposeUp,
+        Key::Scroll,
+        Key::ScrollSpeed,
+        Key::ScrollStart,
+        Key::ScrollStop,
     ];
 
     /// The French words. v3's, byte for byte.
@@ -352,6 +369,10 @@ impl Key {
             Key::Transpose => "Transposer",
             Key::TransposeDown => "Transposer un demi-ton plus bas",
             Key::TransposeUp => "Transposer un demi-ton plus haut",
+            Key::Scroll => "Défilement",
+            Key::ScrollSpeed => "Vitesse",
+            Key::ScrollStart => "Démarrer",
+            Key::ScrollStop => "Arrêter",
         }
     }
 
@@ -380,6 +401,10 @@ impl Key {
             Key::Transpose => "Huri i te accord",
             Key::TransposeDown => "Huri i raro",
             Key::TransposeUp => "Huri i ni'a",
+            Key::Scroll => "Haere noa",
+            Key::ScrollSpeed => "Tere",
+            Key::ScrollStart => "Haere",
+            Key::ScrollStop => "Nofo",
         }
     }
 
@@ -408,6 +433,10 @@ impl Key {
             Key::Transpose => "Transpose",
             Key::TransposeDown => "Transpose a semitone down",
             Key::TransposeUp => "Transpose a semitone up",
+            Key::Scroll => "Auto-scroll",
+            Key::ScrollSpeed => "Speed",
+            Key::ScrollStart => "Start",
+            Key::ScrollStop => "Stop",
         }
     }
 }
@@ -461,10 +490,10 @@ mod tests {
     }
 
     /// **The French chrome, frozen at step 21.** Step 23 added the English
-    /// strings and the language switcher, and step 24 the transposition control;
-    /// none of them may put a different word in a French page than the one step
-    /// 21 shipped, and a translation that quietly "improved" the French is
-    /// exactly the change this table catches.
+    /// strings and the language switcher, step 24 the transposition control and
+    /// step 25 the auto-scroll control; none of them may put a different word in
+    /// a French page than the one step 21 shipped, and a translation that
+    /// quietly "improved" the French is exactly the change this table catches.
     ///
     /// The catalog is allowed to grow — a new control's own label is new chrome,
     /// not a new translation of old chrome — so the table also pins *which* keys
@@ -501,14 +530,19 @@ mod tests {
             assert_eq!(text(Lang::Fr, key), words, "{key:?} moved");
         }
 
-        // Four keys have been added since: the switcher's own label (step 23),
-        // and the transposition control's label and its two step links (step
-        // 24). Every one of them is a new control, not a reworded old one.
-        const ADDED_SINCE: [Key; 4] = [
+        // Eight keys have been added since: the switcher's own label (step 23),
+        // the transposition control's label and its two step links (step 24),
+        // and the auto-scroll control's four words (step 25). Every one of them
+        // is a new control, not a reworded old one.
+        const ADDED_SINCE: [Key; 8] = [
             Key::Language,
             Key::Transpose,
             Key::TransposeDown,
             Key::TransposeUp,
+            Key::Scroll,
+            Key::ScrollSpeed,
+            Key::ScrollStart,
+            Key::ScrollStop,
         ];
 
         assert_eq!(Key::ALL.len(), FRENCH_AT_STEP_21.len() + ADDED_SINCE.len());

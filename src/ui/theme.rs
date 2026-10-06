@@ -623,6 +623,48 @@ pub const TRANSPOSE_LINK: StaticClass =
 pub const TRANSPOSE_VALUE: StaticClass =
     class!("w-8 text-center font-mono tabular-nums text-mist-100");
 
+/// The auto-scroll control in a sheet header: the reader's speed bar.
+///
+/// [`TRANSPOSE`]'s pill again, beside it on the same row, because both are the
+/// reader's controls over the lyric rather than actions on the song. The pill is
+/// drawn only once a script has un-hidden it — the attribute that hides it is
+/// the one the script removes — so a sheet read with JavaScript off carries no
+/// control that cannot work, and the page is what it was before this step. On
+/// paper it is hidden for [`TRANSPOSE`]'s reason: a speed bar is for a screen.
+///
+/// `flex-none` rather than its `shrink` synonym for the reason
+/// [`LANGUAGE_SWITCH`] gives.
+pub const AUTOSCROLL: StaticClass = class!(
+    "flex flex-none items-center gap-2 rounded-full border border-ink-700 bg-ink-800 \
+     px-3 py-1 text-sm text-mist-300 print:hidden"
+);
+
+/// The word naming what the speed bar sets.
+///
+/// A real `<label>` for the range rather than a caption beside it, so it names
+/// the control for a pointer and for a screen reader with no second string: the
+/// pill's own name is read aloud only. Inside [`TRANSPOSE`]'s colour and size.
+pub const AUTOSCROLL_SPEED: StaticClass = class!("mr-1");
+
+/// The speed bar itself: a native range input, restyled and not rewritten.
+///
+/// The browser's own range is the one speed selector a phone, a keyboard and a
+/// screen reader all already know how to work, and it is operable without a
+/// script — the script only reads its value. Only the accent colour and the
+/// track's width are set, so the control keeps the platform's hit area and
+/// keyboard behaviour.
+pub const AUTOSCROLL_RANGE: StaticClass = class!("h-4 w-20 cursor-pointer accent-tahiti-300");
+
+/// The auto-scroll button: start, and stop.
+///
+/// [`TRANSPOSE_LINK`]'s shape, one word wider, with the word kept on one line:
+/// the label changes from the start word to the stop word while the sheet is
+/// moving, and a button that re-wrapped would shift the row each time.
+pub const AUTOSCROLL_BUTTON: StaticClass = class!(
+    "flex-none rounded-full px-2 whitespace-nowrap text-mist-100 \
+     transition-colors hover:text-tahiti-300"
+);
+
 // ---------------------------------------------------------------------------
 // Create-song form
 // ---------------------------------------------------------------------------
@@ -832,6 +874,10 @@ mod tests {
         TRANSPOSE_LABEL,
         TRANSPOSE_LINK,
         TRANSPOSE_VALUE,
+        AUTOSCROLL,
+        AUTOSCROLL_SPEED,
+        AUTOSCROLL_RANGE,
+        AUTOSCROLL_BUTTON,
         FORM_PANEL,
         FORM_FIELD,
         FORM_LABEL,
@@ -1056,12 +1102,14 @@ mod tests {
     }
 
     /// Print is the reason this rewrite has print tokens at all: a songbook gets
-    /// printed. Both pieces of chrome must be gone and the background must be
+    /// printed. Every piece of chrome must be gone and the background must be
     /// cancelled, or a printed lyric sheet is a dark rectangle.
     #[test]
     fn print_drops_chrome_and_background() {
         assert!(rendered(&HEADER).contains("print:hidden"));
         assert!(rendered(&FOOTER).contains("print:hidden"));
+        assert!(rendered(&TRANSPOSE).contains("print:hidden"));
+        assert!(rendered(&AUTOSCROLL).contains("print:hidden"));
         let shell = rendered(&SHELL);
         assert!(shell.contains("print:bg-white"));
         assert!(shell.contains("print:text-black"));
