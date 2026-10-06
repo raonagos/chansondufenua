@@ -57,7 +57,7 @@ use crate::db::{self, SongOrder};
 use crate::domain::song::SITE_URL;
 use crate::domain::{Artist, Song};
 use crate::i18n;
-use crate::pages::{artiste, pluriel, recherche};
+use crate::pages::{artiste, pluriel, recherche, support};
 use crate::state;
 
 /// The catalogue.
@@ -73,6 +73,15 @@ pub const SEARCH_PATH: &str = "/api/search";
 
 /// The health probe.
 pub const HEALTH_PATH: &str = "/api/health";
+
+/// The support page's addresses, as JSON: `/api/support`.
+///
+/// The machine-readable half of [`crate::pages::support`]: the same three
+/// addresses the page prints, byte for byte, and the page's own URL. An address
+/// is exactly the thing a program must not retype from a rendering — and the EVM
+/// one's case *is* its checksum — so it is published as data rather than only as
+/// text inside markup.
+pub const SUPPORT_PATH: &str = "/api/support";
 
 /// The OpenAPI description of this API.
 ///
@@ -305,6 +314,29 @@ async fn search(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
     ))
 }
 
+/// `GET /api/support` — the addresses the site accepts support at.
+///
+/// The page's own three entries, from the page's own table
+/// ([`crate::pages::support::ADDRESSES`]), so the JSON and the HTML cannot
+/// disagree about an address — which, here, is the difference between money
+/// arriving and money going nowhere. The strings are passed through untouched:
+/// nothing in this file re-cases, trims or reformats them.
+///
+/// `page` is the language-neutral address of the page that prints them, the same
+/// form every other `url` in this API uses: this document is not a page and does
+/// not pick a language.
+#[route(GET "/api/support")]
+async fn support_addresses() -> Result<Json<serde_json::Value>> {
+    Ok(Json(serde_json::json!({
+        "page": i18n::absolute(support::PATH),
+        "count": support::ADDRESSES.len(),
+        "addresses": support::ADDRESSES.iter().map(|entry| serde_json::json!({
+            "label": entry.label,
+            "address": entry.address,
+        })).collect::<Vec<_>>(),
+    })))
+}
+
 /// `GET /api/songs/{id}` — one song, with its lyric as Markdown.
 ///
 /// **A draft is not found**, the same rule the sheet applies and for the same
@@ -367,6 +399,10 @@ fn openapi_document() -> Value {
     paths.insert(SONG_PATH.to_owned(), json!({ "get": song_operation() }));
     paths.insert(SEARCH_PATH.to_owned(), json!({ "get": search_operation() }));
     paths.insert(HEALTH_PATH.to_owned(), json!({ "get": health_operation() }));
+    paths.insert(
+        SUPPORT_PATH.to_owned(),
+        json!({ "get": support_operation() }),
+    );
 
     json!({
         "openapi": "3.1.0",
@@ -487,6 +523,25 @@ fn search_operation() -> Value {
     })
 }
 
+/// `GET /api/support` — the site's support addresses.
+fn support_operation() -> Value {
+    json!({
+        "operationId": "support",
+        "summary": "The addresses the site accepts support at",
+        "description": "The same three addresses the support page prints, from the page's own table: one for Bitcoin, one for Solana, and one that is the same address on Ethereum, Polygon, BNB Chain and Avalanche. The strings are passed through untouched — case matters on the third, where the mixed case is its EIP-55 checksum.",
+        "responses": {
+            "200": {
+                "description": "The addresses, and the page that prints them",
+                "content": {
+                    "application/json": {
+                        "schema": { "$ref": "#/components/schemas/Support" }
+                    }
+                }
+            }
+        }
+    })
+}
+
 /// `GET /api/health` — the probe.
 fn health_operation() -> Value {
     json!({
@@ -571,6 +626,23 @@ fn schemas() -> Value {
             "properties": {
                 "error": { "type": "string" },
                 "message": { "type": "string" }
+            }
+        },
+        "Support": {
+            "type": "object",
+            "required": ["count", "page", "addresses"],
+            "properties": {
+                "page": { "type": "string", "format": "uri", "description": "The support page's language-neutral address, on the canonical host. The page's own canonical URL carries a language prefix." },
+                "count": { "type": "integer" },
+                "addresses": { "type": "array", "items": { "$ref": "#/components/schemas/SupportAddress" } }
+            }
+        },
+        "SupportAddress": {
+            "type": "object",
+            "required": ["label", "address"],
+            "properties": {
+                "label": { "type": "string", "description": "The chains the address is for, as the page names them. A proper name, not a translated label." },
+                "address": { "type": "string", "description": "The address, exactly as it must be used. Case is significant: the EVM address's mixed case is its EIP-55 checksum." }
             }
         }
     })
@@ -680,6 +752,7 @@ mod tests {
         assert_eq!(HEALTH_PATH, "/api/health");
         assert_eq!(OPENAPI_PATH, "/api/openapi.json");
         assert_eq!(SEARCH_PATH, "/api/search");
+        assert_eq!(SUPPORT_PATH, "/api/support");
         // The endpoint and the page read the same parameter, so the JSON a
         // client is told to send is the query string a browser's form submits.
         assert_eq!(recherche::PARAM, "q");
@@ -786,7 +859,7 @@ mod tests {
 
         assert_eq!(OPENAPI_PATH, "/api/openapi.json");
         assert_eq!(SONG_PATH, "/api/songs/{id}");
-        let mut served = vec![PATH, SONG_PATH, SEARCH_PATH, HEALTH_PATH];
+        let mut served = vec![PATH, SONG_PATH, SEARCH_PATH, HEALTH_PATH, SUPPORT_PATH];
         served.sort_unstable();
         assert_eq!(paths.keys().map(String::as_str).collect::<Vec<_>>(), served);
 

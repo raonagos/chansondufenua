@@ -45,7 +45,7 @@ use topcoat::{
 
 use crate::db::{SongOrder, songs};
 use crate::i18n::{self, Lang};
-use crate::pages::{home, songs as index};
+use crate::pages::{home, songs as index, support};
 use crate::state;
 
 /// The fixed-pages sitemap.
@@ -61,15 +61,23 @@ pub const SONGS_PATH: &str = "/himene/sitemap.xml";
 
 /// `GET /sitemap.xml` — the pages that are not songs.
 ///
-/// The two entries come from the site's own constants rather than being written
-/// out, so a route that moves takes its sitemap entry with it.
+/// The entries come from the site's own constants rather than being written out,
+/// so a route that moves takes its sitemap entry with it.
+///
+/// **The support page carries no `lastmod`.** The other two are lists of songs,
+/// so the newest song's `updated_at` is genuinely when they last changed; the
+/// support page changes when its addresses do, and that is a date no row in the
+/// database knows. The format's own way of saying "unknown" is to leave the
+/// element out, which is what an absent date does here — a fabricated date would
+/// be a claim to a crawler.
 #[route(GET "/sitemap.xml")]
 async fn fixed_pages(cx: &Cx) -> Result<Sitemap> {
     let updated = newest_update(cx).await?;
 
     Ok(Sitemap::new()
         .url(entry(i18n::url(Lang::DEFAULT, home::PATH), updated).priority(1.0))
-        .url(entry(i18n::url(Lang::DEFAULT, index::PATH), updated)))
+        .url(entry(i18n::url(Lang::DEFAULT, index::PATH), updated))
+        .url(entry(i18n::url(Lang::DEFAULT, support::PATH), None)))
 }
 
 /// `GET /himene/sitemap.xml` — every published song.

@@ -99,6 +99,7 @@ use crate::pages::{
     pluriel,
     recherche,
     songs,
+    support,
 };
 use crate::routes::{api, card, catalog, llms, sitemap};
 use crate::state;
@@ -428,7 +429,40 @@ async fn document(
         return Ok(Some(search_document(&needle, &found, lang, query)));
     }
 
+    // The support page: the heading, the sentence under it, and the addresses.
+    // Prose, so it has a Markdown twin; no read and no second state, because the
+    // page is the same document in every language but its chrome.
+    if path == support::PATH {
+        return Ok(Some(support_document(lang)));
+    }
+
     Ok(None)
+}
+
+/// The support page as one Markdown document — `/soutenir`.
+///
+/// The heading and the sentence under it are chrome and follow the language; the
+/// chain names are proper nouns and the addresses are byte-for-byte the strings
+/// the maintainer wrote. Each address is a fenced code block so a reader (or an
+/// agent) can copy it without the markup around it, and the source line names the
+/// page it came from.
+fn support_document(lang: Lang) -> String {
+    let mut out = format!(
+        "# {}\n\n{}\n",
+        i18n::text(lang, Key::SupportTitle),
+        i18n::text(lang, Key::SupportIntro)
+    );
+
+    for entry in support::ADDRESSES {
+        out.push_str(&format!(
+            "\n## {}\n\n```\n{}\n```\n",
+            entry.label, entry.address
+        ));
+    }
+
+    out.push_str(&format!("\nSource: {}\n", i18n::url(lang, support::PATH)));
+
+    out
 }
 
 /// Whether the client asked for Markdown **in preference to** HTML.
@@ -1033,6 +1067,19 @@ fn links(
         ];
     }
 
+    // The support page. A document, so it names both of its other forms: the
+    // Markdown twin under `alternate`, and the addresses as JSON under
+    // `describedby`. It is the same document in every language — only its
+    // chrome changes — so the alternate is its own URL in the language it was
+    // served in.
+    if path == support::PATH {
+        return vec![
+            sitemap_link,
+            format!("<{SITE_URL}{}>; rel=\"describedby\"", api::SUPPORT_PATH),
+            alternate(i18n::url(lang, support::PATH)),
+        ];
+    }
+
     match path {
         // `/aepa` is the front page under a second URL, so it has the same two
         // representations; it does not repeat the card link, which describes
@@ -1562,5 +1609,58 @@ mod tests {
             format!("- [Te here]({})", i18n::url(Lang::Fr, &song.get_path()))
         );
         assert!(listed.contains(SITE_URL), "{listed}");
+    }
+
+    /// The support page is a document like the others: three links — the
+    /// sitemap, the JSON read of its addresses, and its Markdown twin — and a
+    /// twin whose chrome follows the language while its addresses do not.
+    #[test]
+    fn the_support_page_names_its_two_other_forms() {
+        let html = links(support::PATH, false, Lang::Fr, "", None, None, None);
+        assert_eq!(html.len(), 3);
+        assert_eq!(
+            html[0],
+            format!("<{SITE_URL}{}>; rel=\"sitemap\"", sitemap::PATH)
+        );
+        assert_eq!(
+            html[1],
+            format!("<{SITE_URL}{}>; rel=\"describedby\"", api::SUPPORT_PATH)
+        );
+        assert_eq!(
+            html[2],
+            format!(
+                "<{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
+                i18n::url(Lang::Fr, support::PATH)
+            )
+        );
+
+        // Serving Markdown names the HTML document back, in the language the
+        // response was written in.
+        let as_markdown = links(support::PATH, true, Lang::Ty, "", None, None, None);
+        assert!(
+            as_markdown[2].contains("/ty/soutenir"),
+            "{}",
+            as_markdown[2]
+        );
+        assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
+
+        // The document: the heading is chrome, the addresses are content.
+        let french = support_document(Lang::Fr);
+        assert!(french.starts_with("# Soutenir le site\n"), "{french}");
+        assert!(french.ends_with(&format!("Source: {}\n", i18n::url(Lang::Fr, support::PATH))));
+        for entry in support::ADDRESSES {
+            assert!(french.contains(entry.address), "{}", entry.address);
+            assert!(french.contains(entry.label), "{}", entry.label);
+        }
+
+        let english = support_document(Lang::En);
+        assert!(english.starts_with("# Support the site\n"), "{english}");
+        for entry in support::ADDRESSES {
+            assert!(
+                english.contains(entry.address),
+                "an address was translated: {}",
+                entry.address
+            );
+        }
     }
 }

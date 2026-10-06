@@ -19,6 +19,7 @@ pub mod pluriel;
 pub mod recherche;
 pub mod song;
 pub mod songs;
+pub mod support;
 
 // Every URL that matches nothing else.
 //

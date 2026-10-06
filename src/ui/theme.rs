@@ -870,6 +870,36 @@ pub const FORM_ERROR: StaticClass =
     class!("mb-4 rounded-md border border-red-400 bg-ink-950 p-4 text-red-300");
 
 // ---------------------------------------------------------------------------
+// Support
+// ---------------------------------------------------------------------------
+
+/// A donation address on the support page: the address itself.
+///
+/// A block, so the copy control can sit under it, and it wraps wherever the
+/// characters run out rather than pushing a 44-character string past the edge of
+/// its panel — a phone is exactly where an address is hardest to read and
+/// easiest to mistype, and an address that has to be scrolled sideways is one
+/// that gets copied by hand off the end of a line.
+///
+/// The monospace face the chords and the controls already use, because an
+/// address is a string of characters to be compared one at a time, not a word.
+/// Full-strength text: this is the page's content.
+pub const SUPPORT_ADDRESS: StaticClass = class!("block font-mono text-sm break-all text-mist-100");
+
+/// The copy control under an address.
+///
+/// [`BUTTON_OUTLINE`]'s shape one size down: it is a control on a three-line
+/// panel, not a page's call to action, so it does not take the accent fill the
+/// primary buttons have. It is drawn only by the page's own script — the
+/// attribute that hides it is the one the script removes — so with JavaScript
+/// off the page carries no control that cannot work.
+pub const SUPPORT_COPY: StaticClass = class!(
+    "mt-4 inline-block cursor-pointer rounded-full border-2 border-ink-600 px-4 py-1 \
+     text-sm font-semibold text-mist-100 transition-colors \
+     hover:border-tahiti-400 hover:text-tahiti-300"
+);
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -983,6 +1013,8 @@ mod tests {
         FORM_SUBMIT,
         FORM_SUBMITTER,
         FORM_ERROR,
+        SUPPORT_ADDRESS,
+        SUPPORT_COPY,
     ];
 
     /// Renders a token to the class string the layout would put in the markup.

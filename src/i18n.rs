@@ -340,11 +340,21 @@ pub enum Key {
     SearchArtists,
     /// What a search says when neither half found anything.
     SearchEmpty,
+    /// The heading and `<title>` of `/soutenir` — the page that says how to
+    /// support the site.
+    SupportTitle,
+    /// The sentence under that heading: what the page is for. One line, and no
+    /// claim about the site beyond being free of advertising.
+    SupportIntro,
+    /// The support page's copy control, while the address is where it was.
+    SupportCopy,
+    /// The same control, once the address has been copied.
+    SupportCopied,
 }
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 35] = [
+    pub const ALL: [Key; 39] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -380,6 +390,10 @@ impl Key {
         Key::SearchSongs,
         Key::SearchArtists,
         Key::SearchEmpty,
+        Key::SupportTitle,
+        Key::SupportIntro,
+        Key::SupportCopy,
+        Key::SupportCopied,
     ];
 
     /// The French words. v3's, byte for byte.
@@ -424,6 +438,12 @@ impl Key {
             Key::SearchSongs => "Chansons",
             Key::SearchArtists => "Artistes",
             Key::SearchEmpty => "Aucun résultat",
+            Key::SupportTitle => "Soutenir le site",
+            Key::SupportIntro => {
+                "Ce site est gratuit, sans publicité. Pour aider à payer son hébergement, voici comment."
+            }
+            Key::SupportCopy => "Copier",
+            Key::SupportCopied => "Copié",
         }
     }
 
@@ -474,6 +494,15 @@ impl Key {
             Key::SearchSongs => "Te mau hīmene",
             Key::SearchArtists => "Te mau ta'ata hīmene",
             Key::SearchEmpty => "'Aita e mea i roa'a",
+            // A first pass like the rest of this catalog. `Tauturu` is "to
+            // help", `moni` is money, `titauhia` is the passive of "to ask
+            // for"; `vāhi` is a place. For a native speaker to correct.
+            Key::SupportTitle => "Tauturu i te 'api",
+            Key::SupportIntro => {
+                "'Aita e moni e titauhia i teie 'api. 'A tauturu mai, i raro nei te mau vāhi."
+            }
+            Key::SupportCopy => "Rave",
+            Key::SupportCopied => "'Ua rave",
         }
     }
 
@@ -518,6 +547,12 @@ impl Key {
             Key::SearchSongs => "Songs",
             Key::SearchArtists => "Artists",
             Key::SearchEmpty => "No results",
+            Key::SupportTitle => "Support the site",
+            Key::SupportIntro => {
+                "This site is free, with no advertising. To help pay for its hosting, here is how."
+            }
+            Key::SupportCopy => "Copy",
+            Key::SupportCopied => "Copied",
         }
     }
 }
@@ -612,12 +647,13 @@ mod tests {
             assert_eq!(text(Lang::Fr, key), words, "{key:?} moved");
         }
 
-        // Eighteen keys have been added since: the switcher's own label (step
+        // Twenty-two keys have been added since: the switcher's own label (step
         // 23), the transposition control's label and its two step links (step
         // 24), the auto-scroll control's four words (step 25), the multi-lyric
-        // page's four (step 26), and the search page's six (step 29). Every one
-        // of them is a new control or a new page, not a reworded old line.
-        const ADDED_SINCE: [Key; 18] = [
+        // page's four (step 26), the search page's six (step 29), and the
+        // support page's four (step 30). Every one of them is a new control or a
+        // new page, not a reworded old line.
+        const ADDED_SINCE: [Key; 22] = [
             Key::Language,
             Key::Transpose,
             Key::TransposeDown,
@@ -636,6 +672,10 @@ mod tests {
             Key::SearchSongs,
             Key::SearchArtists,
             Key::SearchEmpty,
+            Key::SupportTitle,
+            Key::SupportIntro,
+            Key::SupportCopy,
+            Key::SupportCopied,
         ];
 
         // Step 28's own work, and the only French in this test that is not

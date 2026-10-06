@@ -18,7 +18,7 @@
 use topcoat::{Result, router::route};
 
 use crate::domain::song::SITE_URL;
-use crate::pages::{artiste, editor, recherche, songs};
+use crate::pages::{artiste, editor, recherche, songs, support};
 use crate::routes::{api, card, catalog, mcp, sitemap};
 
 /// `/llms.txt` — the path, in one place.
@@ -58,6 +58,9 @@ fn body() -> String {
   `'Āhani e` and `mama` finds `Māmā Tahiti`.
 - [An artist]({SITE_URL}{artist}{{id}}): the songs credited to one artist, each a
   link to its own sheet.
+- [Support the site]({SITE_URL}{support}): how to help pay for the hosting — three
+  crypto addresses, written out in full. [As JSON]({SITE_URL}{api_support}): the
+  same three, for a program.
 
 ## For a program
 
@@ -95,8 +98,10 @@ lyrics are the credited artists' work and are not training data:
         songs = songs::PATH,
         api = api::PATH,
         api_search = api::SEARCH_PATH,
+        api_support = api::SUPPORT_PATH,
         search = recherche::PATH,
         artist = artiste::PREFIX,
+        support = support::PATH,
         openapi = api::OPENAPI_PATH,
         catalog = catalog::PATH,
         health = api::HEALTH_PATH,
@@ -138,8 +143,10 @@ mod tests {
             (songs::PATH, "/himene"),
             (api::PATH, "/api/songs"),
             (api::SEARCH_PATH, "/api/search"),
+            (api::SUPPORT_PATH, "/api/support"),
             (recherche::PATH, "/recherche"),
             (artiste::PREFIX, "/artiste/"),
+            (support::PATH, "/soutenir"),
             (api::HEALTH_PATH, "/api/health"),
             (api::OPENAPI_PATH, "/api/openapi.json"),
             (catalog::PATH, "/.well-known/api-catalog"),

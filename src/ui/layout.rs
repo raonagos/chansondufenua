@@ -45,7 +45,7 @@ use crate::i18n::{self, Key, Lang};
 use crate::pages::{
     artiste, editor,
     home::{self, AEPA_PATH, PATH as HOME},
-    pluriel, recherche, songs,
+    pluriel, recherche, songs, support,
 };
 use crate::routes::{negotiation, og};
 use crate::state;
@@ -442,6 +442,20 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
             social: None,
             jsonld: None,
         };
+    }
+
+    // The support page. A page with prose of its own — what it is for, and the
+    // addresses — so it takes a description, a canonical URL and a card, the
+    // same way the index and an artist's page do. Its title is chrome; its
+    // description is the catalogue's own French, like every other page's.
+    if path == support::PATH {
+        return page_head(
+            format!("{} | {TITLE}", i18n::text(lang, Key::SupportTitle)),
+            support::DESCRIPTION,
+            &i18n::url(lang, support::PATH),
+            lang,
+            None,
+        );
     }
 
     // A path no route claims never reaches the layout at all — the router
@@ -906,7 +920,7 @@ mod tests {
     use crate::domain::song::DESCRIPTION_MAX;
 
     /// Every page the router serves, in the order this module decides them.
-    const PAGES: [&str; 4] = [HOME, AEPA_PATH, songs::PATH, editor::PATH];
+    const PAGES: [&str; 5] = [HOME, AEPA_PATH, songs::PATH, editor::PATH, support::PATH];
 
     /// `<title>` is the one field a search result leads with, and two URLs
     /// answering with the same one tells a crawler they are the same page. Three
@@ -922,13 +936,14 @@ mod tests {
         assert_eq!(unique.len(), titles.len(), "{titles:?}");
     }
 
-    /// The three pages that have prose to offer a search engine carry all four
+    /// The pages that have prose to offer a search engine carry all four
     /// fields — a description inside the budget a snippet is read at, the
     /// canonical URL, and a card whose `og:url` is that same URL. Each of them
-    /// was missing a different one in v4.
+    /// was missing a different one in v4, and the support page (step 30) joined
+    /// them by having all four from its first day.
     #[test]
     fn the_prose_pages_have_a_description_a_canonical_and_a_card() {
-        for path in [HOME, AEPA_PATH, songs::PATH] {
+        for path in [HOME, AEPA_PATH, songs::PATH, support::PATH] {
             let head = site_head(path, Lang::Fr);
             let description = head.description.expect("a description");
             let canonical = head.canonical.expect("a canonical URL");
@@ -1096,7 +1111,7 @@ mod tests {
     #[test]
     fn every_page_canonicalises_to_its_own_language_prefix() {
         for lang in Lang::ALL {
-            for path in [HOME, AEPA_PATH, songs::PATH] {
+            for path in [HOME, AEPA_PATH, songs::PATH, support::PATH] {
                 let head = site_head(path, lang);
                 let canonical = head.canonical.expect("a canonical URL");
 
@@ -1135,6 +1150,7 @@ mod tests {
             AEPA_PATH,
             songs::PATH,
             editor::PATH,
+            support::PATH,
             "/himene/ahani-e",
         ] {
             let links: Vec<(Lang, String)> = Lang::ALL
