@@ -7,7 +7,7 @@
 //!   column straight into the template, which is an XSS hole on a free-form
 //!   "add the lyrics" form.
 //! * [`Song::clean_lyrics`] — chord-free plain text, byte-for-byte what v3 put
-//!   in `og:description` and JSON-LD (`Lyrics of <title> - <clean>`).
+//!   in `og:description`, and still what the JSON-LD `lyrics.text` carries.
 //! * [`Song::lyrics_markdown`] — Markdown with chords kept inline, for the
 //!   `Accept: text/markdown` negotiation in step 10.
 
@@ -37,6 +37,15 @@ pub const LYRICS_MAX: usize = 6000;
 /// leaves room to spare while keeping a runaway create-song request cheap to
 /// reject.
 pub const ARTISTS_MAX: usize = 10;
+
+/// The budget for a song page's `<meta name="description">` and
+/// `og:description`.
+///
+/// A search engine shows roughly 155 characters of a description. v3 put the
+/// whole chord-free lyric there instead — 888 characters on a real song, opening
+/// with the scaffold `Lyrics of | Paroles de | Parau hīmene nō`, which is neither
+/// a sentence nor a language. See [`Song::get_meta_data`].
+pub const DESCRIPTION_MAX: usize = 155;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 /// Structure representing a song.
@@ -302,14 +311,16 @@ impl Song {
             false => format!("{} - {} | {page_title}", self.title, artists_name),
         };
 
-        // Left exactly as v3 wrote it, mixing French and Tahitian in one string.
-        // Step 8 (i18n) is where this becomes a translated message.
-        let meta_description = format!(
-            "Lyrics of | Paroles de | Parau hīmene nō {} - {}",
-            self.title,
-            self.clean_lyrics(),
-        );
-        let meta_og_description = format!("Lyrics of {} - {}", self.title, self.clean_lyrics());
+        // v3 wrote both of these as the whole chord-free lyric — 888 characters
+        // on a real song, opening with the scaffold `Lyrics of | Paroles de |
+        // Parau hīmene nō`, which is neither a sentence nor a language. A
+        // description is a snippet: this says what the page is, leads with the
+        // title, and stops inside the ~155 characters a search engine will show.
+        // `clean_lyrics` is still what the JSON-LD carries, where the whole text
+        // is the point.
+        let description = description_sentence(&self.title, &artists_name);
+        let meta_description = description.clone();
+        let meta_og_description = description;
 
         let meta_og_url = self.get_url();
         let uat = self.get_uat_timestamp();
@@ -334,6 +345,50 @@ impl Song {
 }
 
 // html meta tag helper
+
+/// The one-sentence description of a song page.
+///
+/// The title first — what a reader is looking for is the song — then what the
+/// page holds (its lyrics and its chords), then who wrote it and where it lives.
+/// French, like the front page's own description; the chrome's language is a
+/// separate question that does not reach the content.
+///
+/// The result is at most [`DESCRIPTION_MAX`] characters. The tail is kept whole
+/// and the title gives way first, so a very long title is cut rather than the
+/// sentence being left half-written.
+fn description_sentence(title: &str, artists: &str) -> String {
+    let mut tail = String::from(" — paroles et accords");
+    if !artists.is_empty() {
+        tail.push_str(" de ");
+        tail.push_str(artists);
+    }
+    tail.push_str(", à retrouver sur Chanson du fenua.");
+
+    // Defensive: ten artists at the schema's own maximum could in principle
+    // swallow the whole budget. The corpus never comes close — the longest title
+    // in the 2025-03-22 export is 28 characters and the longest artist name 18 —
+    // so the ordinary path is "the title fits, nothing is cut".
+    let tail = truncate_chars(&tail, DESCRIPTION_MAX);
+    let room = DESCRIPTION_MAX - tail.chars().count();
+
+    format!("{}{tail}", truncate_chars(title, room))
+}
+
+/// The first `room` characters of `text`, with an ellipsis when it had to be cut.
+///
+/// Counts characters, not bytes: the corpus's titles carry macrons and `ʻokina`.
+fn truncate_chars(text: &str, room: usize) -> String {
+    if text.chars().count() <= room {
+        return text.to_owned();
+    }
+    if room == 0 {
+        return String::new();
+    }
+
+    let mut out: String = text.chars().take(room - 1).collect();
+    out.push('…');
+    out
+}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MetaSongData {
@@ -759,16 +814,15 @@ mod tests {
 
     #[test]
     fn clean_lyrics_matches_live_output() {
-        // The oracle: the prefix of the real `og:description` served for
-        // /himene/7114wvk91gffr2bj6wza, up to the fourth line.
+        // The oracle: the prefix of the real `og:description` v3 served for
+        // /himene/7114wvk91gffr2bj6wza, up to the fourth line. `clean_lyrics` is
+        // a parity function — v4.1 stopped putting its output in the page head
+        // (see `description_sentence`), but the JSON-LD still carries it, so it
+        // must keep matching what v3 produced.
         let song = song_with(REAL_LYRICS);
         assert_eq!(
             song.clean_lyrics(),
             "'Āhani e , E rāve'a, Nō te fa'aho'i te tau i muri, Hina'aro ho'i au"
-        );
-        assert_eq!(
-            song.get_meta_data().meta_description,
-            "Lyrics of | Paroles de | Parau hīmene nō Song Title - 'Āhani e , E rāve'a, Nō te fa'aho'i te tau i muri, Hina'aro ho'i au"
         );
     }
 
@@ -844,11 +898,11 @@ mod tests {
 
         let meta_data = song.get_meta_data();
         assert_eq!(meta_data.page_title, "Song Title | Chanson du fenua");
-        assert!(
-            meta_data
-                .meta_description
-                .contains("Lyrics of | Paroles de | Parau hīmene nō Song Title")
+        assert_eq!(
+            meta_data.meta_description,
+            "Song Title — paroles et accords, à retrouver sur Chanson du fenua."
         );
+        assert_eq!(meta_data.meta_og_description, meta_data.meta_description);
     }
 
     #[test]
@@ -875,11 +929,11 @@ mod tests {
             meta_data.page_title,
             "Song Title - Artist Name | Chanson du fenua"
         );
-        assert!(
-            meta_data
-                .meta_description
-                .contains("Lyrics of | Paroles de | Parau hīmene nō Song Title")
+        assert_eq!(
+            meta_data.meta_description,
+            "Song Title — paroles et accords de Artist Name, à retrouver sur Chanson du fenua."
         );
+        assert_eq!(meta_data.meta_og_description, meta_data.meta_description);
         assert_eq!(
             meta_data.meta_og_url,
             "https://www.chansondufenua.pf/himene/Song ID"
@@ -894,6 +948,81 @@ mod tests {
                 .meta_img_url_tw
                 .starts_with("https://www.chansondufenua.pf/drive/gentw/")
         );
+    }
+
+    /// The snippet is a sentence, not the document: it leads with the title,
+    /// says what the page is, and stays inside the ~155 characters a search
+    /// engine shows — which the whole chord-free lyric (888 characters on a real
+    /// song) never did.
+    #[test]
+    fn the_description_leads_with_the_title_and_fits_a_snippet() {
+        let song = song_with(REAL_LYRICS);
+        let meta = song.get_meta_data();
+
+        assert!(
+            meta.meta_description.starts_with("Song Title"),
+            "{:?}",
+            meta.meta_description
+        );
+        assert!(meta.meta_description.contains("paroles et accords"));
+        assert!(
+            meta.meta_description.chars().count() <= DESCRIPTION_MAX,
+            "{} characters: {:?}",
+            meta.meta_description.chars().count(),
+            meta.meta_description
+        );
+        // The trap this step exists to close: the description used to *be* the
+        // lyric.
+        assert!(
+            !meta.meta_description.contains("Hina'aro"),
+            "{:?}",
+            meta.meta_description
+        );
+        assert!(meta.meta_description.chars().count() < song.clean_lyrics().chars().count());
+    }
+
+    #[test]
+    fn the_description_names_the_artists() {
+        let mut song = song_with("Song Lyrics");
+        for name in ["2B Brothers Tahiti", "T'Angelo"] {
+            song.artists.push(Artist::new(
+                name.to_string(),
+                name.to_string(),
+                Utc::now(),
+                Utc::now(),
+            ));
+        }
+
+        let meta = song.get_meta_data();
+        assert!(
+            meta.meta_description
+                .contains("paroles et accords de 2B Brothers Tahiti, T'Angelo"),
+            "{:?}",
+            meta.meta_description
+        );
+    }
+
+    /// A title longer than the budget is cut, and the sentence survives whole:
+    /// the ellipsis lands inside the title, never on the tail.
+    #[test]
+    fn a_long_title_gives_way_before_the_sentence() {
+        let long = "Ā".repeat(TITLE_MAX);
+        let song = Song::new(
+            "8nntgjk4rl5dbp67c6en".to_string(),
+            long.clone(),
+            "Song Lyrics".to_string(),
+            100,
+            vec![],
+            true,
+            Utc::now(),
+            Utc::now(),
+        );
+
+        let description = song.get_meta_data().meta_description;
+        assert_eq!(description.chars().count(), DESCRIPTION_MAX);
+        assert!(description.ends_with(", à retrouver sur Chanson du fenua."));
+        assert!(description.contains('…'));
+        assert!(long.starts_with(&description[..description.find('…').unwrap()]));
     }
 
     #[test]

@@ -67,6 +67,9 @@ struct DocumentHead {
 
 /// The Open Graph and Twitter tags, which v3 emitted per song.
 struct SocialCards {
+    /// `og:type`. A song page is `music.song`, which is what the type is for;
+    /// any card a later step gives a non-song page declares its own.
+    og_type: &'static str,
     og_title: String,
     og_description: String,
     og_url: String,
@@ -95,6 +98,9 @@ impl SocialCards {
     /// against `/drive/genog/`) and the card is a wider crop.
     fn for_song(meta: &crate::domain::song::MetaSongData, lang: Lang) -> Self {
         Self {
+            // `music.song`, not v3's `website`: this is a song, and Open Graph
+            // has a type for one.
+            og_type: "music.song",
             og_title: meta.page_title.clone(),
             og_description: meta.meta_og_description.clone(),
             og_url: meta.meta_og_url.clone(),
@@ -254,7 +260,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     Some(cards) => {
                         <meta property="fb:app_id" content="383599779228826"/>
                         <meta property="fb:pages" content="109134754150923"/>
-                        <meta property="og:type" content="website"/>
+                        <meta property="og:type" content=(cards.og_type)/>
                         <meta property="og:locale" content=(cards.locale)/>
                         <meta property="og:locale:alternate" content=(cards.locale_alternate)/>
                         <meta property="og:title" content=(cards.og_title)/>
@@ -270,7 +276,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         <meta name="twitter:description" content=(cards.twitter_description)/>
                         <meta name="twitter:image" content=(cards.twitter_image)/>
                         <meta name="twitter:image:width" content="1200"/>
-                        <meta name="twitter:image:height" content="628"/>
+                        <meta name="twitter:image:height" content="630"/>
                         <meta name="twitter:creator" content="@raonagos"/>
                         <meta name="twitter:site" content="@raonagos"/>
                     },
