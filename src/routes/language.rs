@@ -47,7 +47,7 @@ use topcoat::{
 };
 
 use crate::i18n::{self, Lang, Language};
-use crate::pages::{artiste, editor, home, pluriel, recherche, songs, support};
+use crate::pages::{artist, book, editor, home, search, songs, support};
 use crate::routes::negotiation;
 
 /// The layer. A unit value: it holds no state, and the request context is where
@@ -153,10 +153,10 @@ fn is_page(path: &str) -> bool {
         || path == home::AEPA_PATH
         || path == songs::PATH
         || path == editor::PATH
-        || path == pluriel::PATH
-        || path == recherche::PATH
+        || path == book::PATH
+        || path == search::PATH
         || path == support::PATH
-        || artiste::segment(path).is_some()
+        || artist::segment(path).is_some()
         || songs::page_segment(path).is_some()
         || negotiation::song_segment(path).is_some()
 }
@@ -276,7 +276,7 @@ fn redirect(target: &str, remember: Option<Lang>) -> Response {
 mod tests {
     use super::*;
     use crate::i18n::Lang;
-    use crate::pages::{editor, home, pluriel, songs, support};
+    use crate::pages::{book, editor, home, songs, support};
 
     /// The reader that decides whether a path is a page, and in what language.
     ///
@@ -314,8 +314,8 @@ mod tests {
             home::AEPA_PATH,
             songs::PATH,
             editor::PATH,
-            pluriel::PATH,
-            recherche::PATH,
+            book::PATH,
+            search::PATH,
             support::PATH,
         ] {
             assert!(page_of(path).is_some(), "{path}");

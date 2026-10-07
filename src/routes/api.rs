@@ -26,13 +26,13 @@
 //!   is part of the surface: a caller that asked for JSON should not have to
 //!   parse a document to find out it was wrong.
 //! * **The catalogue takes an optional selection.** `?s={slug}` repeated is the
-//!   multi-lyric page's own URL (`pages::pluriel`), and asking this endpoint for
+//!   multi-lyric page's own URL (`pages::book`), and asking this endpoint for
 //!   it answers the same songs in the order the query named them, **with their
 //!   lyrics** — that page's whole content is the lyrics, so its JSON form has
 //!   nothing to say without them. A selection that names an unpublished song is
 //!   the same 404 as a missing id: the page does not serve a selection with a
 //!   hole in it, and neither does this. The parameter is read by
-//!   `pluriel::selection`, so the page and this read cannot disagree about which
+//!   `book::selection`, so the page and this read cannot disagree about which
 //!   query string is a selection.
 //!
 //! Nothing here writes. The only writable route on the site is the create-song
@@ -57,7 +57,7 @@ use crate::db::{self, SongOrder};
 use crate::domain::song::SITE_URL;
 use crate::domain::{Artist, Song};
 use crate::i18n;
-use crate::pages::{artiste, pluriel, recherche, support};
+use crate::pages::{artist, book, search, support};
 use crate::state;
 
 /// The catalogue.
@@ -65,9 +65,9 @@ pub const PATH: &str = "/api/songs";
 
 /// The search endpoint: `/api/search?q=…`.
 ///
-/// The machine-readable half of [`crate::pages::recherche`]: the same needle, the
+/// The machine-readable half of [`crate::pages::search`]: the same needle, the
 /// same two reads, the same limit. The page's own form and this endpoint share
-/// `recherche::needle`, so the string a browser submits and the string a client
+/// `search::needle`, so the string a browser submits and the string a client
 /// sends are read identically.
 pub const SEARCH_PATH: &str = "/api/search";
 
@@ -200,7 +200,7 @@ impl ArtistJson {
         Self {
             id: artist.get_id(),
             name: artist.get_fullname(),
-            url: i18n::absolute(&artiste::path_of(&artist.get_id())),
+            url: i18n::absolute(&artist::path_of(&artist.get_id())),
         }
     }
 }
@@ -237,12 +237,12 @@ async fn health(cx: &Cx) -> Result<Json<serde_json::Value>> {
 /// not a second resource.
 #[route(GET "/api/songs")]
 async fn catalogue(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
-    let selected = pluriel::selection(uri(cx).query().unwrap_or(""));
+    let selected = book::selection(uri(cx).query().unwrap_or(""));
 
     if !selected.is_empty() {
-        let query = pluriel::query(&selected);
+        let query = book::query(&selected);
         return Ok(
-            match pluriel::resolve(state::db(cx).pool(), &selected).await? {
+            match book::resolve(state::db(cx).pool(), &selected).await? {
                 Some(sheets) => (
                     StatusCode::OK,
                     Json(serde_json::json!({
@@ -251,7 +251,7 @@ async fn catalogue(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
                     })),
                 ),
                 // The message names the selection rather than the offending segment:
-                // the read is `pages::pluriel`'s and it answers with the whole
+                // the read is `pages::book`'s and it answers with the whole
                 // selection's fate by design, so naming one segment here would mean
                 // resolving them a second time in this file.
                 None => (
@@ -279,7 +279,7 @@ async fn catalogue(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
 /// `GET /api/search` — the catalogue's titles and the artists' names, by needle.
 ///
 /// The same two reads the search page makes, from the same function
-/// ([`recherche::run`]), so the HTML and the JSON cannot disagree about what a
+/// ([`search::run`]), so the HTML and the JSON cannot disagree about what a
 /// needle found. The matching is accent- and ʻokina-insensitive: `ahani` finds
 /// `'Āhani e` and `mama` finds `Māmā Tahiti`.
 ///
@@ -289,20 +289,20 @@ async fn catalogue(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
 /// report as success. The body is this API's own error shape, so a client that
 /// asked for JSON does not have to parse a document to find out it was wrong.
 #[route(GET "/api/search")]
-async fn search(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
+async fn search_results(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)> {
     let query = uri(cx).query().unwrap_or("");
 
-    let Some(needle) = recherche::needle(query) else {
+    let Some(needle) = search::needle(query) else {
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
                 "error": "invalid_request",
-                "message": format!("no search term: pass ?{}=…", recherche::PARAM),
+                "message": format!("no search term: pass ?{}=…", search::PARAM),
             })),
         ));
     };
 
-    let found = recherche::run(state::db(cx).pool(), &needle).await?;
+    let found = search::run(state::db(cx).pool(), &needle).await?;
 
     Ok((
         StatusCode::OK,
@@ -755,7 +755,7 @@ mod tests {
         assert_eq!(SUPPORT_PATH, "/api/support");
         // The endpoint and the page read the same parameter, so the JSON a
         // client is told to send is the query string a browser's form submits.
-        assert_eq!(recherche::PARAM, "q");
+        assert_eq!(search::PARAM, "q");
         assert!(VERSION.starts_with('4'));
     }
 
@@ -767,7 +767,7 @@ mod tests {
         let db = Db::open_in_memory().await.expect("in-memory database");
         fixtures::seed(db.pool()).await.expect("seed fixtures");
 
-        let found = recherche::run(db.pool(), "mama").await.expect("the read");
+        let found = search::run(db.pool(), "mama").await.expect("the read");
         assert!(
             found
                 .songs
@@ -787,7 +787,7 @@ mod tests {
         assert_eq!(artist.name, fixtures::ARTISTS[0].fullname);
         assert_eq!(
             artist.url,
-            format!("{SITE_URL}{}", artiste::path_of(fixtures::ARTISTS[0].id))
+            format!("{SITE_URL}{}", artist::path_of(fixtures::ARTISTS[0].id))
         );
         assert!(body["songs"].as_array().is_some());
         assert!(body["artists"].as_array().is_some());
@@ -809,7 +809,7 @@ mod tests {
     /// the query's own order — and a hole in the selection is the 404 rather than
     /// a shortened list.
     ///
-    /// The read is `pages::pluriel`'s, which is the point of this test: the page
+    /// The read is `pages::book`'s, which is the point of this test: the page
     /// and the API cannot answer a selection differently, because there is one
     /// implementation of "which songs does this URL name".
     #[tokio::test]
@@ -821,7 +821,7 @@ mod tests {
         let first = fixtures::SONGS[0].slug.to_owned();
         let selected = vec![second, first];
 
-        let sheets = pluriel::resolve(db.pool(), &selected)
+        let sheets = book::resolve(db.pool(), &selected)
             .await
             .expect("the read")
             .expect("both are published");
@@ -841,7 +841,7 @@ mod tests {
         );
 
         assert!(
-            pluriel::resolve(db.pool(), &["no-such-song".to_owned()])
+            book::resolve(db.pool(), &["no-such-song".to_owned()])
                 .await
                 .expect("the read")
                 .is_none(),
@@ -888,7 +888,7 @@ mod tests {
         assert!(paths[PATH]["get"]["responses"]["404"].is_object());
         assert_eq!(
             selection["name"], "s",
-            "the parameter name is the one `pages::pluriel` reads"
+            "the parameter name is the one `pages::book` reads"
         );
     }
 

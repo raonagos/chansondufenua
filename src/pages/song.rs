@@ -43,7 +43,7 @@ use crate::db;
 use crate::domain::chord;
 use crate::domain::song::{LyricLine, LyricSpan, Song};
 use crate::i18n::{self, Key, Lang};
-use crate::pages::artiste;
+use crate::pages::artist;
 use crate::state;
 use crate::ui::theme;
 
@@ -106,7 +106,7 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
     let artists = sheet
         .get_artists()
         .iter()
-        .map(|artist| (artiste::link(cx, artist), artist.get_fullname()))
+        .map(|artist| (artist::link(cx, artist), artist.get_fullname()))
         .collect::<Vec<(String, String)>>();
 
     // `?tr=` — the reader's own key. Read from the request and applied to the

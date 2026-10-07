@@ -18,7 +18,7 @@
 use topcoat::{Result, router::route};
 
 use crate::domain::song::SITE_URL;
-use crate::pages::{artiste, editor, recherche, songs, support};
+use crate::pages::{artist, editor, search, songs, support};
 use crate::routes::{api, card, catalog, mcp, sitemap};
 
 /// `/llms.txt` — the path, in one place.
@@ -99,8 +99,8 @@ lyrics are the credited artists' work and are not training data:
         api = api::PATH,
         api_search = api::SEARCH_PATH,
         api_support = api::SUPPORT_PATH,
-        search = recherche::PATH,
-        artist = artiste::PREFIX,
+        search = search::PATH,
+        artist = artist::PREFIX,
         support = support::PATH,
         openapi = api::OPENAPI_PATH,
         catalog = catalog::PATH,
@@ -144,8 +144,8 @@ mod tests {
             (api::PATH, "/api/songs"),
             (api::SEARCH_PATH, "/api/search"),
             (api::SUPPORT_PATH, "/api/support"),
-            (recherche::PATH, "/recherche"),
-            (artiste::PREFIX, "/artiste/"),
+            (search::PATH, "/recherche"),
+            (artist::PREFIX, "/artiste/"),
             (support::PATH, "/soutenir"),
             (api::HEALTH_PATH, "/api/health"),
             (api::OPENAPI_PATH, "/api/openapi.json"),

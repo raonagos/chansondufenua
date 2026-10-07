@@ -90,14 +90,14 @@ use crate::domain::chord;
 use crate::domain::song::SITE_URL;
 use crate::i18n::{self, Key, Lang};
 use crate::pages::{
-    artiste,
+    artist,
+    book,
     home,
     // The two front-page URLs. Their owner is `pages::home` — the page that
     // `#[page("/…")]` declares them in — because the layout matches the request
     // path against the same two constants to decide the document head.
     home::{AEPA_PATH as AEPA, PATH as HOME},
-    pluriel,
-    recherche,
+    search,
     songs,
     support,
 };
@@ -165,7 +165,7 @@ impl Layer for Negotiation {
             // headers are decided *here*, before the handler runs, and a header
             // promising a Markdown twin for a URL that 404s is this module's
             // oldest lie.
-            let artist = match artiste::segment(path) {
+            let artist = match artist::segment(path) {
                 Some(id) => db::artist(state::db(cx).pool(), id).await?,
                 None => None,
             };
@@ -299,7 +299,7 @@ pub(crate) fn song_segment(path: &str) -> Option<&str> {
         && !segment.contains('/')
         && path != crate::pages::editor::PATH
         && path != sitemap::SONGS_PATH
-        && path != pluriel::PATH;
+        && path != book::PATH;
 
     is_song.then_some(segment)
 }
@@ -395,12 +395,12 @@ async fn document(
     // A selection that does not resolve answers `None`, so a request for Markdown
     // on it falls through to the router and becomes the site's 404 — the page's
     // own answer, for the page's own reason.
-    if path == pluriel::PATH {
-        let segments = pluriel::selection(uri(cx).query().unwrap_or(""));
+    if path == book::PATH {
+        let segments = book::selection(uri(cx).query().unwrap_or(""));
         if segments.is_empty() {
             return Ok(None);
         }
-        let sheets = pluriel::resolve(state::db(cx).pool(), &segments).await?;
+        let sheets = book::resolve(state::db(cx).pool(), &segments).await?;
         return Ok(sheets.map(|sheets| selection_document(&sheets, lang, &segments)));
     }
 
@@ -408,7 +408,7 @@ async fn document(
     // has a Markdown twin, from the same read the page renders. An id the caller
     // could not resolve answers `None`, and the request falls through to the
     // router and becomes the same 404 the HTML gets.
-    if artiste::segment(path).is_some() {
+    if artist::segment(path).is_some() {
         let Some(row) = artist else {
             return Ok(None);
         };
@@ -419,13 +419,13 @@ async fn document(
 
     // The search page: a *search* is prose and has a document — the two halves of
     // what it found. The bare form has none, the picker's rule again.
-    if path == recherche::PATH {
+    if path == search::PATH {
         let query = uri(cx).query().unwrap_or("");
-        let Some(needle) = recherche::needle(query) else {
+        let Some(needle) = search::needle(query) else {
             return Ok(None);
         };
 
-        let found = recherche::run(state::db(cx).pool(), &needle).await?;
+        let found = search::run(state::db(cx).pool(), &needle).await?;
         return Ok(Some(search_document(&needle, &found, lang, query)));
     }
 
@@ -583,7 +583,7 @@ pub(crate) fn song_document(sheet: &Song, lang: Lang, offset: i32) -> String {
 /// about a URL, and a Markdown file quoted into a chat should say which URL it
 /// came from.
 fn selection_document(sheets: &[Song], lang: Lang, segments: &[String]) -> String {
-    let mut out = format!("# {}\n\n", i18n::text(lang, Key::PlurielTitle));
+    let mut out = format!("# {}\n\n", i18n::text(lang, Key::BookTitle));
 
     for sheet in sheets {
         let title = link_text(&sheet.get_title());
@@ -605,10 +605,7 @@ fn selection_document(sheets: &[Song], lang: Lang, segments: &[String]) -> Strin
         out.push_str(&format!("{}\n\n", sheet.lyrics_markdown()));
     }
 
-    let url = i18n::url(
-        lang,
-        &format!("{}?{}", pluriel::PATH, pluriel::query(segments)),
-    );
+    let url = i18n::url(lang, &format!("{}?{}", book::PATH, book::query(segments)));
     out.push_str(&format!("Source: {url}\n"));
 
     out
@@ -635,7 +632,7 @@ fn artist_document(artist: &crate::domain::Artist, listed: &[Song], lang: Lang) 
 
     out.push_str(&format!(
         "\nSource: {}\n",
-        i18n::url(lang, &artiste::path_of(&artist.get_id()))
+        i18n::url(lang, &artist::path_of(&artist.get_id()))
     ));
 
     out
@@ -651,7 +648,7 @@ fn artist_document(artist: &crate::domain::Artist, listed: &[Song], lang: Lang) 
 /// The source line names the *search*, not the catalogue: this document is about
 /// a URL, and a Markdown file quoted into a chat should say which URL it came
 /// from.
-fn search_document(needle: &str, found: &recherche::Results, lang: Lang, query: &str) -> String {
+fn search_document(needle: &str, found: &search::Results, lang: Lang, query: &str) -> String {
     let mut out = format!(
         "# {} : {}\n\n",
         i18n::text(lang, Key::SearchTitle),
@@ -675,15 +672,15 @@ fn search_document(needle: &str, found: &recherche::Results, lang: Lang, query: 
                 out.push_str(&format!(
                     "- [{}]({})\n",
                     link_text(&artist.get_fullname()),
-                    i18n::url(lang, &artiste::path_of(&artist.get_id()))
+                    i18n::url(lang, &artist::path_of(&artist.get_id()))
                 ));
             }
         }
     }
 
-    let source = match recherche::query_string(query) {
-        Some(chosen) => format!("{}?{chosen}", recherche::PATH),
-        None => recherche::PATH.to_owned(),
+    let source = match search::query_string(query) {
+        Some(chosen) => format!("{}?{chosen}", search::PATH),
+        None => search::PATH.to_owned(),
     };
     out.push_str(&format!("\nSource: {}\n", i18n::url(lang, &source)));
 
@@ -987,11 +984,11 @@ fn links(
     // resolved: `None` means the URL names nobody, so the page handler raises the
     // branded 404 and this promises it nothing but the sitemap, the same rule a
     // song URL that names no published song follows.
-    if artiste::segment(path).is_some() {
+    if artist::segment(path).is_some() {
         return match artist {
             Some(row) => vec![
                 sitemap_link,
-                alternate(i18n::url(lang, &artiste::path_of(&row.get_id()))),
+                alternate(i18n::url(lang, &artist::path_of(&row.get_id()))),
             ],
             None => vec![sitemap_link],
         };
@@ -1003,15 +1000,15 @@ fn links(
     // because the promise is about *this* search and a link built from the path
     // alone would name the bare form, which has neither. The bare form promises
     // the sitemap and nothing else: a form is not a document.
-    if path == recherche::PATH {
-        return match recherche::query_string(query) {
+    if path == search::PATH {
+        return match search::query_string(query) {
             Some(chosen) => vec![
                 sitemap_link,
                 format!(
                     "<{SITE_URL}{}?{chosen}>; rel=\"describedby\"",
                     api::SEARCH_PATH
                 ),
-                alternate(i18n::url(lang, &format!("{}?{chosen}", recherche::PATH))),
+                alternate(i18n::url(lang, &format!("{}?{chosen}", search::PATH))),
             ],
             None => vec![sitemap_link],
         };
@@ -1039,17 +1036,17 @@ fn links(
     // A selection has both of the other forms; the picker has neither, and
     // promises only the sitemap — the same single link the create-song page
     // gets, for the same reason: a form is not a document.
-    if path == pluriel::PATH {
-        let segments = pluriel::selection(query);
+    if path == book::PATH {
+        let segments = book::selection(query);
         if segments.is_empty() {
             return vec![sitemap_link];
         }
 
-        let chosen = pluriel::query(&segments);
+        let chosen = book::query(&segments);
         return vec![
             sitemap_link,
             format!("<{SITE_URL}{}?{chosen}>; rel=\"describedby\"", api::PATH),
-            alternate(i18n::url(lang, &format!("{}?{chosen}", pluriel::PATH))),
+            alternate(i18n::url(lang, &format!("{}?{chosen}", book::PATH))),
         ];
     }
 
@@ -1433,7 +1430,7 @@ mod tests {
     /// document.
     #[test]
     fn a_selection_names_its_own_json_and_markdown_forms() {
-        let chosen = links(pluriel::PATH, false, Lang::Fr, "s=a&s=b", None, None, None);
+        let chosen = links(book::PATH, false, Lang::Fr, "s=a&s=b", None, None, None);
         assert_eq!(chosen.len(), 3);
         assert_eq!(
             chosen[0],
@@ -1453,14 +1450,14 @@ mod tests {
 
         // Serving Markdown flips the alternate to the HTML document and keeps
         // the query, in the reader's language.
-        let as_markdown = links(pluriel::PATH, true, Lang::Ty, "s=a&s=b", None, None, None);
+        let as_markdown = links(book::PATH, true, Lang::Ty, "s=a&s=b", None, None, None);
         assert!(as_markdown[2].contains("/ty/himene/pluriel?s=a&s=b"));
         assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
 
         // The picker: a path with no selection, and a query that is not one.
         for query in ["", "s=", "tr=3", "page=2"] {
             assert_eq!(
-                links(pluriel::PATH, false, Lang::Fr, query, None, None, None).len(),
+                links(book::PATH, false, Lang::Fr, query, None, None, None).len(),
                 1,
                 "{query:?}"
             );

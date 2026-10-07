@@ -54,7 +54,7 @@ use topcoat::{
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
 use crate::i18n::{self, Key};
-use crate::pages::{artiste, pluriel, song as sheet};
+use crate::pages::{artist, book, song as sheet};
 use crate::state;
 use crate::ui::theme;
 
@@ -304,10 +304,10 @@ pub async fn index_body(cx: &Cx, number: u32) -> Result<impl View> {
             // The index's own next step: a reader who has just scanned the
             // catalogue can choose several songs and read them together. A plain
             // link rather than a control of its own, and the page it opens is
-            // `noindex` — see `pages::pluriel`.
-            <p class=(theme::PLURIEL_ENTRY)>
-                <a href=(i18n::link(cx, pluriel::PATH)) class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))>
-                    (i18n::text(lang, Key::PlurielOpen))
+            // `noindex` — see `pages::book`.
+            <p class=(theme::BOOK_ENTRY)>
+                <a href=(i18n::link(cx, book::PATH)) class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))>
+                    (i18n::text(lang, Key::BookOpen))
                 </a>
             </p>
         </div>
@@ -333,7 +333,7 @@ pub async fn song_row(cx: &Cx, song: Song) -> Result<impl View> {
     let artists = song
         .get_artists()
         .iter()
-        .map(|artist| (artiste::link(cx, artist), artist.get_fullname()))
+        .map(|artist| (artist::link(cx, artist), artist.get_fullname()))
         .collect::<Vec<(String, String)>>();
 
     Ok(view! {

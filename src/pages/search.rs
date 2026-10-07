@@ -10,7 +10,7 @@
 //!
 //! `/recherche?q=ahani` — a `GET` form on this page, and the same parameter read
 //! back from the URL. That is the multi-lyric page's pattern
-//! ([`crate::pages::pluriel`]) for the same reason: a reader can keep, print or
+//! ([`crate::pages::book`]) for the same reason: a reader can keep, print or
 //! send the result, and the page needs no script to do it.
 //!
 //! # The head is `noindex`, and there is no canonical
@@ -35,7 +35,7 @@
 //!
 //! Note the naming constraint every page in this directory shares:
 //! `#[page("/recherche")]` emits a unit struct named after its handler —
-//! `recherche` — in this module's *type* namespace, so a local binding of that
+//! `search` — in this module's *type* namespace, so a local binding of that
 //! name would be read as a pattern matching it.
 
 use sqlx::SqlitePool;
@@ -49,7 +49,7 @@ use topcoat::{
 use crate::db::{self, DbResult};
 use crate::domain::{Artist, Song};
 use crate::i18n::{self, Key};
-use crate::pages::artiste;
+use crate::pages::artist;
 use crate::pages::songs::song_row;
 use crate::state;
 use crate::ui::theme;
@@ -141,7 +141,7 @@ pub fn query_string(query: &str) -> Option<String> {
 
 /// Percent-decode a query value, treating `+` as a space.
 ///
-/// Hand-rolled like the other query readers in this crate (`pluriel::selection`,
+/// Hand-rolled like the other query readers in this crate (`book::selection`,
 /// `chord::offset`, `routes::language::explicit`): this runs before any extractor
 /// and wants one raw value, not a typed struct, and the alternative is a
 /// dependency for twenty lines of ASCII. A malformed escape (`%zz`, a trailing
@@ -200,7 +200,7 @@ fn hex(byte: u8) -> Option<u8> {
 /// because the reader builds the URL in the form and reads it back on the page,
 /// the same arrangement `/himene/pluriel` makes.
 #[page("/recherche")]
-pub async fn recherche(cx: &Cx) -> Result<impl View> {
+pub async fn search(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let query = uri(cx).query().unwrap_or("");
 
@@ -229,7 +229,7 @@ pub async fn recherche(cx: &Cx) -> Result<impl View> {
                         class=(class!(theme::FORM_INPUT, theme::FOCUS))
                     />
                 </div>
-                <div class=(class!(theme::FORM_SUBMIT, theme::PLURIEL_ENTRY))>
+                <div class=(class!(theme::FORM_SUBMIT, theme::BOOK_ENTRY))>
                     <button type="submit" class=(class!(theme::FORM_SUBMITTER, theme::FOCUS))>
                         (i18n::text(lang, Key::SearchSubmit))
                     </button>
@@ -290,10 +290,10 @@ pub async fn recherche(cx: &Cx) -> Result<impl View> {
     })
 }
 
-/// An artist's page, in the request's language — [`artiste::link`]'s, so a search
+/// An artist's page, in the request's language — [`artist::link`]'s, so a search
 /// result and a song's credits point at the same address.
 pub fn artist_link(cx: &Cx, artist: &Artist) -> String {
-    artiste::link(cx, artist)
+    artist::link(cx, artist)
 }
 
 #[cfg(test)]

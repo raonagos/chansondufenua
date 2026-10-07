@@ -403,7 +403,7 @@ pub async fn song_at(pool: &SqlitePool, segment: &str) -> DbResult<Option<Addres
 ///
 /// `None` where a segment names nothing. That is not an error here: the caller
 /// decides what a selection with a hole in it means, and both callers
-/// (`pages::pluriel` and the JSON read) answer it with the 404 rather than
+/// (`pages::book` and the JSON read) answer it with the 404 rather than
 /// dropping the song.
 ///
 /// Drafts come back with everything else, for [`song`]'s reason: this is the
@@ -575,7 +575,7 @@ pub async fn artists(pool: &SqlitePool) -> DbResult<Vec<Artist>> {
 
 /// One artist by id, published or not — the read, not the policy.
 ///
-/// The artist page (`pages::artiste`) is what decides that an id it cannot
+/// The artist page (`pages::artist`) is what decides that an id it cannot
 /// resolve is a 404; `routes::negotiation` reads the same row so its `Link`
 /// headers do not promise a Markdown form for a page that is not served.
 pub async fn artist(pool: &SqlitePool, id: &str) -> DbResult<Option<Artist>> {

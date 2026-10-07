@@ -43,9 +43,9 @@ use crate::domain::Artist;
 use crate::domain::song::{SITE_URL, Song};
 use crate::i18n::{self, Key, Lang};
 use crate::pages::{
-    artiste, editor,
+    artist, book, editor,
     home::{self, AEPA_PATH, PATH as HOME},
-    pluriel, recherche, songs, support,
+    search, songs, support,
 };
 use crate::routes::{negotiation, og};
 use crate::state;
@@ -233,7 +233,7 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
     // `MusicGroup` that named a different artist than the page prints would be a
     // lie told to a machine. An id that resolves to nothing is the 404 the page
     // handler raises, so it gets the 404's head.
-    if let Some(id) = artiste::segment(path) {
+    if let Some(id) = artist::segment(path) {
         return match db::artist(state::db(cx).pool(), id).await {
             Ok(Some(row)) => artist_head(cx, &row, lang).await,
             // A read that fails is the page's own read failing too: the response
@@ -244,12 +244,12 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
     }
 
     // The search page. `noindex` and **no canonical**, the multi-lyric page's
-    // decision made for the same reason (see `pages::recherche`): the URL space is
+    // decision made for the same reason (see `pages::search`): the URL space is
     // every string a person could type, and a canonical URL on a page a crawler is
     // told not to index names a preferred address for nothing. The bare form gets
     // the same head as a search, because there is nothing about a form to
     // describe; the title is chrome and follows the request's language.
-    if path == recherche::PATH {
+    if path == search::PATH {
         return DocumentHead {
             title: format!("{} | {TITLE}", i18n::text(lang, Key::SearchTitle)),
             description: None,
@@ -268,7 +268,7 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
 /// Its own title, its own description, its own canonical URL and its own card,
 /// and — the reason this page exists in the search's eyes — its own structured
 /// data: a `MusicGroup` for the artist and an `ItemList` of their songs, from the
-/// same read the page renders ([`artiste::jsonld`]).
+/// same read the page renders ([`artist::jsonld`]).
 ///
 /// The songs are read a second time here, after the page's own read. That is the
 /// trade the song head already makes and documents: the layout cannot see the
@@ -279,13 +279,13 @@ async fn artist_head(cx: &Cx, artist: &Artist, lang: Lang) -> DocumentHead {
         Ok(listed) => listed,
         // The page's own read fails the same way, so the response is a 500 with
         // nothing of the catalogue in it.
-        Err(_) => return site_head(&artiste::path_of(&artist.get_id()), lang),
+        Err(_) => return site_head(&artist::path_of(&artist.get_id()), lang),
     };
 
     let name = artist.get_fullname();
     let title = format!("{name} | {TITLE}");
-    let description = artiste::description(&name);
-    let canonical = i18n::url(lang, &artiste::path_of(&artist.get_id()));
+    let description = artist::description(&name);
+    let canonical = i18n::url(lang, &artist::path_of(&artist.get_id()));
 
     DocumentHead {
         title: title.clone(),
@@ -298,7 +298,7 @@ async fn artist_head(cx: &Cx, artist: &Artist, lang: Lang) -> DocumentHead {
             &canonical,
             lang,
         )),
-        jsonld: Some(artiste::jsonld(artist, &canonical, &listed)),
+        jsonld: Some(artist::jsonld(artist, &canonical, &listed)),
     }
 }
 
@@ -413,15 +413,15 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
 
     // The multi-lyric page — a chosen set of songs, or the picker that builds
     // one. `noindex`, and **no canonical**, decided together and deliberately
-    // (see `pages::pluriel`): the URL space is every ordered subset of the
+    // (see `pages::book`): the URL space is every ordered subset of the
     // catalogue, so an index full of selections would be duplicate content built
     // out of the sheets it quotes, and a canonical URL would name a preferred
     // address for a page a crawler is being told not to index. What the title
     // says is what the page is, and the songs inside it are the sheets' own
     // pages — linked, canonical, and indexable.
-    if path == pluriel::PATH {
+    if path == book::PATH {
         return DocumentHead {
-            title: format!("{} | {TITLE}", i18n::text(lang, Key::PlurielTitle)),
+            title: format!("{} | {TITLE}", i18n::text(lang, Key::BookTitle)),
             description: None,
             canonical: None,
             noindex: true,
@@ -489,7 +489,7 @@ fn addressed_path(cx: &Cx) -> String {
     let path = request.path();
 
     match request.query() {
-        Some(query) if path == pluriel::PATH => format!("{path}?{query}"),
+        Some(query) if path == book::PATH => format!("{path}?{query}"),
         _ => path.to_owned(),
     }
 }
@@ -526,7 +526,7 @@ fn page_head(
 /// form (`x-default`), because the action it describes is available in every
 /// language at the same URL.
 ///
-/// `urlTemplate` names [`recherche::PATH`] through its own constant, so the
+/// `urlTemplate` names [`search::PATH`] through its own constant, so the
 /// template and the page cannot drift; the placeholder is schema.org's own
 /// required name, not a translatable string.
 fn website_jsonld() -> String {
@@ -540,7 +540,7 @@ fn website_jsonld() -> String {
             "@type": "SearchAction",
             "target": {
                 "@type": "EntryPoint",
-                "urlTemplate": format!("{}{}?{}={{search_term_string}}", SITE_URL, recherche::PATH, recherche::PARAM),
+                "urlTemplate": format!("{}{}?{}={{search_term_string}}", SITE_URL, search::PATH, search::PARAM),
             },
             "query-input": "required name=search_term_string",
         },
@@ -1007,8 +1007,8 @@ mod tests {
         let template = format!(
             "{}{}?{}={{search_term_string}}",
             SITE_URL,
-            recherche::PATH,
-            recherche::PARAM
+            search::PATH,
+            search::PARAM
         );
         assert_eq!(
             document["potentialAction"]["target"]["urlTemplate"], template,

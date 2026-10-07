@@ -678,20 +678,20 @@ pub const AUTOSCROLL_BUTTON: StaticClass = class!(
 /// the surface. On paper the break rule is the whole point of the token — a
 /// songbook whose songs are cut in half by the printer is the defect this page
 /// was asked for in the first place.
-pub const PLURIEL_ITEM: StaticClass = class!("mb-8 print:break-inside-avoid");
+pub const BOOK_ITEM: StaticClass = class!("mb-8 print:break-inside-avoid");
 
 /// The index's link to the picker.
 ///
 /// Under the table rather than in the nav: choosing several songs to read
 /// together is the index's own next step, not a fourth section of the site.
-pub const PLURIEL_ENTRY: StaticClass = class!("mt-6 text-center");
+pub const BOOK_ENTRY: StaticClass = class!("mt-6 text-center");
 
 /// One song in the picker: a checkbox, its title, and its credits.
 ///
 /// The rule between rows is the reason this is a token rather than a bare list
 /// item — the last row drops it, the way [`INDEX_ROW`] does, so the panel's own
 /// edge is the only line at the foot.
-pub const PLURIEL_PICK_ROW: StaticClass =
+pub const BOOK_PICK_ROW: StaticClass =
     class!("flex items-center gap-3 border-b border-ink-700 py-3 last:border-b-0");
 
 /// The picker's checkbox.
@@ -700,14 +700,14 @@ pub const PLURIEL_PICK_ROW: StaticClass =
 /// [`LANGUAGE_SWITCH`] gives — and the box is a square, so it is sized in one
 /// utility rather than two. The accent colour is the same one the song sheet's
 /// speed bar uses, so the site's controls agree about what is picked.
-pub const PLURIEL_PICK_BOX: StaticClass = class!("size-4 flex-none accent-tahiti-300");
+pub const BOOK_PICK_BOX: StaticClass = class!("size-4 flex-none accent-tahiti-300");
 
 /// The credits beside a title in the picker.
 ///
 /// Muted, and smaller than the title they follow: on this page the title is what
 /// the reader is choosing between, and two songs by one artist are common enough
 /// that the credits have to be readable without being the point.
-pub const PLURIEL_PICK_ARTISTS: StaticClass = class!("text-sm text-mist-500");
+pub const BOOK_PICK_ARTISTS: StaticClass = class!("text-sm text-mist-500");
 
 // ---------------------------------------------------------------------------
 // Pagination
@@ -1006,14 +1006,14 @@ mod tests {
         AUTOSCROLL_SPEED,
         AUTOSCROLL_RANGE,
         AUTOSCROLL_BUTTON,
-        PLURIEL_ITEM,
-        PLURIEL_ENTRY,
+        BOOK_ITEM,
+        BOOK_ENTRY,
         PAGINATION,
         PAGINATION_LINK,
         PAGINATION_CURRENT,
-        PLURIEL_PICK_ROW,
-        PLURIEL_PICK_BOX,
-        PLURIEL_PICK_ARTISTS,
+        BOOK_PICK_ROW,
+        BOOK_PICK_BOX,
+        BOOK_PICK_ARTISTS,
         FORM_PANEL,
         FORM_FIELD,
         FORM_LABEL,
@@ -1218,7 +1218,7 @@ mod tests {
             // The multi-lyric page's sheets: the panel and the per-sheet
             // spacing-and-break rule, which must add to the panel rather than
             // fight it.
-            ("chosen sheet", &SONG_SHEET, &PLURIEL_ITEM),
+            ("chosen sheet", &SONG_SHEET, &BOOK_ITEM),
             // The pagination nav and its links: the container owns the layout
             // and the print hide, each link owns its own box.
             ("pagination nav", &PAGINATION, &PAGINATION_LINK),

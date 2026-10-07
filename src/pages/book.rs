@@ -68,7 +68,7 @@
 //!
 //! Note the naming constraint this directory's pages share: `#[page(...)]` emits
 //! a unit struct named after its handler in this module's *type* namespace, so a
-//! local binding called `pluriel` would be read as a pattern matching it.
+//! local binding called `book` would be read as a pattern matching it.
 
 use topcoat::{
     Result,
@@ -207,7 +207,7 @@ pub(crate) async fn resolve(pool: &SqlitePool, segments: &[String]) -> DbResult<
 /// page's own `<h1>` above it, because this page's title is the page's and each
 /// song's is a section of it.
 #[page("/himene/pluriel")]
-pub async fn pluriel(cx: &Cx) -> Result<impl View> {
+pub async fn book(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let segments = selection(uri(cx).query().unwrap_or(""));
 
@@ -233,7 +233,7 @@ pub async fn pluriel(cx: &Cx) -> Result<impl View> {
 
     Ok(view! {
         <div class=(theme::PAGE)>
-            <h1 class=(theme::H1)>(i18n::text(lang, Key::PlurielTitle))</h1>
+            <h1 class=(theme::H1)>(i18n::text(lang, Key::BookTitle))</h1>
 
             match chosen {
                 Some(sheets) => {
@@ -242,7 +242,7 @@ pub async fn pluriel(cx: &Cx) -> Result<impl View> {
                     }
                 },
                 None => {
-                    <p class=(theme::LEAD)>(i18n::text(lang, Key::PlurielHint))</p>
+                    <p class=(theme::LEAD)>(i18n::text(lang, Key::BookHint))</p>
 
                     if listed.is_empty() {
                         // Nothing to choose from. The index's own line, because it
@@ -256,23 +256,23 @@ pub async fn pluriel(cx: &Cx) -> Result<impl View> {
                             class=(theme::FORM_PANEL)
                         >
                             for sheet in listed {
-                                <label class=(theme::PLURIEL_PICK_ROW)>
+                                <label class=(theme::BOOK_PICK_ROW)>
                                     <input
                                         type="checkbox"
                                         name=(SELECTION)
                                         value=(sheet.get_segment())
-                                        class=(class!(theme::PLURIEL_PICK_BOX, theme::FOCUS))
+                                        class=(class!(theme::BOOK_PICK_BOX, theme::FOCUS))
                                     />
                                     <span>(sheet.get_title())</span>
-                                    <span class=(theme::PLURIEL_PICK_ARTISTS)>(artists_of(&sheet))</span>
+                                    <span class=(theme::BOOK_PICK_ARTISTS)>(artists_of(&sheet))</span>
                                 </label>
                             }
-                            <div class=(class!(theme::FORM_SUBMIT, theme::PLURIEL_ENTRY))>
+                            <div class=(class!(theme::FORM_SUBMIT, theme::BOOK_ENTRY))>
                                 <button
                                     type="submit"
                                     class=(class!(theme::FORM_SUBMITTER, theme::FOCUS))
                                 >
-                                    (i18n::text(lang, Key::PlurielRead))
+                                    (i18n::text(lang, Key::BookRead))
                                 </button>
                             </div>
                         </form>
@@ -303,7 +303,7 @@ async fn chosen_sheet(cx: &Cx, sheet: Song) -> Result<impl View> {
         .collect::<Vec<_>>();
 
     Ok(view! {
-        <article class=(class!(theme::SONG_SHEET, theme::PLURIEL_ITEM))>
+        <article class=(class!(theme::SONG_SHEET, theme::BOOK_ITEM))>
             <header class=(theme::SONG_HEAD)>
                 <div class=(theme::SONG_HEADING)>
                     <h2 class=(theme::SONG_TITLE)>

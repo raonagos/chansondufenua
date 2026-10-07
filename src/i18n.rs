@@ -340,16 +340,16 @@ pub enum Key {
     ScrollStop,
     /// The heading of `/himene/pluriel` — the page that reads several songs one
     /// after another, and the picker that builds the selection.
-    PlurielTitle,
+    BookTitle,
     /// What the picker asks for: tick the songs, then read them together.
-    PlurielHint,
+    BookHint,
     /// The picker's submit button.
-    PlurielRead,
+    BookRead,
     /// The index's link to the picker.
     ///
-    /// A word of its own rather than [`PlurielTitle`](Self::PlurielTitle): a
+    /// A word of its own rather than [`BookTitle`](Self::BookTitle): a
     /// heading names a page, and a link has to say what following it does.
-    PlurielOpen,
+    BookOpen,
     /// The heading of `/recherche` — the search page, in both of its states.
     SearchTitle,
     /// The label of the search form's one field: what the box searches.
@@ -402,10 +402,10 @@ impl Key {
         Key::ScrollSpeed,
         Key::ScrollStart,
         Key::ScrollStop,
-        Key::PlurielTitle,
-        Key::PlurielHint,
-        Key::PlurielRead,
-        Key::PlurielOpen,
+        Key::BookTitle,
+        Key::BookHint,
+        Key::BookRead,
+        Key::BookOpen,
         Key::SearchTitle,
         Key::SearchLabel,
         Key::SearchSubmit,
@@ -452,10 +452,10 @@ impl Key {
             Key::ScrollSpeed => "scroll_speed",
             Key::ScrollStart => "scroll_start",
             Key::ScrollStop => "scroll_stop",
-            Key::PlurielTitle => "pluriel_title",
-            Key::PlurielHint => "pluriel_hint",
-            Key::PlurielRead => "pluriel_read",
-            Key::PlurielOpen => "pluriel_open",
+            Key::BookTitle => "book_title",
+            Key::BookHint => "book_hint",
+            Key::BookRead => "book_read",
+            Key::BookOpen => "book_open",
             Key::SearchTitle => "search_title",
             Key::SearchLabel => "search_label",
             Key::SearchSubmit => "search_submit",
@@ -631,10 +631,10 @@ mod tests {
             Key::ScrollSpeed,
             Key::ScrollStart,
             Key::ScrollStop,
-            Key::PlurielTitle,
-            Key::PlurielHint,
-            Key::PlurielRead,
-            Key::PlurielOpen,
+            Key::BookTitle,
+            Key::BookHint,
+            Key::BookRead,
+            Key::BookOpen,
             Key::SearchTitle,
             Key::SearchLabel,
             Key::SearchSubmit,
