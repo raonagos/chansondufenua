@@ -2,12 +2,25 @@
 //! and the URLs they are addressed by.
 //!
 //! Topcoat 0.10 has no localization support — it is on the project's roadmap,
-//! not in the crate — so this module is homegrown and dependency-free beyond
-//! what the framework already exposes: an enum of languages, an enum of message
-//! keys, and one exhaustive match per language. A key with no translation is a
-//! **compile error** rather than a blank line on the page, which is the whole
-//! reason the catalog is an enum and not a lookup map: the compiler checks what
-//! a map would let rot silently.
+//! not in the crate — so this module is homegrown: an enum of languages, an
+//! enum of message keys, and one `locales/<lang>.toml` per language, read **at
+//! runtime** by [`catalog`].
+//!
+//! The enum is the *list* of keys and nothing else. Adding a key is a code
+//! change; translating one is not, and that split is the point of this module.
+//! The Tahitian is a first pass waiting for a native speaker and the French is
+//! the maintainer's, so the people who would correct a sentence are not the
+//! people who run `cargo build` — the words live in files read once at startup,
+//! and correcting one is an edit and a restart. No compiler, no toolchain on the
+//! box that serves the site.
+//!
+//! A key with no translation used to be a **compile error**, and that is what
+//! the files cost. The boot checks what the compiler used to: [`catalog::Catalog::load`]
+//! refuses a file that names a key no variant owns, and refuses a `fr.toml` or
+//! `en.toml` that is missing one. `ty.toml` is deliberately exempt — an
+//! unfinished Tahitian catalog is this catalog's normal state, and a line that
+//! is not there is served from English. See [`catalog`] for the lookup order and
+//! where the files are found.
 //!
 //! # What is translated, and what is not
 //!
@@ -35,8 +48,9 @@
 //! check it. The vocabulary is deliberately small and conservative — `hīmene`
 //! (song), `fa'aea` (welcome/home), `parau hīmene` (lyrics, the phrase the
 //! song page's own metadata already uses), `tāpiri` (to add) — and the strings
-//! are short enough to correct in place without touching any code. A native
-//! review is the next action, not a prerequisite for the plumbing.
+//! are short enough to correct in `locales/ty.toml` alone, which is now a file
+//! a translator can open, not three `match` arms in this one. A native review is
+//! the next action, not a prerequisite for the plumbing.
 //!
 //! The English catalog is a first pass too, and plainer than the other two on
 //! purpose: the site's French is warm and idiomatic and its English has no
@@ -64,6 +78,10 @@ use topcoat::{
 };
 
 use crate::domain::song::SITE_URL;
+
+pub mod catalog;
+
+pub use catalog::{init, text};
 
 /// The name of the cookie an explicit language choice is kept in.
 pub const COOKIE: &str = "lang";
@@ -253,6 +271,10 @@ pub fn path_and_query(cx: &Cx) -> String {
 }
 
 /// A string in the chrome, as opposed to the content it surrounds.
+///
+/// The list of them, and only the list: what each one *says* is in
+/// `locales/<lang>.toml`, read at startup by [`catalog`]. A variant's own name,
+/// in snake_case, is the line it is written on there — see [`Key::name`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Key {
     /// The header link to the front page.
@@ -396,177 +418,64 @@ impl Key {
         Key::SupportCopied,
     ];
 
-    /// The French words. v3's, byte for byte.
-    fn fr(self) -> &'static str {
+    /// The key's name: the line it is spelled by in `locales/*.toml`, and the
+    /// name it is reported by in a test.
+    ///
+    /// snake_case, and one string for the life of the program — a name is not a
+    /// translation. It is also the catalog's last resort: a key that no file
+    /// carries is served as its own name, which is a bug a reader can report,
+    /// rather than a blank a reader cannot.
+    pub const fn name(self) -> &'static str {
         match self {
-            Key::NavHome => "Accueil",
-            Key::NavSongs => "Chanson",
-            Key::Language => "Langue",
-            Key::NotFoundTitle => "La page n'existe pas.",
-            Key::NotFoundBody => {
-                "Rien à lire ici — l'adresse s'est peut-être perdue en chemin, ou la chanson a pris le large."
-            }
-            Key::NotFoundCta => "Retour à l'accueil",
-            Key::AddLyrics => "Ajouter des paroles",
-            Key::IndexTitle => "Toutes les chansons",
-            Key::IndexColumnTitle => "Titre",
-            Key::IndexColumnArtist => "Artiste",
-            Key::IndexEmpty => "Pas de chanson",
-            Key::HomeDiscover => "Découvrir les chansons",
-            Key::HomeStart => "C'est parti !",
-            Key::FieldLyrics => "Paroles",
-            Key::Save => "Enregistrer",
-            Key::SaveError => {
-                "La chanson n'a pas été enregistrée. Vérifiez le titre et les paroles."
-            }
-            Key::RemoveArtist => "Retirer cet artiste",
-            Key::AddChord => "Ajouter cet accord",
-            Key::Transpose => "Transposer",
-            Key::TransposeDown => "Transposer un demi-ton plus bas",
-            Key::TransposeUp => "Transposer un demi-ton plus haut",
-            Key::Scroll => "Défilement",
-            Key::ScrollSpeed => "Vitesse",
-            Key::ScrollStart => "Démarrer",
-            Key::ScrollStop => "Arrêter",
-            Key::PlurielTitle => "Plusieurs chansons",
-            Key::PlurielHint => "Choisissez des chansons pour lire leurs paroles à la suite.",
-            Key::PlurielRead => "Lire la sélection",
-            Key::PlurielOpen => "Lire plusieurs chansons",
-            Key::SearchTitle => "Recherche",
-            Key::SearchLabel => "Chanson ou artiste",
-            Key::SearchSubmit => "Chercher",
-            Key::SearchSongs => "Chansons",
-            Key::SearchArtists => "Artistes",
-            Key::SearchEmpty => "Aucun résultat",
-            Key::SupportTitle => "Soutenir le site",
-            Key::SupportIntro => {
-                "Ce site est gratuit, sans publicité. Pour aider à payer son hébergement, voici comment."
-            }
-            Key::SupportCopy => "Copier",
-            Key::SupportCopied => "Copié",
+            Key::NavHome => "nav_home",
+            Key::NavSongs => "nav_songs",
+            Key::Language => "language",
+            Key::NotFoundTitle => "not_found_title",
+            Key::NotFoundBody => "not_found_body",
+            Key::NotFoundCta => "not_found_cta",
+            Key::AddLyrics => "add_lyrics",
+            Key::IndexTitle => "index_title",
+            Key::IndexColumnTitle => "index_column_title",
+            Key::IndexColumnArtist => "index_column_artist",
+            Key::IndexEmpty => "index_empty",
+            Key::HomeDiscover => "home_discover",
+            Key::HomeStart => "home_start",
+            Key::FieldLyrics => "field_lyrics",
+            Key::Save => "save",
+            Key::SaveError => "save_error",
+            Key::RemoveArtist => "remove_artist",
+            Key::AddChord => "add_chord",
+            Key::Transpose => "transpose",
+            Key::TransposeDown => "transpose_down",
+            Key::TransposeUp => "transpose_up",
+            Key::Scroll => "scroll",
+            Key::ScrollSpeed => "scroll_speed",
+            Key::ScrollStart => "scroll_start",
+            Key::ScrollStop => "scroll_stop",
+            Key::PlurielTitle => "pluriel_title",
+            Key::PlurielHint => "pluriel_hint",
+            Key::PlurielRead => "pluriel_read",
+            Key::PlurielOpen => "pluriel_open",
+            Key::SearchTitle => "search_title",
+            Key::SearchLabel => "search_label",
+            Key::SearchSubmit => "search_submit",
+            Key::SearchSongs => "search_songs",
+            Key::SearchArtists => "search_artists",
+            Key::SearchEmpty => "search_empty",
+            Key::SupportTitle => "support_title",
+            Key::SupportIntro => "support_intro",
+            Key::SupportCopy => "support_copy",
+            Key::SupportCopied => "support_copied",
         }
     }
 
-    /// The Tahitian words. See the module docs: a first pass, awaiting a native
-    /// speaker's review, and short enough to correct here alone.
-    fn ty(self) -> &'static str {
-        match self {
-            Key::NavHome => "Fa'aea",
-            Key::NavSongs => "Hīmene",
-            Key::Language => "Reo",
-            Key::NotFoundTitle => "'Aita te 'api",
-            // The joke in one clause rather than two: French and English can
-            // send a wrong *address* astray, but Tahitian has no word here for
-            // "address" that would not be invention. The image it keeps — the
-            // song gone out to sea — is the half that carries without slang.
-            // Still a first pass, awaiting a native speaker.
-            Key::NotFoundBody => "'Aita e mea e hi'o i reira — ua reva paha te hīmene i te moana.",
-            Key::NotFoundCta => "Ho'i i te fa'aea",
-            Key::AddLyrics => "Tāpiri i te parau hīmene",
-            Key::IndexTitle => "Te mau hīmene ato'a",
-            Key::IndexColumnTitle => "I'oa",
-            Key::IndexColumnArtist => "Ta'ata hīmene",
-            Key::IndexEmpty => "'Aita hīmene",
-            Key::HomeDiscover => "'Ite i te mau hīmene",
-            Key::HomeStart => "Haere tātou!",
-            Key::FieldLyrics => "Parau hīmene",
-            Key::Save => "Tāpiri",
-            Key::SaveError => "'Aita te hīmene i tāpiri. Hi'opoa i te i'oa e te parau hīmene.",
-            Key::RemoveArtist => "Rave i teie ta'ata hīmene",
-            Key::AddChord => "Tāpiri i teie accord",
-            Key::Transpose => "Huri i te accord",
-            Key::TransposeDown => "Huri i raro",
-            Key::TransposeUp => "Huri i ni'a",
-            Key::Scroll => "Haere noa",
-            Key::ScrollSpeed => "Tere",
-            Key::ScrollStart => "Haere",
-            Key::ScrollStop => "Nofo",
-            Key::PlurielTitle => "Te mau hīmene rau",
-            Key::PlurielHint => "Ma'iti i te mau hīmene no te hi'o i te parau hīmene.",
-            Key::PlurielRead => "Hi'o i te mau hīmene",
-            Key::PlurielOpen => "Hi'o i te mau hīmene rau",
-            // A first pass like the rest of this catalog: `'imi` is "to seek",
-            // and the two section headings reuse the words the index already
-            // uses for a song and for a credited artist.
-            Key::SearchTitle => "'Imi",
-            Key::SearchLabel => "Hīmene 'aore ra ta'ata hīmene",
-            Key::SearchSubmit => "'Imi",
-            Key::SearchSongs => "Te mau hīmene",
-            Key::SearchArtists => "Te mau ta'ata hīmene",
-            Key::SearchEmpty => "'Aita e mea i roa'a",
-            // A first pass like the rest of this catalog. `Tauturu` is "to
-            // help", `moni` is money, `titauhia` is the passive of "to ask
-            // for"; `vāhi` is a place. For a native speaker to correct.
-            Key::SupportTitle => "Tauturu i te 'api",
-            Key::SupportIntro => {
-                "'Aita e moni e titauhia i teie 'api. 'A tauturu mai, i raro nei te mau vāhi."
-            }
-            Key::SupportCopy => "Rave",
-            Key::SupportCopied => "'Ua rave",
-        }
-    }
-
-    /// The English words. See the module docs: a first pass, plain on purpose,
-    /// and short enough to correct here alone.
-    fn en(self) -> &'static str {
-        match self {
-            Key::NavHome => "Home",
-            Key::NavSongs => "Songs",
-            Key::Language => "Language",
-            Key::NotFoundTitle => "This page does not exist.",
-            Key::NotFoundBody => {
-                "Nothing to read here — the address may have lost its way, or the song has gone to sea."
-            }
-            Key::NotFoundCta => "Back to the front page",
-            Key::AddLyrics => "Add the lyrics",
-            Key::IndexTitle => "All the songs",
-            Key::IndexColumnTitle => "Title",
-            Key::IndexColumnArtist => "Artist",
-            Key::IndexEmpty => "No songs",
-            Key::HomeDiscover => "Discover the songs",
-            Key::HomeStart => "Let's go!",
-            Key::FieldLyrics => "Lyrics",
-            Key::Save => "Save",
-            Key::SaveError => "The song was not saved. Check the title and the lyrics.",
-            Key::RemoveArtist => "Remove this artist",
-            Key::AddChord => "Add this chord",
-            Key::Transpose => "Transpose",
-            Key::TransposeDown => "Transpose a semitone down",
-            Key::TransposeUp => "Transpose a semitone up",
-            Key::Scroll => "Auto-scroll",
-            Key::ScrollSpeed => "Speed",
-            Key::ScrollStart => "Start",
-            Key::ScrollStop => "Stop",
-            Key::PlurielTitle => "Several songs",
-            Key::PlurielHint => "Pick songs to read their lyrics one after another.",
-            Key::PlurielRead => "Read the selection",
-            Key::PlurielOpen => "Read several songs",
-            Key::SearchTitle => "Search",
-            Key::SearchLabel => "Song or artist",
-            Key::SearchSubmit => "Search",
-            Key::SearchSongs => "Songs",
-            Key::SearchArtists => "Artists",
-            Key::SearchEmpty => "No results",
-            Key::SupportTitle => "Support the site",
-            Key::SupportIntro => {
-                "This site is free, with no advertising. To help pay for its hosting, here is how."
-            }
-            Key::SupportCopy => "Copy",
-            Key::SupportCopied => "Copied",
-        }
-    }
-}
-
-/// The words for `key` in `lang`.
-///
-/// The three matches inside [`Key`] are over the whole key enum, so adding a
-/// key is a compile error until every language has a string for it. This
-/// function is the only way to read the catalog.
-pub fn text(lang: Lang, key: Key) -> &'static str {
-    match lang {
-        Lang::Fr => key.fr(),
-        Lang::Ty => key.ty(),
-        Lang::En => key.en(),
+    /// The key that `name` names, or nothing when no key owns it.
+    ///
+    /// How a file is checked against the enum: a line the catalog cannot place
+    /// is a typo, and the boot refuses it rather than quietly translating
+    /// nothing.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|key| key.name() == name)
     }
 }
 
@@ -575,9 +484,14 @@ mod tests {
     use super::*;
 
     /// Every key has a string in every language, and no two languages say the
-    /// same thing. The first half the compiler already guarantees through the
-    /// three matches; the second half is what catches a key that was given its
-    /// French words and a placeholder equal to them.
+    /// same thing.
+    ///
+    /// The completeness half is what the boot also checks for the two files the
+    /// lookup falls back to (`fr.toml`, `en.toml` — see
+    /// [`catalog::Catalog::load`]); this test is the shipped-files half of it,
+    /// and reads the words through the same runtime catalog a page does. The
+    /// difference half is what catches a key that was given its French words and
+    /// a placeholder equal to them.
     #[test]
     fn every_key_is_translated_and_actually_differs() {
         for key in Key::ALL {
@@ -605,6 +519,56 @@ mod tests {
         }
     }
 
+    /// A name is the line a key is written on in `locales/*.toml`: one per key,
+    /// snake_case, and stable. A duplicate would silently shadow a key in every
+    /// file, and a name the file does not spell would make the key unfindable.
+    #[test]
+    fn every_key_is_named_once_and_in_snake_case() {
+        let mut names = std::collections::BTreeSet::new();
+
+        for key in Key::ALL {
+            let name = key.name();
+
+            assert!(
+                !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'),
+                "{key:?} is named {name:?}, which is not a snake_case key"
+            );
+            assert!(names.insert(name), "{name:?} names two keys");
+        }
+
+        assert_eq!(names.len(), Key::ALL.len());
+
+        for key in Key::ALL {
+            assert_eq!(Key::from_name(key.name()), Some(key), "{key:?}");
+        }
+        assert_eq!(Key::from_name("navhome"), None);
+        assert_eq!(Key::from_name(""), None);
+    }
+
+    /// The words a file carries are the words a page says — accents, em dashes
+    /// and `'okina` included. The Tahitian line is the one that would break
+    /// first if the catalog mishandled UTF-8 or TOML's escapes.
+    #[test]
+    fn the_files_hand_back_their_diacritics_byte_for_byte() {
+        const PINNED: [(Lang, Key, &str); 8] = [
+            (Lang::Fr, Key::NavHome, "Accueil"),
+            (Lang::Fr, Key::IndexTitle, "Toutes les chansons"),
+            (Lang::Ty, Key::NavSongs, "Hīmene"),
+            (Lang::Ty, Key::NavHome, "Fa'aea"),
+            (Lang::Ty, Key::IndexColumnArtist, "Ta'ata hīmene"),
+            (Lang::Ty, Key::SupportCopy, "Rave"),
+            (Lang::En, Key::NavSongs, "Songs"),
+            (Lang::En, Key::HomeStart, "Let's go!"),
+        ];
+
+        for (lang, key, words) in PINNED {
+            assert_eq!(text(lang, key), words, "{} {key:?}", lang.code());
+        }
+    }
+
     /// **The French chrome, frozen at step 21.** Step 23 added the English
     /// strings and the language switcher, step 24 the transposition control,
     /// step 25 the auto-scroll control and step 26 the multi-lyric page; none of
@@ -619,6 +583,11 @@ mod tests {
     /// The catalog is allowed to grow — a new control's own label is new chrome,
     /// not a new translation of old chrome — so the table also pins *which* keys
     /// were added rather than only the words that were not.
+    ///
+    /// Step 31 moved the words out of three `match` arms and into
+    /// `locales/fr.toml`, without changing one of them: this table is what says
+    /// so, and it is the only reason the move is checkable at all. A French page
+    /// is byte-for-byte the page step 30b served.
     #[test]
     fn adding_chrome_did_not_change_a_word_of_french() {
         const FRENCH_AT_STEP_21: [(Key, &str); 16] = [

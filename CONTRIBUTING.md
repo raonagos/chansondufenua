@@ -18,7 +18,7 @@ Thank you for considering contributing to **Chanson du fenua** ! We welcome cont
 ## Usage
 
 1. Make sure you have [rust](https://www.rust-lang.org/learn/get-started) installed. That is the whole toolchain — there is no second target to install, no Node, and no database server to run.
-2. Read [env.example](./env.example) for the three variables the binary knows (`DATABASE_URL`, `HOST`, `PORT`). Nothing loads a `.env` file for you; export them, or put them on the command line.
+2. Read [env.example](./env.example) for the four variables the binary knows (`DATABASE_URL`, `HOST`, `PORT`, `LOCALES_DIR`). Nothing loads a `.env` file for you; export them, or put them on the command line.
 3. Bundle the assets and start the application:
 
 ```bash
@@ -32,6 +32,36 @@ The database is a SQLite file. It does not have to exist — the first boot crea
 Those three commands produce and run the whole site. Pages, stylesheet, fonts, logos and the database engine are compiled into the one executable; there is no client-side runtime, no separate database server and no asset pipeline beyond staging the bundled files next to the binary.
 
 4. Open your browser and go to the URL: `http://localhost:3000`.
+
+## Translations
+
+The words in the chrome — the navigation, the buttons, the messages, the 404 — are not in the code. They are three files, one per language, in [locales/](./locales):
+
+```
+locales/fr.toml   French, the site's default
+locales/ty.toml   Tahitian
+locales/en.toml   English
+```
+
+Each file is a flat list of `name = "words"` lines, and a `#` starts a comment:
+
+```toml
+nav_home = "Accueil"
+not_found_title = "La page n'existe pas."
+```
+
+They are read **at startup, not compiled**: correcting a sentence is an edit and a restart, with no `cargo build` and no toolchain on the machine that serves the site. That is deliberate — the people who can check the Tahitian are not the people who run the compiler.
+
+Two rules the boot enforces:
+
+- `fr.toml` and `en.toml` must carry **every** key, because they are what a missing translation falls back to. A line missing from either one stops the server, with the file and the key named.
+- A name no key owns stops the server too. The names are `i18n::Key`'s, snake_case (see `src/i18n.rs`); listing one here does not put it on a page, the enum has to name it as well. Adding a key is a code change, translating one is not.
+
+`ty.toml` is the exception: an unfinished Tahitian translation is its normal state, so a key it does not carry is served from English, and then from French. Delete a line, restart, and that one string changes.
+
+Where the files are found: `LOCALES_DIR` if it is set, otherwise `./locales`, otherwise `locales/` beside the binary. A deployment can therefore ship the directory next to the executable and be edited in place.
+
+The song lyrics are the content and are never translated — the catalog is only the chrome around them.
 
 ## Agent readiness
 
@@ -95,7 +125,7 @@ The project is **one crate** — a library target (so the integration tests in [
 - `pages` : one module per route — the home page, the song list, a song sheet, the create-song form.
 - `ui` : the shell, the chrome, and the design tokens the pages compose.
 - `routes` : the things that are not pages — `robots.txt`, the sitemaps, `llms.txt`, the read-only JSON API, the social cards.
-- `i18n` : the French and Tahitian catalogs, checked at compile time.
+- `i18n` : the languages, the addresses, and the lookup order for the chrome — the words themselves are the files in [locales/](./locales), one per language, read at startup (see [Translations](#translations)).
 
 [ARCHITECTURE.xml](./ARCHITECTURE.xml) draws how these fit together.
 

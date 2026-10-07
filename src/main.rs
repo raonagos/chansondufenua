@@ -13,11 +13,12 @@
 //! and it is on stdout, where `journalctl` finds it with no environment set.
 
 use chansondufenua::db::{self, Db, SongOrder};
-use chansondufenua::log;
+use chansondufenua::{i18n, log};
 
 #[tokio::main]
 async fn main() {
     log::init();
+    chrome();
 
     let url = database_url();
     let db = bootstrap_database(&url).await;
@@ -43,6 +44,29 @@ async fn main() {
     topcoat::serve(listener, chansondufenua::router(db))
         .await
         .expect("serving");
+}
+
+/// Read the chrome's catalog, and say where its words came from.
+///
+/// First thing after the log, and loud. The words are files now, not `match`
+/// arms the compiler could check, so the boot is the one place left that can
+/// refuse a catalog with a sentence missing or a line no key owns — and it has
+/// to be here, before a page can render, because the alternative is a server
+/// that serves key names to readers and looks healthy while it does it.
+fn chrome() {
+    let report = i18n::init();
+
+    log::info(format_args!(
+        "catalog dir={} keys={} {}",
+        report.dir.display(),
+        report.keys,
+        report
+            .words
+            .iter()
+            .map(|(lang, words)| format!("{}={words}", lang.code()))
+            .collect::<Vec<_>>()
+            .join(" "),
+    ));
 }
 
 /// The database to open: `DATABASE_URL`, or the application's own default.

@@ -1,0 +1,50 @@
+# The French chrome — the site's default language.
+#
+# One key per line, `name = "words"`; a line starting with `#` is a comment.
+# The name is `i18n::Key`'s, in snake_case: listing a name here does not put it
+# on a page, the enum has to name it too. A name this file does not know, or a
+# key missing from it, stops the server at boot — loud on purpose, so that a
+# half-copied file cannot serve a key name to a reader.
+#
+# Read at startup and never compiled: correcting a sentence is an edit and a
+# restart, not a `cargo build`.
+
+nav_home = "Accueil"
+nav_songs = "Chanson"
+language = "Langue"
+not_found_title = "La page n'existe pas."
+not_found_body = "Rien à lire ici — l'adresse s'est peut-être perdue en chemin, ou la chanson a pris le large."
+not_found_cta = "Retour à l'accueil"
+add_lyrics = "Ajouter des paroles"
+index_title = "Toutes les chansons"
+index_column_title = "Titre"
+index_column_artist = "Artiste"
+index_empty = "Pas de chanson"
+home_discover = "Découvrir les chansons"
+home_start = "C'est parti !"
+field_lyrics = "Paroles"
+save = "Enregistrer"
+save_error = "La chanson n'a pas été enregistrée. Vérifiez le titre et les paroles."
+remove_artist = "Retirer cet artiste"
+add_chord = "Ajouter cet accord"
+transpose = "Transposer"
+transpose_down = "Transposer un demi-ton plus bas"
+transpose_up = "Transposer un demi-ton plus haut"
+scroll = "Défilement"
+scroll_speed = "Vitesse"
+scroll_start = "Démarrer"
+scroll_stop = "Arrêter"
+pluriel_title = "Plusieurs chansons"
+pluriel_hint = "Choisissez des chansons pour lire leurs paroles à la suite."
+pluriel_read = "Lire la sélection"
+pluriel_open = "Lire plusieurs chansons"
+search_title = "Recherche"
+search_label = "Chanson ou artiste"
+search_submit = "Chercher"
+search_songs = "Chansons"
+search_artists = "Artistes"
+search_empty = "Aucun résultat"
+support_title = "Soutenir le site"
+support_intro = "Ce site est gratuit, sans publicité. Pour aider à payer son hébergement, voici comment."
+support_copy = "Copier"
+support_copied = "Copié"

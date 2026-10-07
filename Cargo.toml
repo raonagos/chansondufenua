@@ -34,6 +34,11 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 ammonia = "4.2.1"
 regex-lite = "0.1.9"
+# The chrome catalog is read from `locales/*.toml` at startup (see `src/i18n.rs`
+# and `src/i18n/catalog.rs`), so a sentence can be corrected without a rebuild.
+# Already in the tree — `toml` is what reads the Tailwind config at build time —
+# so naming it here declares a dependency without adding one to the build.
+toml = "1"
 thiserror = "2.0.21"
 # The social cards (`src/routes/og.rs`). Pure-Rust rendering was chosen over
 # headless Chromium, so `fontdue` rasterises the glyphs and `png` encodes

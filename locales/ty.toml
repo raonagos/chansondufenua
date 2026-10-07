@@ -1,0 +1,49 @@
+# The Tahitian chrome. A first pass, written without a native speaker.
+#
+# Unlike the other two this file may be **incomplete**: a key it does not carry
+# is served from English, then French, so an unfinished translation shows a
+# reader a real sentence instead of a blank or a key name. Delete a line,
+# restart the server, and that one string changes — no `cargo build`, which is
+# the whole reason the catalog is a file.
+#
+# The format is `fr.toml`'s.
+
+nav_home = "Fa'aea"
+nav_songs = "Hīmene"
+language = "Reo"
+not_found_title = "'Aita te 'api"
+not_found_body = "'Aita e mea e hi'o i reira — ua reva paha te hīmene i te moana."
+not_found_cta = "Ho'i i te fa'aea"
+add_lyrics = "Tāpiri i te parau hīmene"
+index_title = "Te mau hīmene ato'a"
+index_column_title = "I'oa"
+index_column_artist = "Ta'ata hīmene"
+index_empty = "'Aita hīmene"
+home_discover = "'Ite i te mau hīmene"
+home_start = "Haere tātou!"
+field_lyrics = "Parau hīmene"
+save = "Tāpiri"
+save_error = "'Aita te hīmene i tāpiri. Hi'opoa i te i'oa e te parau hīmene."
+remove_artist = "Rave i teie ta'ata hīmene"
+add_chord = "Tāpiri i teie accord"
+transpose = "Huri i te accord"
+transpose_down = "Huri i raro"
+transpose_up = "Huri i ni'a"
+scroll = "Haere noa"
+scroll_speed = "Tere"
+scroll_start = "Haere"
+scroll_stop = "Nofo"
+pluriel_title = "Te mau hīmene rau"
+pluriel_hint = "Ma'iti i te mau hīmene no te hi'o i te parau hīmene."
+pluriel_read = "Hi'o i te mau hīmene"
+pluriel_open = "Hi'o i te mau hīmene rau"
+search_title = "'Imi"
+search_label = "Hīmene 'aore ra ta'ata hīmene"
+search_submit = "'Imi"
+search_songs = "Te mau hīmene"
+search_artists = "Te mau ta'ata hīmene"
+search_empty = "'Aita e mea i roa'a"
+support_title = "Tauturu i te 'api"
+support_intro = "'Aita e moni e titauhia i teie 'api. 'A tauturu mai, i raro nei te mau vāhi."
+support_copy = "Rave"
+support_copied = "'Ua rave"

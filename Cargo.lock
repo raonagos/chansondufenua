@@ -242,6 +242,7 @@ dependencies = [
  "sqlx",
  "thiserror",
  "tokio",
+ "toml",
  "topcoat",
 ]
 
