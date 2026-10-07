@@ -1,4 +1,4 @@
-//! The chain marks on the support page — `/soutenir`.
+//! The chain marks on the support page — `/tauturu`.
 //!
 //! Six marks, one per chain the site accepts support on, drawn here as geometry:
 //! a 20×20 viewBox, one colour — `currentColor`, so a mark follows the theme the

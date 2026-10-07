@@ -669,7 +669,7 @@ pub const AUTOSCROLL_BUTTON: StaticClass = class!(
 // Several songs on one page
 // ---------------------------------------------------------------------------
 
-/// One chosen song on `/himene/pluriel`: the step between two sheets, and the
+/// One chosen song on `/puta-himene`: the step between two sheets, and the
 /// rule that keeps a lyric off a page break.
 ///
 /// Composed with [`SONG_SHEET`], which brings the panel and the print colours —

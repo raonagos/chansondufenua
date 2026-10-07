@@ -21,13 +21,13 @@
 //! layer too and would otherwise be the one spelling that did *not* move.
 //!
 //! **Which pages have a Markdown form** is one list, spelled in the private
-//! `document` below: a song, the front page (`/`, and the `/aepa` duplicate of
-//! it), the index and its later pages, a selection on the multi-lyric page, an
-//! artist's `/artiste/{id}`, and a *search* on `/recherche`. `links` is the same
+//! `document` below: a song, the front page (its canonical `/faariiraa`, and
+//! the root `/` that serves it), the index and its later pages, a selection on
+//! the book, an artist's `/taata-himene/{id}`, and a *search* on `/paimi`. `links` is the same
 //! list read the other way round — a page with two representations names the one
 //! a given response is not — so a header promising a variant this layer does not
 //! serve cannot be written. A *form* is on neither list: the create-song page,
-//! the multi-lyric page's picker and `/recherche` with no needle are the same
+//! the book's picker and `/paimi` with no needle are the same
 //! kind of thing, and none of them has a second representation to promise. Nor is
 //! a URL that names nothing: an artist id with no row, or a page of the index the
 //! catalogue does not have, promises the sitemap and nothing else.
@@ -96,7 +96,7 @@ use crate::pages::{
     // The two front-page URLs. Their owner is `pages::home` — the page that
     // `#[page("/…")]` declares them in — because the layout matches the request
     // path against the same two constants to decide the document head.
-    home::{AEPA_PATH as AEPA, PATH as HOME},
+    home::{PATH as HOME, ROOT},
     search,
     songs,
     support,
@@ -246,6 +246,11 @@ impl Layer for Negotiation {
 
 /// `301` to `location`, with no body.
 ///
+/// `pub(crate)` because `routes::language` issues the same redirect for the
+/// addresses the site published before v4.2: one spelling of "this document
+/// moved, for good" rather than two that can drift about the code, the body or
+/// the absence of a `Cache-Control`.
+///
 /// **301, not 308.** Topcoat's own `redirect_permanent` is a 308, which is the
 /// right code for a *method-preserving* move and the wrong one here: what is
 /// being retired is one address of a `GET`-only document, and 301 is the code
@@ -256,7 +261,7 @@ impl Layer for Negotiation {
 /// that does not bake in a host the request may not have arrived on. Slugs are
 /// `[a-z0-9-]` by construction (`domain::slug`), so the header value cannot be
 /// malformed and there is nothing to percent-encode.
-fn moved_permanently(location: &str) -> Response {
+pub(crate) fn moved_permanently(location: &str) -> Response {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::MOVED_PERMANENTLY;
     response.headers_mut().insert(
@@ -366,10 +371,10 @@ async fn document(
         return Ok(addressed.map(|found| song_document(found.song(), lang, offset)));
     }
 
-    // `/aepa` is the front page under a second URL, and the same document:
+    // The root is the front page under a second URL, and the same document:
     // everything but the canonical URL is identical, and the document names the
     // canonical host either way.
-    if path == HOME || path == AEPA {
+    if path == HOME || path == ROOT {
         return home_document(cx, lang).await.map(Some);
     }
 
@@ -439,7 +444,7 @@ async fn document(
     Ok(None)
 }
 
-/// The support page as one Markdown document — `/soutenir`.
+/// The support page as one Markdown document — `/tauturu`.
 ///
 /// The heading and the sentence under it are chrome and follow the language; the
 /// chain names are proper nouns and the addresses are byte-for-byte the strings
@@ -565,7 +570,7 @@ pub(crate) fn song_document(sheet: &Song, lang: Lang, offset: i32) -> String {
     out
 }
 
-/// The chosen songs as one Markdown document — `/himene/pluriel?s=…`.
+/// The chosen songs as one Markdown document — `/puta-himene?s=…`.
 ///
 /// The pieces are [`song_document`]'s, once per song and in the reading order the
 /// URL named: a `##` heading that is a link to the sheet that owns the song, the
@@ -611,7 +616,7 @@ fn selection_document(sheets: &[Song], lang: Lang, segments: &[String]) -> Strin
     out
 }
 
-/// An artist's page as one Markdown document — `/artiste/{id}`.
+/// An artist's page as one Markdown document — `/taata-himene/{id}`.
 ///
 /// The name, then that artist's songs as the index writes them: one line each,
 /// the title a link to its own sheet and the credits beside it. Read from the
@@ -638,7 +643,7 @@ fn artist_document(artist: &crate::domain::Artist, listed: &[Song], lang: Lang) 
     out
 }
 
-/// A search as one Markdown document — `/recherche?q=…`.
+/// A search as one Markdown document — `/paimi?q=…`.
 ///
 /// The needle the document is about, then the two halves in the order the page
 /// shows them: the songs as the index's own list, the artists as links to their
@@ -687,7 +692,8 @@ fn search_document(needle: &str, found: &search::Results, lang: Lang, query: &st
     out
 }
 
-/// The front page as one Markdown document — `/`, and `/aepa` with it.
+/// The front page as one Markdown document — `/faariiraa`, and the root `/`
+/// that serves the same page.
 ///
 /// The same content the HTML page carries, in the same order: the hero, the
 /// three cards, the synopsis, the two tables and the closing block. The prose is
@@ -931,7 +937,7 @@ fn queue_links(cx: &Cx, values: Vec<String>) -> Result<()> {
 ///
 /// * Every document names the sitemap.
 /// * Every page with a Markdown form names the other of its two representations
-///   under `alternate` — a song, the front page, its `/aepa` duplicate, and the
+///   under `alternate` — a song, the front page, the root that duplicates it, and the
 ///   index. That is the same list [`document`] serves, and it is derived from
 ///   `served_markdown` rather than from a second table.
 /// * A song names its JSON read under `describedby`. That URL is keyed by the
@@ -944,7 +950,7 @@ fn queue_links(cx: &Cx, values: Vec<String>) -> Result<()> {
 ///   query string: the promise is about *this* selection, and a link built from
 ///   the path alone would name the picker — a different document, and one with
 ///   neither of those two forms.
-/// * A **search** on `/recherche` does the same: its JSON read is
+/// * A **search** on `/paimi` does the same: its JSON read is
 ///   `/api/search?q=…` (the same needle, the same two reads) and its Markdown
 ///   twin carries the reader's own query string. The bare page is the form and
 ///   promises the sitemap alone.
@@ -980,7 +986,7 @@ fn links(
     let other = if served_markdown { HTML } else { MARKDOWN_TYPE };
     let alternate = |url: String| format!("<{url}>; rel=\"alternate\"; type=\"{other}\"");
 
-    // An artist's page — `/artiste/{id}`. `artist` is the row the caller already
+    // An artist's page — `/taata-himene/{id}`. `artist` is the row the caller already
     // resolved: `None` means the URL names nobody, so the page handler raises the
     // branded 404 and this promises it nothing but the sitemap, the same rule a
     // song URL that names no published song follows.
@@ -1086,10 +1092,10 @@ fn links(
     }
 
     match path {
-        // `/aepa` is the front page under a second URL, so it has the same two
-        // representations; it does not repeat the card link, which describes
-        // the site and is promised once, on `/`.
-        AEPA => vec![sitemap_link, alternate(i18n::url(lang, AEPA))],
+        // The root is the front page under a second URL, so it has the same two
+        // representations; it does not repeat the site-level links, which
+        // describe the site and are promised once, on its canonical address.
+        ROOT => vec![sitemap_link, alternate(i18n::url(lang, ROOT))],
         HOME => vec![
             sitemap_link,
             alternate(i18n::url(lang, HOME)),
@@ -1354,10 +1360,10 @@ mod tests {
 
         // The front door names the MCP server card under `service-desc`, the API
         // catalog under `api-catalog` (RFC 9727 §3), and its own written
-        // description under `describedby` — plus its Markdown form; the page that
-        // is the same page under another URL names its Markdown form but does not
-        // repeat the site-level links, because they describe the site and one
-        // link on one URL is the whole promise.
+        // description under `describedby` — plus its Markdown form; the root,
+        // which is the same page under another URL, names its Markdown form but
+        // does not repeat the site-level links, because they describe the site
+        // and one link on the page's own canonical URL is the whole promise.
         let home = links(HOME, false, Lang::Fr, "", None, None, None);
         assert_eq!(home.len(), 5);
         assert_eq!(home[0], song[0]);
@@ -1395,13 +1401,13 @@ mod tests {
         );
         assert_eq!(home[4], describedby_link());
 
-        let aepa = links(AEPA, false, Lang::Fr, "", None, None, None);
-        assert_eq!(aepa.len(), 2);
+        let root = links(ROOT, false, Lang::Fr, "", None, None, None);
+        assert_eq!(root.len(), 2);
         assert_eq!(
-            aepa[1],
+            root[1],
             format!(
                 "<{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
-                i18n::url(Lang::Fr, AEPA)
+                i18n::url(Lang::Fr, ROOT)
             )
         );
 
@@ -1444,14 +1450,14 @@ mod tests {
             chosen[2],
             format!(
                 "<{}>; rel=\"alternate\"; type=\"{MARKDOWN_TYPE}\"",
-                i18n::url(Lang::Fr, "/himene/pluriel?s=a&s=b")
+                i18n::url(Lang::Fr, "/puta-himene?s=a&s=b")
             )
         );
 
         // Serving Markdown flips the alternate to the HTML document and keeps
         // the query, in the reader's language.
         let as_markdown = links(book::PATH, true, Lang::Ty, "s=a&s=b", None, None, None);
-        assert!(as_markdown[2].contains("/ty/himene/pluriel?s=a&s=b"));
+        assert!(as_markdown[2].contains("/ty/puta-himene?s=a&s=b"));
         assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
 
         // The picker: a path with no selection, and a query that is not one.
@@ -1514,7 +1520,7 @@ mod tests {
         );
         assert!(text.ends_with(&format!(
             "Source: {}\n",
-            i18n::url(Lang::Fr, "/himene/pluriel?s=te-here&s=ahani-e")
+            i18n::url(Lang::Fr, "/puta-himene?s=te-here&s=ahani-e")
         )));
 
         // Chrome, so it follows the language; the lyrics do not.
@@ -1642,11 +1648,7 @@ mod tests {
         // Serving Markdown names the HTML document back, in the language the
         // response was written in.
         let as_markdown = links(support::PATH, true, Lang::Ty, "", None, None, None);
-        assert!(
-            as_markdown[2].contains("/ty/soutenir"),
-            "{}",
-            as_markdown[2]
-        );
+        assert!(as_markdown[2].contains("/ty/tauturu"), "{}", as_markdown[2]);
         assert!(as_markdown[2].ends_with("rel=\"alternate\"; type=\"text/html\""));
 
         // The document: the heading is chrome, the addresses are content.

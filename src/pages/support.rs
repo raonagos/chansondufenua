@@ -1,4 +1,4 @@
-//! Support — `/soutenir`.
+//! Support — `/tauturu`.
 //!
 //! The site's last page: what a reader who wants to help pay for it can do. It
 //! carries three addresses and nothing else — one for Bitcoin, one for Solana,
@@ -43,7 +43,7 @@
 //! that script is running, so an address is always there to select by hand.
 //!
 //! Note the naming constraint every page in this directory shares:
-//! `#[page("/soutenir")]` emits a unit struct named after its handler —
+//! `#[page("/tauturu")]` emits a unit struct named after its handler —
 //! `soutenir` — in this module's *type* namespace, so a local binding of that
 //! name would be read as a pattern matching it.
 
@@ -57,13 +57,13 @@ use topcoat::{
 use crate::i18n::{self, Key};
 use crate::ui::{icons, theme};
 
-/// `/soutenir` — the address, in one place.
+/// `/tauturu` — the address, in one place.
 ///
 /// `routes::language` decides whether a request path is language-scoped and
 /// `routes::negotiation` decides whether it has a Markdown form; both read this
 /// constant. `#[page]` cannot take one — it is a macro over a literal path — so
 /// this restates it, as `pages::songs::PATH` does.
-pub const PATH: &str = "/soutenir";
+pub const PATH: &str = "/tauturu";
 
 /// The page's `<meta name="description">`.
 ///
@@ -145,8 +145,8 @@ pub fn money(lang: i18n::Lang) -> &'static [&'static str] {
     }
 }
 
-/// `/soutenir` — the page.
-#[page("/soutenir")]
+/// `/tauturu` — the page.
+#[page("/tauturu")]
 pub async fn soutenir(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let copy = i18n::text(lang, Key::SupportCopy);
@@ -473,7 +473,7 @@ mod tests {
     /// one segment, no parameter.
     #[test]
     fn the_path_is_what_the_route_declares() {
-        assert_eq!(PATH, "/soutenir");
+        assert_eq!(PATH, "/tauturu");
         assert!(!PATH.contains('{'), "{PATH}");
     }
 }

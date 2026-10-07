@@ -1,4 +1,4 @@
-//! The home page — `/`, and the same page again at `/aepa`.
+//! The home page — `/faariiraa`, and the same page again at the root `/`.
 //!
 //! Transcribed from v3's `HomePage` (`app/src/pages/index.rs`): the hero, the
 //! three "why" cards, the synopsis, the two song tables, and the closing call to
@@ -123,28 +123,39 @@ pub mod copy {
 /// table size would make the two forms of one page disagree about it.
 pub(crate) const ROWS: i64 = 5;
 
-/// `/` — the front page, and the path `#[page]` below declares.
+/// `/faariiraa` — the front page's own address, and the path `#[page]` below
+/// declares.
 ///
 /// A constant as well as an attribute, because the layout matches the request
 /// path against it to decide this page's `<head>`: `#[page]` is a macro over a
 /// literal and cannot take one, so the constant restates it — the same
 /// arrangement `pages::songs::PATH` and `pages::editor::PATH` have.
-pub const PATH: &str = "/";
+///
+/// The Tahitian spelling, and the one the site is published at: the reviewer's
+/// list of addresses (`/faariiraa`, `/himene`, `/taata-himene`, `/puta-himene`,
+/// `/paimi`, `/tauturu`) and the URL standard he named for this one. `/aepa`,
+/// v3's transliteration of the same word, moved here for good — see
+/// [`crate::pages::retired`].
+pub const PATH: &str = "/faariiraa";
 
-/// `/aepa` — the front page under its Tahitian address, and the path `#[page]`
-/// below declares. See [`PATH`].
-pub const AEPA_PATH: &str = "/aepa";
+/// `/` — the root, which serves the front page and names [`PATH`] canonical.
+///
+/// Kept as a route rather than redirected: the root is where a reader who knows
+/// the domain and nothing else lands, and a domain that answers 200 with its own
+/// front page is a domain that works. What it does *not* do is compete with
+/// [`PATH`]: its `<head>` names the canonical address, so the two URLs are one
+/// page to a crawler rather than two.
+pub const ROOT: &str = "/";
 
-/// `/` — the front page.
-#[page("/")]
+/// `/faariiraa` — the front page.
+#[page("/faariiraa")]
 pub async fn home() -> Result<impl View> {
     Ok(view! { home_body() })
 }
 
-/// `/aepa` — the same page under a Tahitian path, kept because it is published
-/// and linked from the header.
-#[page("/aepa")]
-pub async fn aepa() -> Result<impl View> {
+/// `/` — the same page under the root, which canonicalises to [`PATH`].
+#[page("/")]
+pub async fn root() -> Result<impl View> {
     Ok(view! { home_body() })
 }
 

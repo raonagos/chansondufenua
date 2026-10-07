@@ -44,7 +44,7 @@ use crate::domain::song::{SITE_URL, Song};
 use crate::i18n::{self, Key, Lang};
 use crate::pages::{
     artist, book, editor,
-    home::{self, AEPA_PATH, PATH as HOME},
+    home::{self, PATH as HOME, ROOT},
     search, songs, support,
 };
 use crate::routes::{negotiation, og};
@@ -143,9 +143,9 @@ impl SocialCards {
     /// and it is the same URL for every language, because it says the site's name
     /// and nothing that is translated.
     ///
-    /// `og:url` is the canonical URL, not the requested one: `/aepa` and `/` are
-    /// one page, and a card that named the second address would be advertising a
-    /// duplicate.
+    /// `og:url` is the canonical URL, not the requested one: the root and
+    /// `/faariiraa` are one page, and a card that named the second address would
+    /// be advertising a duplicate.
     fn for_page(title: &str, description: &str, url: &str, lang: Lang) -> Self {
         let image = format!("{SITE_URL}{}", og::SITE_CARD);
 
@@ -358,17 +358,21 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
 /// The `<head>` of everything that is not a song, by which route it is.
 ///
 /// **One title per URL.** v3 set the site's name once, on the app root, and v4
-/// inherited the consequence: `/`, `/aepa` and `/himene` answered with the same
-/// `<title>`, which tells a search engine that three addresses are one page. The
-/// front door keeps the name; the others say what they are and then name the
-/// site, in the chrome's own words, so the title follows the page's language the
-/// way the rest of the chrome does.
+/// inherited the consequence: the two front-page URLs and `/himene` answered
+/// with the same `<title>`, which tells a search engine that three addresses are
+/// one page. The front door keeps the name; the others say what they are and
+/// then name the site, in the chrome's own words, so the title follows the
+/// page's language the way the rest of the chrome does.
 ///
 /// The same three pages get a description, a canonical URL and a social card
 /// from [`page_head`], because having prose and being shareable are the same
-/// condition. `/aepa` is the exception that proves the shape: it is the front
-/// page under a second URL, so it shares the description and the canonical that
-/// points home, and differs in the one field where two URLs must differ.
+/// condition. The root is the exception that proves the shape: it is the front
+/// page under a second URL — the address a reader who knows the domain and
+/// nothing else lands on — so it shares the description and the canonical that
+/// points at [`home::PATH`], and differs in the one field where two URLs must
+/// differ. The site's own structured data stays on the canonical address, since
+/// what it describes is the site and two copies on two URLs is one description
+/// competing with itself.
 ///
 /// **The canonical URL carries the language prefix.** `/himene` and `/ty/himene`
 /// are one page in two languages, and the prefixed form is the one that is
@@ -376,17 +380,17 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
 /// scope names explicitly: one canonical per page, and the bare URL declaring
 /// it rather than competing with it.
 fn site_head(path: &str, lang: Lang) -> DocumentHead {
-    // `/` and `/aepa` are one page under two URLs. v3 declared `/aepa` the
-    // duplicate, and its canonical URL carries no trailing slash — that is the
-    // form the live site emits, so that is the form kept.
-    if matches!(path, HOME | AEPA_PATH) {
-        let title = if path == AEPA_PATH {
+    // `/faariiraa` and `/` are one page under two URLs. The root is the
+    // duplicate — v4.2 made the Tahitian address canonical — and the canonical
+    // URL carries no trailing slash, the form the live site emits.
+    if matches!(path, HOME | ROOT) {
+        let title = if path == ROOT {
             format!("{} | {TITLE}", i18n::text(lang, Key::NavHome))
         } else {
             TITLE.to_owned()
         };
 
-        // The front door describes the site once, and `/aepa` — the same page
+        // The front door describes the site once, and the root — the same page
         // under a second URL — does not repeat it: what the structured data
         // describes is the site, and two copies on two URLs is one description
         // competing with itself.
@@ -480,17 +484,23 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
 /// follows, which is why a transposed sheet declares the untransposed URL as its
 /// canonical and its alternates name the same sheet in the other two languages.
 ///
-/// The multi-lyric page is the exception, and it is what makes the rule visible:
-/// there the query **is** the page — `/himene/pluriel` with no selection is the
-/// picker, and a selection is a different document — so dropping it would make
-/// every selection declare the picker in three languages as its own alternate.
+/// The book is the exception, and it is what makes the rule visible: there the
+/// query **is** the page — `/puta-himene` with no selection is the picker, and a
+/// selection is a different document — so dropping it would make every selection
+/// declare the picker in three languages as its own alternate.
+///
+/// The root is the other one, and for the opposite reason: it is not a page of
+/// its own but the front page under a second URL, and everything built from this
+/// answer — the switcher, the `hreflang` cluster, `x-default` — has to name the
+/// address the page is published at. A cluster whose members were `/fr`, `/ty`
+/// and `/en` would be three URLs that each canonicalise somewhere else.
 fn addressed_path(cx: &Cx) -> String {
     let request = uri(cx);
     let path = request.path();
 
     match request.query() {
         Some(query) if path == book::PATH => format!("{path}?{query}"),
-        _ => path.to_owned(),
+        _ => (if path == ROOT { HOME } else { path }).to_owned(),
     }
 }
 
@@ -748,30 +758,33 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
 pub async fn header(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let home_link = href!(home::home);
-    let aepa_link = href!(home::aepa);
+    let root_link = href!(home::root);
     let songs_link = href!(songs::songs);
 
-    let on_aepa = aepa_link.is_current(cx);
+    let on_root = root_link.is_current(cx);
     let on_home = home_link.is_current(cx);
     let on_songs = songs_link.is_current(cx) || names_the_index(uri(cx).path());
 
-    // v3 linked "Accueil" at `/aepa` and nothing at `/`. Both are the same page,
-    // so both light up for it.
-    let on_accueil = on_aepa || on_home;
+    // The front page is served at two URLs — its own address and the root — and
+    // the nav's "Accueil" lights up on both. Topcoat's `is_current` compares the
+    // handler the router matched, and the two URLs are two handlers, so asking
+    // one of them would leave the highlight dark on the other.
+    let on_accueil = on_root || on_home;
 
     // Every link the chrome emits is the canonical, language-prefixed form of
     // the page: a reader on `/` who clicks "Chanson" lands on `/fr/himene`, which
     // is the address that page is published at. `is_current` is asked of the
-    // route rather than of the URL, so the highlight survives the prefix.
+    // route rather than of the URL, so the highlight survives the prefix. The
+    // "Accueil" link names the front page's own address, never the root, so one
+    // page has one address in the chrome.
     let home_href = i18n::link(cx, &home_link.resolve(cx));
-    let aepa_href = i18n::link(cx, &aepa_link.resolve(cx));
     let songs_href = i18n::link(cx, &songs_link.resolve(cx));
 
     Ok(view! {
         <header class=(theme::HEADER)>
             <div class=(theme::HEADER_INNER)>
                 <div>
-                    <a href=(home_href) class=(class!(theme::FOCUS))>
+                    <a href=(home_href.clone()) class=(class!(theme::FOCUS))>
                         <img
                             class=(theme::LOGO)
                             src=(assets::LOGO)
@@ -794,7 +807,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                 <nav id="navigation" class=(theme::NAV)>
                     <span class=(theme::NAV_SPACER)></span>
                     <a
-                        href=(aepa_href)
+                        href=(home_href)
                         aria-current=(on_accueil.then_some("page"))
                         class=(class!(
                             theme::NAV_LINK,
@@ -920,7 +933,7 @@ mod tests {
     use crate::domain::song::DESCRIPTION_MAX;
 
     /// Every page the router serves, in the order this module decides them.
-    const PAGES: [&str; 5] = [HOME, AEPA_PATH, songs::PATH, editor::PATH, support::PATH];
+    const PAGES: [&str; 5] = [HOME, ROOT, songs::PATH, editor::PATH, support::PATH];
 
     /// `<title>` is the one field a search result leads with, and two URLs
     /// answering with the same one tells a crawler they are the same page. Three
@@ -943,7 +956,7 @@ mod tests {
     /// them by having all four from its first day.
     #[test]
     fn the_prose_pages_have_a_description_a_canonical_and_a_card() {
-        for path in [HOME, AEPA_PATH, songs::PATH, support::PATH] {
+        for path in [HOME, ROOT, songs::PATH, support::PATH] {
             let head = site_head(path, Lang::Fr);
             let description = head.description.expect("a description");
             let canonical = head.canonical.expect("a canonical URL");
@@ -968,24 +981,24 @@ mod tests {
         }
     }
 
-    /// The front page under its second address is the same page, so it points at
-    /// the same canonical URL and offers the same description — and it still
-    /// names itself in its own title.
+    /// The front page under its second address — the root — is the same page, so
+    /// it points at the same canonical URL and offers the same description, and it
+    /// still names itself in its own title.
     #[test]
     fn the_two_front_page_urls_point_home() {
         let home = site_head(HOME, Lang::Fr);
-        let aepa = site_head(AEPA_PATH, Lang::Fr);
+        let root = site_head(ROOT, Lang::Fr);
 
         assert_eq!(
             home.canonical.as_deref(),
             Some(i18n::url(Lang::Fr, HOME).as_str())
         );
-        assert_eq!(home.canonical, aepa.canonical);
-        assert_eq!(home.description, aepa.description);
-        assert_ne!(home.title, aepa.title);
+        assert_eq!(home.canonical, root.canonical);
+        assert_eq!(home.description, root.description);
+        assert_ne!(home.title, root.title);
     }
 
-    /// The front door names the site and the box that searches it, and `/aepa`
+    /// The front door names the site and the box that searches it, and the root
     /// — the same page under a second URL — does not repeat either.
     ///
     /// The `SearchAction`'s template is the search page's own path and parameter,
@@ -1020,8 +1033,8 @@ mod tests {
         );
 
         assert!(
-            site_head(AEPA_PATH, Lang::Fr).jsonld.is_none(),
-            "/aepa repeats the site description"
+            site_head(ROOT, Lang::Fr).jsonld.is_none(),
+            "the root repeats the site description"
         );
         assert!(site_head(songs::PATH, Lang::Fr).jsonld.is_none());
     }
@@ -1091,13 +1104,12 @@ mod tests {
         }
 
         // A song under the same prefix is not the index, and neither is the
-        // multi-lyric page: the nav would be lying about which page the reader
-        // is on.
+        // book: the nav would be lying about which page the reader is on.
         for path in [
             HOME,
-            AEPA_PATH,
+            ROOT,
             "/himene/ahani-e",
-            "/himene/pluriel",
+            "/puta-himene",
             "/himene/sitemap.xml",
             editor::PATH,
         ] {
@@ -1111,13 +1123,13 @@ mod tests {
     #[test]
     fn every_page_canonicalises_to_its_own_language_prefix() {
         for lang in Lang::ALL {
-            for path in [HOME, AEPA_PATH, songs::PATH, support::PATH] {
+            for path in [HOME, ROOT, songs::PATH, support::PATH] {
                 let head = site_head(path, lang);
                 let canonical = head.canonical.expect("a canonical URL");
 
-                // `/aepa` is the front page under a second URL: it canonicalises
+                // The root is the front page under a second URL: it canonicalises
                 // to the front page, in the language it was served in.
-                let canonical_path = if path == AEPA_PATH { HOME } else { path };
+                let canonical_path = if path == ROOT { HOME } else { path };
                 assert_eq!(
                     canonical,
                     i18n::url(lang, canonical_path),
@@ -1143,11 +1155,16 @@ mod tests {
     /// It also pins the two properties a switcher is easy to get wrong: it
     /// addresses *this* page (not the front door, and not the other language's
     /// index), and its own language is among its links rather than left out.
+    ///
+    /// The list starts at [`HOME`] and not at [`ROOT`]: the root is the front
+    /// page under a second URL, and the path both the switcher and the cluster
+    /// are built from is [`addressed_path`]'s answer, which names the page's own
+    /// address — so `/fr`, `/ty` and `/en` are not three members of anybody's
+    /// cluster.
     #[test]
     fn the_switcher_and_the_hreflang_cluster_name_the_same_urls() {
         for path in [
             HOME,
-            AEPA_PATH,
             songs::PATH,
             editor::PATH,
             support::PATH,

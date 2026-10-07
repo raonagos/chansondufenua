@@ -1,4 +1,8 @@
-//! Search — `/recherche`.
+//! Search — `/paimi`.
+//!
+//! Transcribed from v3's `Search` page. One address, two states: the form, and
+//! the results when the URL carries a needle. `/paimi` is *pā'imi*, to search —
+//! the reviewer's own word for this page, and one of the six addresses he named.
 //!
 //! One box that searches the two things a reader knows about a song: its title
 //! and who sang it. The matching is accent- and ʻokina-insensitive, because that
@@ -8,7 +12,7 @@
 //!
 //! # The query is the address
 //!
-//! `/recherche?q=ahani` — a `GET` form on this page, and the same parameter read
+//! `/paimi?q=ahani` — a `GET` form on this page, and the same parameter read
 //! back from the URL. That is the multi-lyric page's pattern
 //! ([`crate::pages::book`]) for the same reason: a reader can keep, print or
 //! send the result, and the page needs no script to do it.
@@ -34,7 +38,7 @@
 //! picker follow: a form is not prose.
 //!
 //! Note the naming constraint every page in this directory shares:
-//! `#[page("/recherche")]` emits a unit struct named after its handler —
+//! `#[page("/paimi")]` emits a unit struct named after its handler —
 //! `search` — in this module's *type* namespace, so a local binding of that
 //! name would be read as a pattern matching it.
 
@@ -54,12 +58,12 @@ use crate::pages::songs::song_row;
 use crate::state;
 use crate::ui::theme;
 
-/// `/recherche` — the address, in one place.
+/// `/paimi` — the address, in one place.
 ///
 /// `routes::language` decides whether a request path is language-scoped, and this
 /// is the constant it reads. `#[page]` cannot take a constant — it is a macro
 /// over a literal path — so this restates it, as `pages::songs::PATH` does.
-pub const PATH: &str = "/recherche";
+pub const PATH: &str = "/paimi";
 
 /// The query parameter the needle travels in.
 ///
@@ -193,13 +197,13 @@ fn hex(byte: u8) -> Option<u8> {
     }
 }
 
-/// `/recherche` — the form, and the results when the URL carries a needle.
+/// `/paimi` — the form, and the results when the URL carries a needle.
 ///
 /// One page, two states, decided by the query string and nothing else: no
 /// needle renders the form, a needle renders what it found. They are one address
 /// because the reader builds the URL in the form and reads it back on the page,
-/// the same arrangement `/himene/pluriel` makes.
-#[page("/recherche")]
+/// the same arrangement `/puta-himene` makes.
+#[page("/paimi")]
 pub async fn search(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let query = uri(cx).query().unwrap_or("");

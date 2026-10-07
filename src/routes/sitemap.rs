@@ -21,15 +21,15 @@
 //! songs. A site with no songs carries no `lastmod` at all rather than a
 //! fabricated one.
 //!
-//! `/aepa` is not listed. It is the home page under a second URL and its own
+//! The root is not listed. It is the home page under a second URL and its own
 //! canonical link says so; a sitemap lists canonical URLs.
 //!
 //! **"Canonical" means the language-prefixed form.** A page's canonical URL is
 //! `/fr/…`, `/ty/…` or `/en/…` ([`crate::i18n::url`]); the bare URL is the
 //! language-neutral `x-default` that serves the default and names the prefixed
 //! form. A sitemap that listed the bare URL would hand a crawler a URL whose own
-//! `<link rel="canonical">` pointed somewhere else — the one thing this module's
-//! `/aepa` rule exists to avoid. So both sitemaps list
+//! `<link rel="canonical">` pointed somewhere else — the one thing the rule
+//! above exists to avoid. So both sitemaps list
 //! [`Lang::DEFAULT`](crate::i18n::Lang::DEFAULT)'s addresses; the other two
 //! languages are discovered from each page's `hreflang` cluster, which is what
 //! that cluster is for.

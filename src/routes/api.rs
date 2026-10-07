@@ -191,7 +191,7 @@ pub(crate) struct ArtistJson {
     id: String,
     name: String,
     /// The artist page's language-neutral address, on the canonical host:
-    /// `/artiste/{id}`, the same URL the search page links to.
+    /// `/taata-himene/{id}`, the same URL the search page links to.
     url: String,
 }
 
@@ -429,7 +429,7 @@ fn catalogue_operation() -> Value {
             "name": "s",
             "in": "query",
             "required": false,
-            "description": "A song's slug, once per chosen song. Repeating it selects several songs in reading order — the same query string `/himene/pluriel` serves as a page. Two segments that name one song are one selection; a segment that names no published song is the 404.",
+            "description": "A song's slug, once per chosen song. Repeating it selects several songs in reading order — the same query string `/puta-himene` serves as a page. Two segments that name one song are one selection; a segment that names no published song is the 404.",
             "schema": { "type": "array", "items": { "type": "string" } },
             "style": "form",
             "explode": true
@@ -596,7 +596,7 @@ fn schemas() -> Value {
             "type": "object",
             "required": ["id", "name", "url"],
             "properties": {
-                "id": { "type": "string", "description": "The stable key, as the artist's page is addressed by it: `/artiste/{id}`." },
+                "id": { "type": "string", "description": "The stable key, as the artist's page is addressed by it: `/taata-himene/{id}`." },
                 "name": { "type": "string", "description": "The credited name, as the songs print it." },
                 "url": { "type": "string", "format": "uri", "description": "The artist page's language-neutral address, on the canonical host. The page's own canonical URL carries a language prefix." }
             }

@@ -1,4 +1,4 @@
-//! Several songs on one page — `/himene/pluriel`.
+//! Several songs on one page — `/puta-himene`, the book.
 //!
 //! A reader picks songs and reads their lyrics one after another, on one page,
 //! with the chords where they were written. That is the whole feature, and the
@@ -8,13 +8,13 @@
 //!
 //! # The selection is the URL
 //!
-//! `/himene/pluriel?s=te-here&s=ahani-e` — one `s` per chosen song, **in reading
-//! order**. A query string rather than a path, deliberately: `/himene/{slug}` is
-//! a song's address and `/himene/sitemap.xml` and `/himene/api` are already two
-//! literal segments under the same prefix, so a path-shaped selection
-//! (`/himene/a+b`) would have to be told apart from a song slug by more rules
-//! than it is worth — while a query names the set, keeps the songs' own addresses
-//! intact, and composes with the language prefix that the song pages already use.
+//! `/puta-himene?s=te-here&s=ahani-e` — one `s` per chosen song, **in reading
+//! order**. A query string rather than a path, deliberately: a path-shaped
+//! selection (`/puta-himene/te-here+ahani-e`) would have to be told apart from a
+//! slug by more rules than it is worth — and a selection is not an address of its
+//! own anyway, being every ordered subset of the catalogue — while a query names
+//! the set, keeps each song's own address intact, and composes with the language
+//! prefix the pages already carry.
 //!
 //! The selection is a **set**: a segment repeated in the URL is read once, and
 //! two segments that name the same song (a slug and its id) are one sheet.
@@ -87,14 +87,14 @@ use crate::pages::song::lyric_line;
 use crate::state;
 use crate::ui::theme;
 
-/// `/himene/pluriel` — the address, in one place.
+/// `/puta-himene` — the address, in one place.
 ///
 /// Two other modules name it: `routes::language`'s `is_page` (a page is
 /// language-scoped, and this one is a page) and `routes::negotiation`, which
 /// serves the Markdown form of a selection. `#[page]` cannot take a constant —
 /// it is a macro over a literal path — so the constant restates it, as
 /// `pages::editor::PATH` does.
-pub const PATH: &str = "/himene/pluriel";
+pub const PATH: &str = "/puta-himene";
 
 /// The query parameter that names one chosen song.
 ///
@@ -186,7 +186,7 @@ pub(crate) async fn resolve(pool: &SqlitePool, segments: &[String]) -> DbResult<
     Ok(Some(out))
 }
 
-/// `/himene/pluriel` — a chosen set of songs, or the form that chooses them.
+/// `/puta-himene` — a chosen set of songs, or the form that chooses them.
 ///
 /// One page, two states, decided by the query string and by nothing else: a
 /// selection renders the sheets, and no selection renders the picker. They are
@@ -206,7 +206,7 @@ pub(crate) async fn resolve(pool: &SqlitePool, segments: &[String]) -> DbResult<
 /// The chosen song is the song page's sheet — see `chosen_sheet` — with the
 /// page's own `<h1>` above it, because this page's title is the page's and each
 /// song's is a section of it.
-#[page("/himene/pluriel")]
+#[page("/puta-himene")]
 pub async fn book(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let segments = selection(uri(cx).query().unwrap_or(""));

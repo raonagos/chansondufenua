@@ -394,7 +394,7 @@ pub async fn song_at(pool: &SqlitePool, segment: &str) -> DbResult<Option<Addres
 
 /// The songs a list of URL segments names — one entry per segment, in order.
 ///
-/// The bulk form of [`song_at`], for the multi-lyric page (`/himene/pluriel`):
+/// The bulk form of [`song_at`], for the book (`/puta-himene`):
 /// the same rule (slug, then id, then a retired slug) applied to a list. Written
 /// as a loop over [`song_at`] rather than as one `IN (…)` on purpose — "a slug,
 /// else an id, else a slug it used to have" is not a predicate SQL can be handed
@@ -1003,7 +1003,7 @@ mod tests {
     /// out as in, a hole where a segment names nothing, and the canonical flag
     /// carried per row so the caller can tell an id URL from an address.
     ///
-    /// This is the read behind `/himene/pluriel`: the page's own order is the
+    /// This is the read behind `/puta-himene`: the page's own order is the
     /// reader's reading order, so an implementation that sorted or deduped here
     /// would be reordering a selection the reader made.
     #[tokio::test]

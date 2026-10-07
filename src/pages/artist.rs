@@ -1,4 +1,4 @@
-//! An artist's page — `/artiste/{id}`.
+//! An artist's page — `/taata-himene/{id}`.
 //!
 //! The scope's second item: artist pages are **real indexable URLs**, not only a
 //! filter on the index. A reader who follows a name on a song sheet lands here
@@ -11,9 +11,10 @@
 //! Songs moved to slugs ([`crate::domain::slug`]) because a song's title is the
 //! thing a reader shares. An artist's name is not a song's title: there is no
 //! rename history to keep alive, no author-facing label to mint a slug from, and
-//! the id is already stable and opaque. So `/artiste/{id}` names the row and
-//! nothing else has to be true of it — no 301, no retired-address table, no
-//! second namespace next to the songs' slugs.
+//! the id is already stable and opaque. So `/taata-himene/{id}` names the row and
+//! nothing else has to be true of it — no second namespace next to the songs'
+//! slugs. (The prefix itself moved once, from v4.1's French `/artiste/`; the
+//! retired address is one row of `pages::retired`, not a slugger's problem.)
 //!
 //! # One artist, one page
 //!
@@ -31,7 +32,7 @@
 //! per-page head API); [`jsonld`] is the structured data that head carries.
 //!
 //! Note the naming constraint every page in this directory shares:
-//! `#[page("/artiste/{id}")]` emits a unit struct named after its handler —
+//! `#[page("/taata-himene/{id}")]` emits a unit struct named after its handler —
 //! `artist` — in this module's *type* namespace, so a local binding of that name
 //! would be read as a pattern matching it. The page's row lives in `found`.
 
@@ -56,7 +57,7 @@ use crate::ui::theme;
 /// the handler, and both need the *shape*. `#[page]` cannot take a constant — it
 /// is a macro over a literal path — so this restates it, as `pages::songs::PATH`
 /// does.
-pub const PREFIX: &str = "/artiste/";
+pub const PREFIX: &str = "/taata-himene/";
 
 // The `{id}` in this page's path.
 //
@@ -65,11 +66,11 @@ pub const PREFIX: &str = "/artiste/";
 // the `#[page]` attribute and no other module spells it out.
 path_param!(pub id);
 
-/// The id a `/artiste/{id}` path names, if the path has that shape.
+/// The id a `/taata-himene/{id}` path names, if the path has that shape.
 ///
 /// *Shape*, not existence: the segment is returned as it arrived, and the read
 /// is what decides whether it names a row. One segment and nothing else —
-/// `/artiste/a/b` is nobody's page.
+/// `/taata-himene/a/b` is nobody's page.
 pub fn segment(path: &str) -> Option<&str> {
     let segment = path.strip_prefix(PREFIX)?;
 
@@ -87,7 +88,7 @@ pub fn path_of(id: &str) -> String {
 /// An artist's page, in the request's language — the one place a credit becomes a
 /// link.
 ///
-/// Through `href!`, so `/artiste/{id}` is spelled in this page's own attribute and
+/// Through `href!`, so `/taata-himene/{id}` is spelled in this page's own attribute and
 /// nowhere else: a song's credits, the index's artist column and a search result
 /// all come through here, and a route that moved would move them with it.
 pub fn link(cx: &Cx, row: &Artist) -> String {
@@ -159,12 +160,12 @@ pub fn jsonld(row: &Artist, url: &str, songs: &[Song]) -> String {
     .to_string()
 }
 
-/// `/artiste/{id}` — one artist and the songs credited to them.
+/// `/taata-himene/{id}` — one artist and the songs credited to them.
 ///
 /// An id that names no row is the branded 404: the same `ok_or_not_found` a
 /// missing song raises, so both travel through the layout's error boundary and
 /// wear the site's chrome.
-#[page("/artiste/{id}")]
+#[page("/taata-himene/{id}")]
 pub async fn artist(cx: &Cx) -> Result<impl View> {
     let id: &str = path_param::<Id>(cx);
 
@@ -230,23 +231,23 @@ mod tests {
     #[test]
     fn a_path_names_an_artist_only_when_it_has_that_shape() {
         assert_eq!(
-            segment("/artiste/1kvm9y2tcplm43wgeuni"),
+            segment("/taata-himene/1kvm9y2tcplm43wgeuni"),
             Some("1kvm9y2tcplm43wgeuni")
         );
         // A segment with no `/` in it is a segment, whatever it holds: whether it
         // names a row is the read's question.
-        assert_eq!(segment("/artiste/nope"), Some("nope"));
+        assert_eq!(segment("/taata-himene/nope"), Some("nope"));
 
-        assert_eq!(segment("/artiste/"), None);
-        assert_eq!(segment("/artiste"), None);
-        assert_eq!(segment("/artiste/a/b"), None);
+        assert_eq!(segment("/taata-himene/"), None);
+        assert_eq!(segment("/taata-himene"), None);
+        assert_eq!(segment("/taata-himene/a/b"), None);
         assert_eq!(segment("/himene/ahani-e"), None);
         assert_eq!(segment(PREFIX), None);
     }
 
     #[test]
     fn the_path_is_the_prefix_and_the_id() {
-        assert_eq!(path_of("abc"), "/artiste/abc");
+        assert_eq!(path_of("abc"), "/taata-himene/abc");
         assert_eq!(
             segment(&path_of("abc")),
             Some("abc"),

@@ -338,7 +338,7 @@ pub enum Key {
     /// where the reader is, which is what a pause does, and "stop" is the word
     /// the two other catalogs already have for a control that is not moving.
     ScrollStop,
-    /// The heading of `/himene/pluriel` — the page that reads several songs one
+    /// The heading of `/puta-himene` — the page that reads several songs one
     /// after another, and the picker that builds the selection.
     BookTitle,
     /// What the picker asks for: tick the songs, then read them together.
@@ -350,7 +350,7 @@ pub enum Key {
     /// A word of its own rather than [`BookTitle`](Self::BookTitle): a
     /// heading names a page, and a link has to say what following it does.
     BookOpen,
-    /// The heading of `/recherche` — the search page, in both of its states.
+    /// The heading of `/paimi` — the search page, in both of its states.
     SearchTitle,
     /// The label of the search form's one field: what the box searches.
     SearchLabel,
@@ -362,7 +362,7 @@ pub enum Key {
     SearchArtists,
     /// What a search says when neither half found anything.
     SearchEmpty,
-    /// The heading and `<title>` of `/soutenir` — the page that says how to
+    /// The heading and `<title>` of `/tauturu` — the page that says how to
     /// support the site.
     SupportTitle,
     /// The sentence under that heading: what the page is for. One line, and no
@@ -772,7 +772,7 @@ mod tests {
         assert_eq!(at(Lang::Ty, "/"), "/ty");
         assert_eq!(at(Lang::En, "/himene"), "/en/himene");
         assert_eq!(at(Lang::Ty, "/himene/ahani-e"), "/ty/himene/ahani-e");
-        assert_eq!(at(Lang::Fr, "/aepa"), "/fr/aepa");
+        assert_eq!(at(Lang::Fr, "/faariiraa"), "/fr/faariiraa");
 
         assert_eq!(url(Lang::Ty, "/himene"), format!("{SITE_URL}/ty/himene"));
         assert_eq!(absolute("/"), SITE_URL);

@@ -2,8 +2,12 @@
 //! serves the default.
 //!
 //! This layer is what makes a language an *address* rather than a preference.
-//! It sits outside the router's page handlers and does three things, in order:
+//! It sits outside the router's page handlers and does four things, in order:
 //!
+//! 0. **A retired address** — one the site published under an older name,
+//!    spelled in [`crate::pages::retired`] — is answered `301` at the address
+//!    that answers it now, in the language the URL named. This is the one thing
+//!    here that outlives a preference: a `301` is cached, by design.
 //! 1. **`?lang=xx`** — a reader asking for a language by name is redirected to
 //!    that language's URL, so the query string never becomes a second indexed
 //!    copy of a page. The choice is remembered in a cookie on the way.
@@ -30,10 +34,12 @@
 //! language-neutral machine surfaces: `/ty/api/songs` is not a thing, and it
 //! 404s rather than serving a second address for one document.
 //!
-//! The two redirects are `302` and carry `Cache-Control: private, no-store`,
-//! because what they answer depends on a cookie or a query the client just
-//! sent. A permanently cached redirect to one language is exactly the mistake
-//! this module exists to prevent.
+//! The two *preference* redirects are `302` and carry `Cache-Control:
+//! private, no-store`, because what they answer depends on a cookie or a query
+//! the client just sent. A permanently cached redirect to one language is
+//! exactly the mistake this module exists to prevent. A retired address is the
+//! other way round — the `301` is permanent on purpose, and cacheable, because
+//! the move does not depend on anything about the request.
 
 use topcoat::{
     context::Cx,
@@ -47,7 +53,7 @@ use topcoat::{
 };
 
 use crate::i18n::{self, Lang, Language};
-use crate::pages::{artist, book, editor, home, search, songs, support};
+use crate::pages::{artist, book, editor, home, retired, search, songs, support};
 use crate::routes::negotiation;
 
 /// The layer. A unit value: it holds no state, and the request context is where
@@ -65,6 +71,17 @@ impl Layer for LanguageLayer {
         Box::pin(async move {
             let path = uri(cx).path();
             let query = uri(cx).query().unwrap_or("");
+
+            // 0. **A retired address moves for good**, in the language its URL
+            //    named: `/fr/recherche` is the French search page's old address
+            //    and it answers `/fr/paimi`, so a reader who follows a link from
+            //    2019 lands on the page in the language they were reading. This
+            //    is checked *before* anything else, and before `page_of`,
+            //    because a retired path is deliberately not a page any more:
+            //    nothing further down knows the name.
+            if let Some(target) = retired_target(path) {
+                return Ok(negotiation::moved_permanently(&with_query(target, query)));
+            }
 
             // A path the site's pages do not own is not language-scoped at all:
             // it is answered as it is, whatever prefix it arrived under (and a
@@ -126,8 +143,8 @@ impl Layer for LanguageLayer {
 /// not an address this layer invents a meaning for. It 404s.
 ///
 /// **This is the list step 22 was told two files would need, and it is one.**
-/// A new page (an artist's `/artiste/{id}`, step 29) is added here, next to the
-/// route that declares it — `/himene/pluriel` is there for step 26, and
+/// A new page (an artist's `/taata-himene/{id}`, step 29) is added here, next to
+/// the route that declares it — the book is there for step 26, and
 /// `negotiation::song_segment` has to know the same name for a different reason
 /// (it must not mistake the page for a song).
 ///
@@ -146,11 +163,36 @@ fn page_of(path: &str) -> Option<(&str, Option<Lang>)> {
     }
 }
 
+/// The address a retired path is answered at now, in the language its URL named.
+///
+/// `pages::retired` knows *which* addresses retired and where they went; this
+/// function puts the language back, because that is this layer's business and
+/// nothing else in the site knows the request's path arrived with a prefix. A
+/// bare old address stays bare — the default language — exactly as a bare new
+/// one would.
+fn retired_target(path: &str) -> Option<String> {
+    let (lang, page) = match split_prefix(path) {
+        Some((lang, page)) => (Some(lang), page),
+        None => (None, path),
+    };
+
+    let successor = retired::successor(page)?;
+    Some(match lang {
+        Some(lang) => i18n::at(lang, &successor),
+        None => successor,
+    })
+}
+
 /// Whether `path` is one of the site's pages — the set the layout gives a
 /// `<head>` and the negotiation layer gives a Markdown form.
+///
+/// A retired address is **not** in it: the old spelling of a page is answered by
+/// a `301` before this list is consulted (see [`retired_target`]), and a page
+/// that had two names here would have two heads, two canonical URLs and two
+/// Markdown forms.
 fn is_page(path: &str) -> bool {
     path == home::PATH
-        || path == home::AEPA_PATH
+        || path == home::ROOT
         || path == songs::PATH
         || path == editor::PATH
         || path == book::PATH
@@ -276,7 +318,7 @@ fn redirect(target: &str, remember: Option<Lang>) -> Response {
 mod tests {
     use super::*;
     use crate::i18n::Lang;
-    use crate::pages::{book, editor, home, songs, support};
+    use crate::pages::{book, editor, home, search, songs, support};
 
     /// The reader that decides whether a path is a page, and in what language.
     ///
@@ -304,14 +346,14 @@ mod tests {
         assert_eq!(page_of("/xx/himene"), None);
         assert_eq!(page_of("/himene/a/b"), None);
 
-        // The pages themselves, unprefixed — including the multi-lyric page,
-        // whose selection lives in a query string and whose *path* is therefore
-        // a page like any other: `/fr/himene/pluriel?s=…` has to strip to
-        // `/himene/pluriel?s=…` or the page 404s in every language but the
+        // The pages themselves, unprefixed — including the book, whose
+        // selection lives in a query string and whose *path* is therefore a
+        // page like any other: `/ty/puta-himene?s=…` has to strip to
+        // `/puta-himene?s=…` or the page 404s in every language but the
         // default.
         for path in [
             home::PATH,
-            home::AEPA_PATH,
+            home::ROOT,
             songs::PATH,
             editor::PATH,
             book::PATH,
@@ -321,28 +363,47 @@ mod tests {
             assert!(page_of(path).is_some(), "{path}");
         }
         assert_eq!(
-            page_of("/ty/himene/pluriel"),
-            Some(("/himene/pluriel", Some(Lang::Ty)))
+            page_of("/ty/puta-himene"),
+            Some(("/puta-himene", Some(Lang::Ty)))
         );
+
+        // A retired address is *not* a page: the `301` is the language layer's,
+        // and a page that kept a second name would have a second head, a second
+        // canonical URL and a second Markdown form. Every one of them but the
+        // book is now a path the pages do not own at all; `/himene/pluriel`
+        // still wears the song shape (one segment under the index), which is why
+        // the retired table is consulted *before* this reader rather than by it —
+        // a song called `pluriel` is nobody's sheet and the redirect is what the
+        // address means.
+        assert_eq!(page_of("/aepa"), None);
+        assert_eq!(page_of("/fr/aepa"), None);
+        assert_eq!(page_of("/recherche"), None);
+        assert_eq!(page_of("/fr/recherche"), None);
+        assert_eq!(page_of("/soutenir"), None);
+        assert_eq!(page_of("/artiste/1kvm9y2tcplm43wgeuni"), None);
+        assert_eq!(
+            retired_target("/himene/pluriel").as_deref(),
+            Some("/puta-himene")
+        );
+        assert_eq!(page_of("/himene/pluriel"), Some(("/himene/pluriel", None)));
 
         // An artist's page is a page like any other, and one id deep — an
         // artist URL below that is nobody's page, prefixed or not.
         assert_eq!(
-            page_of("/artiste/1kvm9y2tcplm43wgeuni"),
-            Some(("/artiste/1kvm9y2tcplm43wgeuni", None))
+            page_of("/taata-himene/1kvm9y2tcplm43wgeuni"),
+            Some(("/taata-himene/1kvm9y2tcplm43wgeuni", None))
         );
         assert_eq!(
-            page_of("/en/artiste/1kvm9y2tcplm43wgeuni"),
-            Some(("/artiste/1kvm9y2tcplm43wgeuni", Some(Lang::En)))
+            page_of("/en/taata-himene/1kvm9y2tcplm43wgeuni"),
+            Some(("/taata-himene/1kvm9y2tcplm43wgeuni", Some(Lang::En)))
         );
-        assert_eq!(page_of("/artiste/a/b"), None);
-        assert_eq!(page_of("/ty/artiste/a/b"), None);
+        assert_eq!(page_of("/taata-himene/a/b"), None);
+        assert_eq!(page_of("/ty/taata-himene/a/b"), None);
         // The search page carries its needle in the query string, so its path is
-        // a page like the multi-lyric page's is.
-        assert_eq!(
-            page_of("/fr/recherche"),
-            Some(("/recherche", Some(Lang::Fr)))
-        );
+        // a page like the book's is.
+        assert_eq!(page_of("/fr/paimi"), Some(("/paimi", Some(Lang::Fr))));
+        assert_eq!(page_of("/tauturu"), Some(("/tauturu", None)));
+        assert_eq!(page_of("/faariiraa"), Some(("/faariiraa", None)));
 
         // A page of the index: the two-segment shape is a page, whatever number
         // is in it and whether or not that number exists — which numbers exist is
@@ -362,6 +423,56 @@ mod tests {
         assert_eq!(page_of("/himene/page"), Some(("/himene/page", None)));
         assert_eq!(page_of("/himene/page/2/3"), None);
         assert_eq!(page_of("/ty/himene/page/2/3"), None);
+    }
+
+    /// A retired address moves to the page's address in the *same* language, and
+    /// a bare one stays bare.
+    ///
+    /// The language is the reason this is a reader of its own rather than a
+    /// constant table: `pages::retired` holds unprefixed paths, because a page's
+    /// address is `search::PATH` and not `/fr/paimi`, and only this layer knows
+    /// that the request arrived with a prefix. A reader on `/ty/recherche` is
+    /// sent to the Tahitian search page, not to the French one.
+    #[test]
+    fn a_retired_address_moves_within_its_own_language() {
+        assert_eq!(retired_target("/recherche").as_deref(), Some(search::PATH));
+        assert_eq!(
+            retired_target("/ty/recherche").as_deref(),
+            Some("/ty/paimi")
+        );
+        assert_eq!(
+            retired_target("/en/soutenir").as_deref(),
+            Some("/en/tauturu")
+        );
+        assert_eq!(retired_target("/aepa").as_deref(), Some(home::PATH));
+        assert_eq!(retired_target("/fr/aepa").as_deref(), Some("/fr/faariiraa"));
+        assert_eq!(
+            retired_target("/himene/pluriel").as_deref(),
+            Some(book::PATH)
+        );
+        assert_eq!(
+            retired_target("/fr/artiste/1kvm9y2tcplm43wgeuni").as_deref(),
+            Some("/fr/taata-himene/1kvm9y2tcplm43wgeuni")
+        );
+
+        // A page that is live now does not move, and a path that only resembles
+        // a retired one is not invented an answer.
+        for path in [
+            "/",
+            "/faariiraa",
+            "/fr/faariiraa",
+            "/himene",
+            "/paimi",
+            "/tauturu",
+            "/puta-himene",
+            "/taata-himene/1kvm9y2tcplm43wgeuni",
+            "/artiste/a/b",
+            "/ty/artiste/a/b",
+            "/recherche/x",
+            "/api/songs",
+        ] {
+            assert_eq!(retired_target(path), None, "{path}");
+        }
     }
 
     /// `?lang=` is read out of the query and the rest of the query is kept, so
