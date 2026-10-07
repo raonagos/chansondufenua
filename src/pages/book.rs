@@ -13,8 +13,7 @@
 //! selection (`/puta-himene/te-here+ahani-e`) would have to be told apart from a
 //! slug by more rules than it is worth — and a selection is not an address of its
 //! own anyway, being every ordered subset of the catalogue — while a query names
-//! the set, keeps each song's own address intact, and composes with the language
-//! prefix the pages already carry.
+//! the set and keeps each song's own address intact.
 //!
 //! The selection is a **set**: a segment repeated in the URL is read once, and
 //! two segments that name the same song (a slug and its id) are one sheet.
@@ -252,7 +251,7 @@ pub async fn book(cx: &Cx) -> Result<impl View> {
                     } else {
                         <form
                             method="get"
-                            action=(i18n::link(cx, PATH))
+                            action=(PATH)
                             class=(theme::FORM_PANEL)
                         >
                             for sheet in listed {
@@ -294,7 +293,7 @@ pub async fn book(cx: &Cx) -> Result<impl View> {
 async fn chosen_sheet(cx: &Cx, sheet: Song) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let title = sheet.get_title();
-    let url = i18n::link(cx, &sheet.get_path());
+    let url = sheet.get_path();
     let artists = artists_of(&sheet);
     let lines = sheet
         .lyrics_lines()

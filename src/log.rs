@@ -242,10 +242,12 @@ impl Layer for AccessLog {
             // the common path allocates nothing to name the request.
             //
             // The path is the one the reader asked for, not the one being
-            // handled: a language-prefixed request is handled internally at the
-            // bare path, and a log line naming `/himene` for a request to
-            // `/ty/himene` would be a line about the router's day, not the
-            // reader's.
+            // handled. Since v4.2 nothing in this crate dispatches a request
+            // again at a second path — the language is no longer part of a URL,
+            // and the spellings that used to say it are answered with a `301` —
+            // but Topcoat's router offers that rewrite, and a log line naming an
+            // internal path would be a line about the router's day rather than
+            // the reader's.
             let method = method(cx);
             let path = original_uri(cx).path();
             let started = Instant::now();
@@ -256,11 +258,10 @@ impl Layer for AccessLog {
                     report(method, path, status, &representation, bytes, None, started);
                     Ok(response)
                 }
-                // A rewrite is not an outcome: the router dispatches the request
-                // again at the carried path, and *that* dispatch produces the
-                // response this layer logs. Logging the rewrite would report a
-                // 500 for every prefixed page, and would report the same request
-                // twice.
+                // A rewrite is not an outcome: the router would dispatch the
+                // request again, and *that* dispatch produces the response this
+                // layer logs. Logging the rewrite would report a 500 for the
+                // request, and would report the same request twice.
                 Err(error) if error.downcast_ref::<RewriteError>().is_some() => Err(error),
                 Err(error) => {
                     let (status, representation, bytes) = error

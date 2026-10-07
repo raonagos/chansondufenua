@@ -47,7 +47,6 @@ use topcoat::{
 
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
-use crate::i18n::Lang;
 use crate::log;
 use crate::routes::api::{SongJson, VERSION};
 use crate::routes::negotiation::song_document;
@@ -545,7 +544,7 @@ async fn get_song(cx: &Cx, arguments: &Value) -> std::result::Result<Value, RpcE
     Ok(match found {
         // No step: MCP is not a page and a tool call carries no view of one.
         // An agent asking for a song wants the chords the author wrote.
-        Some(sheet) => text_result(song_document(&sheet, Lang::DEFAULT, 0)),
+        Some(sheet) => text_result(song_document(&sheet, 0)),
         None => error_result(format!(
             "No published song with id or slug {id:?}. Use {LIST_TOOL} to find one."
         )),

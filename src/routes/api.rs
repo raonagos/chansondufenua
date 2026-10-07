@@ -137,10 +137,10 @@ pub(crate) struct SongJson {
     artists: Vec<String>,
     /// The song page's address, on the canonical host.
     ///
-    /// The language-neutral one: the slug with no language prefix, which is what
-    /// `x-default` names and what the bare URL serves. A page's *canonical* URL
-    /// carries its language prefix ([`crate::i18n::url`]); this document is not a
-    /// page and does not pick a language.
+    /// The page's own URL — the slug — which since v4.2 is the one address the
+    /// sheet has: the chrome's language is resolved per request and is not part
+    /// of the URL, so this document names the same address the page's
+    /// `<link rel="canonical">` does.
     url: String,
     view_count: u32,
     created_at: String,
@@ -190,8 +190,8 @@ impl SongJson {
 pub(crate) struct ArtistJson {
     id: String,
     name: String,
-    /// The artist page's language-neutral address, on the canonical host:
-    /// `/taata-himene/{id}`, the same URL the search page links to.
+    /// The artist page's address, on the canonical host: `/taata-himene/{id}`,
+    /// the same URL the search page links to and the page canonicalises to.
     url: String,
 }
 
@@ -322,9 +322,8 @@ async fn search_results(cx: &Cx) -> Result<(StatusCode, Json<serde_json::Value>)
 /// arriving and money going nowhere. The strings are passed through untouched:
 /// nothing in this file re-cases, trims or reformats them.
 ///
-/// `page` is the language-neutral address of the page that prints them, the same
-/// form every other `url` in this API uses: this document is not a page and does
-/// not pick a language.
+/// `page` is the address of the page that prints them, the same form every other
+/// `url` in this API uses: the page's own URL, which is what it canonicalises to.
 #[route(GET "/api/support")]
 async fn support_addresses() -> Result<Json<serde_json::Value>> {
     Ok(Json(serde_json::json!({
@@ -574,7 +573,7 @@ fn schemas() -> Value {
                 "id": { "type": "string", "description": "The stable key: 20 characters of [0-9a-z]. It is not the page's address — `url` is." },
                 "title": { "type": "string" },
                 "artists": { "type": "array", "items": { "type": "string" } },
-                "url": { "type": "string", "format": "uri", "description": "The song page's language-neutral address: the slug form, no language prefix (the page's canonical URL carries one). `/himene/{id}` answers a 301 to it." },
+                "url": { "type": "string", "format": "uri", "description": "The song page's own address, on the canonical host. It is the URL the page canonicalises to; `/himene/{id}` answers a 301 to it." },
                 "view_count": { "type": "integer" },
                 "created_at": { "type": "string", "format": "date-time" },
                 "updated_at": { "type": "string", "format": "date-time" },
@@ -598,7 +597,7 @@ fn schemas() -> Value {
             "properties": {
                 "id": { "type": "string", "description": "The stable key, as the artist's page is addressed by it: `/taata-himene/{id}`." },
                 "name": { "type": "string", "description": "The credited name, as the songs print it." },
-                "url": { "type": "string", "format": "uri", "description": "The artist page's language-neutral address, on the canonical host. The page's own canonical URL carries a language prefix." }
+                "url": { "type": "string", "format": "uri", "description": "The artist page's own address, on the canonical host — the URL the page canonicalises to." }
             }
         },
         "Search": {
@@ -632,7 +631,7 @@ fn schemas() -> Value {
             "type": "object",
             "required": ["count", "page", "addresses"],
             "properties": {
-                "page": { "type": "string", "format": "uri", "description": "The support page's language-neutral address, on the canonical host. The page's own canonical URL carries a language prefix." },
+                "page": { "type": "string", "format": "uri", "description": "The support page's own address, on the canonical host — the URL the page canonicalises to." },
                 "count": { "type": "integer" },
                 "addresses": { "type": "array", "items": { "$ref": "#/components/schemas/SupportAddress" } }
             }
@@ -688,11 +687,9 @@ mod tests {
         );
     }
 
-    /// The URL a caller is handed is the page's language-neutral address, on the
-    /// canonical host: the slug as the page, the sitemap and `llms.txt` spell it.
-    /// Three spellings of a song's address would be three things to keep in
-    /// step; the page's own `<link rel="canonical">` is the language-prefixed
-    /// form, and this document is not a page.
+    /// The URL a caller is handed is the page's own address, on the canonical
+    /// host: the slug as the page, the sitemap and `llms.txt` spell it — one
+    /// spelling, because the page canonicalises to it.
     #[test]
     fn the_url_is_the_song_pages_own() {
         use crate::domain::song::SITE_URL;
@@ -760,8 +757,8 @@ mod tests {
     }
 
     /// A search answers the page's own two reads, and an artist is handed the
-    /// address of the page that describes them — the language-neutral form, the
-    /// same one every other `url` field in this API uses.
+    /// address of the page that describes them — the page's own URL, the same
+    /// one every other `url` field in this API names.
     #[tokio::test]
     async fn a_search_answers_the_pages_own_reads() {
         let db = Db::open_in_memory().await.expect("in-memory database");

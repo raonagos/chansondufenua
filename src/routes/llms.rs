@@ -50,9 +50,10 @@ fn body() -> String {
 - [Song index]({SITE_URL}{songs}): every published song, newest first,
   twenty to a page. Later pages are `/himene/page/{{n}}`.
 - [One song]({SITE_URL}/himene/{{slug}}): the lyric with its chords. The slug is
-  the song's address, as the catalogue's `url` field spells it. The page is also
-  published in the chrome of each language — `/ty/himene/{{slug}}` and
-  `/en/himene/{{slug}}` — and the lyrics themselves are as written.
+  the song's address, as the catalogue's `url` field spells it — one address for
+  every reader. The chrome around the lyric follows the language the client asks
+  for (a `lang` cookie, then `Accept-Language`, French when it says neither); the
+  lyrics themselves are as written.
 - [Search]({SITE_URL}{search}?q={{needle}}): one box over the song titles and the
   artists' names. Matching ignores accents and the ʻokina, so `ahani` finds
   `'Āhani e` and `mama` finds `Māmā Tahiti`.

@@ -158,13 +158,13 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                 <div class=(theme::TRANSPOSE) role="group" aria-label=(transpose)>
                     <span class=(theme::TRANSPOSE_LABEL) aria-hidden="true">(transpose)</span>
                     <a
-                        href=(step_link(cx, &sheet.get_path(), offset - 1))
+                        href=(step_link(&sheet.get_path(), offset - 1))
                         class=(class!(theme::TRANSPOSE_LINK, theme::FOCUS))
                         aria-label=(i18n::text(lang, Key::TransposeDown))
                     >("\u{2212}")</a>
                     <span class=(theme::TRANSPOSE_VALUE)>(step)</span>
                     <a
-                        href=(step_link(cx, &sheet.get_path(), offset + 1))
+                        href=(step_link(&sheet.get_path(), offset + 1))
                         class=(class!(theme::TRANSPOSE_LINK, theme::FOCUS))
                         aria-label=(i18n::text(lang, Key::TransposeUp))
                     >("+")</a>
@@ -203,7 +203,7 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                     >(scroll_start)</button>
                 </div>
                 <a
-                    href=(i18n::link(cx, crate::pages::editor::PATH))
+                    href=(crate::pages::editor::PATH)
                     class=(class!(theme::BUTTON_SMALL, theme::FOCUS))
                 >
                     (i18n::text(lang, Key::AddLyrics))
@@ -227,9 +227,9 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
 /// a link to `?tr=0` would be a second address for the page the reader is
 /// already on. A step past the end of the wheel clamps to it — the link is still
 /// served, and the sheet it returns is the one on screen.
-fn step_link(cx: &Cx, path: &str, offset: i32) -> String {
+fn step_link(path: &str, offset: i32) -> String {
     let stepped = offset.clamp(-chord::MAX_OFFSET, chord::MAX_OFFSET);
-    let base = i18n::link(cx, path);
+    let base = path.to_owned();
     if stepped == 0 {
         base
     } else {

@@ -59,9 +59,9 @@ pub const ARTIST_PREFIX: &str = "/artiste/";
 /// being moved — [`crate::pages::artist::segment`]'s own rule, restated here
 /// because a redirect is a promise that the target answers.
 ///
-/// The successor is root-relative and carries no language prefix: the caller
-/// ([`crate::routes::language`]) knows which language the request named and is
-/// the one thing that can put the prefix back.
+/// The successor is root-relative and is a page's own address: a language is no
+/// longer part of a URL, so there is nothing for the caller to put back in front
+/// of it.
 pub fn successor(path: &str) -> Option<String> {
     if let Some((_, to)) = RETIRED.iter().find(|(from, _)| *from == path) {
         return Some((*to).to_owned());

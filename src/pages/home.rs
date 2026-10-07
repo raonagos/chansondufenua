@@ -180,11 +180,10 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
     let latest = db::songs(pool, SongOrder::Newest, Some(ROWS)).await?;
     let most_viewed = db::songs(pool, SongOrder::MostViewed, Some(ROWS)).await?;
     let songs_link = href!(songs::songs);
-    // The chrome's links carry the request's language: a reader on `/ty` who
-    // clicks "Découvrir les chansons" lands on `/ty/himene`, not on the French
-    // index by a longer road.
-    let songs_href = i18n::link(cx, &songs_link.resolve(cx));
-    let editor_href = i18n::link(cx, crate::pages::editor::PATH);
+    // The chrome's links are the pages' own addresses — one URL per page, so
+    // there is no language to put in front of them.
+    let songs_href = songs_link.resolve(cx);
+    let editor_href = crate::pages::editor::PATH.to_owned();
 
     Ok(view! {
         <div class=(theme::PAGE)>
@@ -283,12 +282,8 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
 #[component]
 pub async fn song_row(cx: &Cx, song: Song, #[default] inverse: bool) -> Result<impl View> {
     // The address of the sheet, from the route's own parameter — the slug, or the
-    // id for a song whose title earned no slug — put through the request's
-    // language, so the three list surfaces link within their own language.
-    let url = i18n::link(
-        cx,
-        &href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx),
-    );
+    // id for a song whose title earned no slug.
+    let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
     let title = song.get_title();
     let lyrics = song.clean_lyrics();
 

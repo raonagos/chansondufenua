@@ -220,7 +220,7 @@ pub async fn search(cx: &Cx) -> Result<impl View> {
         <div class=(theme::PAGE)>
             <h1 class=(theme::H1)>(i18n::text(lang, Key::SearchTitle))</h1>
 
-            <form method="get" action=(i18n::link(cx, PATH)) class=(theme::FORM_PANEL)>
+            <form method="get" action=(PATH) class=(theme::FORM_PANEL)>
                 <div class=(theme::FORM_FIELD)>
                     <label class=(theme::FORM_LABEL) for="q">
                         (i18n::text(lang, Key::SearchLabel))

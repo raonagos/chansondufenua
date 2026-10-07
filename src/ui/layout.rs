@@ -13,12 +13,13 @@
 //!   default. That covers *raised* errors only — a URL matching no route never
 //!   reaches the layout at all, which is why `pages::not_found!("/")` also
 //!   exists, and
-//! * the document declares which language it is in, and names the other one,
-//!   because the shell is where the chrome's words live. `crate::i18n` decides
-//!   the language; this file only asks for the strings, and
+//! * the document declares which language it is in, because the shell is where
+//!   the chrome's words live. `crate::i18n` decides the language; this file only
+//!   asks for the strings, and
 //! * the three languages are also a visible switcher — three plain links in the
-//!   header, in the served HTML of every page. A page's other addresses are part
-//!   of the page, not something a menu draws after a click, and
+//!   header, in the served HTML of every page. Choosing one sets a cookie and
+//!   comes back to the same page, so the choice is a navigation a reader can make
+//!   with no script at all, and
 //! * the three images the browser fetches are embedded in the binary and served
 //!   from content-hashed URLs, rather than handed out of a static directory the
 //!   way v3's web server did it. v3's own files, under a URL that cannot go
@@ -47,7 +48,7 @@ use crate::pages::{
     home::{self, PATH as HOME, ROOT},
     search, songs, support,
 };
-use crate::routes::{negotiation, og};
+use crate::routes::{language, negotiation, og};
 use crate::state;
 use crate::ui::{assets, fonts, theme};
 
@@ -285,7 +286,7 @@ async fn artist_head(cx: &Cx, artist: &Artist, lang: Lang) -> DocumentHead {
     let name = artist.get_fullname();
     let title = format!("{name} | {TITLE}");
     let description = artist::description(&name);
-    let canonical = i18n::url(lang, &artist::path_of(&artist.get_id()));
+    let canonical = i18n::absolute(&artist::path_of(&artist.get_id()));
 
     DocumentHead {
         title: title.clone(),
@@ -324,7 +325,7 @@ fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
     page_head(
         title,
         &description,
-        &i18n::url(lang, &songs::page_path(number)),
+        &i18n::absolute(&songs::page_path(number)),
         lang,
         None,
     )
@@ -332,14 +333,14 @@ fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
 
 /// The `<head>` of a song page, from the song's own metadata.
 ///
-/// The canonical URL is the one this response is served at: the slug, under the
-/// request's language prefix. A song's page is the same document in every
-/// language — the lyric is never translated, only the chrome around it changes —
-/// but each of the three addresses is the canonical of *that* page, and the
-/// alternates are what tie them together. The id and the retired-slug forms are
-/// not addresses at all; `routes::negotiation` has already sent them here.
+/// The canonical URL is the one this response is served at: the slug's own
+/// address. A song's page is the same document in every language — the lyric is
+/// never translated, only the chrome around it changes — and since v4.2 it is
+/// also the same *URL* in every language, resolved from a cookie or from
+/// `Accept-Language`. The id and the retired-slug forms are not addresses at all;
+/// `routes::negotiation` has already sent them here.
 fn song_head(song: &Song, lang: Lang) -> DocumentHead {
-    let canonical = i18n::url(lang, &song.get_path());
+    let canonical = i18n::absolute(&song.get_path());
     let meta = song.get_meta_data(&canonical);
 
     DocumentHead {
@@ -374,11 +375,12 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
 /// what it describes is the site and two copies on two URLs is one description
 /// competing with itself.
 ///
-/// **The canonical URL carries the language prefix.** `/himene` and `/ty/himene`
-/// are one page in two languages, and the prefixed form is the one that is
-/// canonical; the bare URL is the `x-default` and says so. That is the trade the
-/// scope names explicitly: one canonical per page, and the bare URL declaring
-/// it rather than competing with it.
+/// **The canonical URL is the page's own address and nothing else.** A page has
+/// exactly one URL since v4.2 — the language is resolved from a cookie or from
+/// `Accept-Language` and is not part of it — so every page canonicalises to
+/// itself, and there is no cluster of alternates to consolidate. The root is the
+/// one remaining second URL, and it does what it always did: it names the front
+/// page's own address.
 fn site_head(path: &str, lang: Lang) -> DocumentHead {
     // `/faariiraa` and `/` are one page under two URLs. The root is the
     // duplicate — v4.2 made the Tahitian address canonical — and the canonical
@@ -399,7 +401,7 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
         return page_head(
             title,
             home::copy::DESCRIPTION,
-            &i18n::url(lang, HOME),
+            &i18n::absolute(HOME),
             lang,
             jsonld,
         );
@@ -409,7 +411,7 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
         return page_head(
             format!("{} | {TITLE}", i18n::text(lang, Key::IndexTitle)),
             songs::DESCRIPTION,
-            &i18n::url(lang, songs::PATH),
+            &i18n::absolute(songs::PATH),
             lang,
             None,
         );
@@ -456,7 +458,7 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
         return page_head(
             format!("{} | {TITLE}", i18n::text(lang, Key::SupportTitle)),
             support::DESCRIPTION,
-            &i18n::url(lang, support::PATH),
+            &i18n::absolute(support::PATH),
             lang,
             None,
         );
@@ -473,34 +475,6 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
         noindex: false,
         social: None,
         jsonld: None,
-    }
-}
-
-/// The request's path as *this page's* identity: what its `hreflang` cluster and
-/// its `x-default` name.
-///
-/// For every page but one that is the path alone. A query string is a view of a
-/// document rather than a second document — that is the rule `?tr=` on a sheet
-/// follows, which is why a transposed sheet declares the untransposed URL as its
-/// canonical and its alternates name the same sheet in the other two languages.
-///
-/// The book is the exception, and it is what makes the rule visible: there the
-/// query **is** the page — `/puta-himene` with no selection is the picker, and a
-/// selection is a different document — so dropping it would make every selection
-/// declare the picker in three languages as its own alternate.
-///
-/// The root is the other one, and for the opposite reason: it is not a page of
-/// its own but the front page under a second URL, and everything built from this
-/// answer — the switcher, the `hreflang` cluster, `x-default` — has to name the
-/// address the page is published at. A cluster whose members were `/fr`, `/ty`
-/// and `/en` would be three URLs that each canonicalise somewhere else.
-fn addressed_path(cx: &Cx) -> String {
-    let request = uri(cx);
-    let path = request.path();
-
-    match request.query() {
-        Some(query) if path == book::PATH => format!("{path}?{query}"),
-        _ => (if path == ROOT { HOME } else { path }).to_owned(),
     }
 }
 
@@ -532,9 +506,9 @@ fn page_head(
 ///
 /// A `WebSite` node with a `SearchAction` is what makes a search box appear in a
 /// result for the site's own name, and it is a statement about the site rather
-/// than about a page — so it is written on `/` alone, in the language-neutral
-/// form (`x-default`), because the action it describes is available in every
-/// language at the same URL.
+/// than about a page — so it is written on `/` alone, and it is the same
+/// statement in every language, because the action it describes is the same
+/// address in all of them.
 ///
 /// `urlTemplate` names [`search::PATH`] through its own constant, so the
 /// template and the page cannot drift; the placeholder is schema.org's own
@@ -587,10 +561,9 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let head = document_head(cx, lang).await;
     let home_link = href!(home::home);
-    let path = addressed_path(cx);
-    // The 404's way home carries the reader's language too, and the closure
-    // below cannot borrow `cx` to build it, so it is resolved here.
-    let home_href = i18n::link(cx, &home_link.resolve(cx));
+    // The 404's way home, resolved here because the closure below cannot borrow
+    // `cx` to build it.
+    let home_href = home_link.resolve(cx);
 
     Ok(view! {
         <!DOCTYPE html>
@@ -605,7 +578,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
         // controls, which reads as a rendering fault.
         //
         // `lang` is the request's language, not a constant: it is what tells a
-        // screen reader and a search engine which of the site's two languages
+        // screen reader and a search engine which of the site's three languages
         // this response is written in. See `crate::i18n`.
         <html lang=(lang.code()) class="dark">
             <head>
@@ -632,25 +605,12 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     true => <meta name="robots" content="noindex, follow"/>,
                     false => "",
                 }
-                // The language alternates. Every page exists in all three
-                // languages at a prefix of its own, and the prefix is the only
-                // difference: so each page names all of them, itself included,
-                // which is what a `hreflang` cluster is and what tells a search
-                // engine that the three URLs are one page rather than duplicates
-                // competing for the same query.
-                //
-                // The URLs are origin-qualified because a search engine reads
-                // them out of context, and `x-default` points at the page with
-                // no prefix — the form a reader who has expressed no preference
-                // should land on, and the one Cloudflare may cache for everyone.
-                for alternate in Lang::ALL {
-                    <link
-                        rel="alternate"
-                        hreflang=(alternate.code())
-                        href=(i18n::url(alternate, &path))
-                    />
-                }
-                <link rel="alternate" hreflang="x-default" href=(i18n::absolute(&path))/>
+                // No `hreflang` cluster, and no `x-default`: a page has one URL
+                // since v4.2 — the language is resolved from a cookie or from
+                // `Accept-Language`, not from the address — so there are no
+                // alternates to declare. The switcher below still marks each
+                // link with the language it leads to, which is a different
+                // statement about a different thing.
                 // The social tags, only on a song page. v3 declared them on the
                 // song route, so the home page has never carried them.
                 match head.social {
@@ -771,14 +731,13 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
     // one of them would leave the highlight dark on the other.
     let on_accueil = on_root || on_home;
 
-    // Every link the chrome emits is the canonical, language-prefixed form of
-    // the page: a reader on `/` who clicks "Chanson" lands on `/fr/himene`, which
-    // is the address that page is published at. `is_current` is asked of the
-    // route rather than of the URL, so the highlight survives the prefix. The
+    // Every link the chrome emits is the page's own address, because a page has
+    // one: the language is the response's, not the URL's. `is_current` is asked
+    // of the route, and the resolved href is what the page is published at. The
     // "Accueil" link names the front page's own address, never the root, so one
     // page has one address in the chrome.
-    let home_href = i18n::link(cx, &home_link.resolve(cx));
-    let songs_href = i18n::link(cx, &songs_link.resolve(cx));
+    let home_href = home_link.resolve(cx);
+    let songs_href = songs_link.resolve(cx);
 
     Ok(view! {
         <header class=(theme::HEADER)>
@@ -836,33 +795,36 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
 
 /// The language switcher: this page, in each of the site's three languages.
 ///
-/// Three real links with no script anywhere near them. The set of addresses a
-/// page exists at is exactly what a crawler needs to see, so it is written into
-/// the HTML of every page rather than drawn by a menu that only opens for a
-/// pointer. `hreflang` says which language a link leads to and `lang` says which
-/// language its own label is written in — the pair is what lets a screen reader
-/// say *Reo Tahiti* in Tahitian while reading an English page.
+/// Three real links with no script anywhere near them, and since v4.2 they are
+/// not three addresses of the page — a page has one address — but three
+/// *choices*: each link names the language and carries the page the reader is on
+/// (see [`language::switch`]), and the route behind it sets the cookie and sends
+/// the reader back to the same page written in that language. With JavaScript
+/// off it is a full navigation like any other; the cookie is what makes the
+/// choice stick for the pages that follow.
+///
+/// `hreflang` says which language a link leads to and `lang` says which language
+/// its own label is written in — the pair is what lets a screen reader say *Reo
+/// Tahiti* in Tahitian while reading an English page.
 ///
 /// The current language is a link like the others. A switcher that turns it into
-/// plain text reads as "you cannot go here", and `/fr/himene` linked from
-/// `/fr/himene` is what makes the three addresses one cluster instead of a
-/// one-way door. The one difference is `aria-current`, which is what tells a
-/// reader which of the three they are on when the underline is not enough.
-///
-/// The three URLs are [`Lang::ALL`] under their own prefixes — the same list the
-/// document head writes `hreflang` from, and the same `addressed_path`, so the
-/// switcher and the cluster cannot disagree about which page is being switched:
-/// a reader who chooses a language on a selection keeps the selection.
+/// plain text reads as "you cannot go here", and following it re-states the
+/// language the reader is already reading — which is what a reader does after a
+/// cookie went missing. The one difference is `aria-current`, which is what tells
+/// a reader which of the three they are on when the underline is not enough.
 #[component]
 pub async fn language_switcher(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
-    let path = addressed_path(cx);
+    // The page the switcher's route will send the reader back to: the one they
+    // are on, with its query string, because a selection and a search are part
+    // of the page.
+    let next = i18n::path_and_query(cx);
 
     Ok(view! {
         <nav class=(theme::LANGUAGE_SWITCH) aria-label=(i18n::text(lang, Key::Language))>
             for target in Lang::ALL {
                 <a
-                    href=(i18n::at(target, &path))
+                    href=(language::switch(target, &next))
                     hreflang=(target.code())
                     lang=(target.code())
                     aria-current=((target == lang).then_some("true"))
@@ -888,9 +850,9 @@ pub async fn language_switcher(cx: &Cx) -> Result<impl View> {
 /// than of the handler because there is no handler for "the index" — there are
 /// two, and the pages they serve are one series.
 ///
-/// The path here is the request's own, after the language layer has rewritten
-/// `/ty/himene/page/2` to `/himene/page/2`, so a prefixed page highlights its nav
-/// for the same reason the unprefixed one does.
+/// The path here is the page's own, because a prefixed one never reaches a page
+/// any more: `/ty/himene/page/2` is a `301` to `/himene/page/2`, answered by the
+/// language layer before routing.
 fn names_the_index(path: &str) -> bool {
     path == songs::PATH || songs::page_segment(path).is_some()
 }
@@ -991,7 +953,7 @@ mod tests {
 
         assert_eq!(
             home.canonical.as_deref(),
-            Some(i18n::url(Lang::Fr, HOME).as_str())
+            Some(i18n::absolute(HOME).as_str())
         );
         assert_eq!(home.canonical, root.canonical);
         assert_eq!(home.description, root.description);
@@ -1040,16 +1002,13 @@ mod tests {
     }
 
     /// The index is the one page that is not the front door and has an address of
-    /// its own to canonicalise to.
+    /// its own to canonicalise to — its own, and not the root's.
     #[test]
     fn the_index_canonicalises_to_its_own_path() {
         let head = site_head(songs::PATH, Lang::Fr);
 
-        assert_eq!(
-            head.canonical,
-            Some(i18n::url(Lang::Fr, songs::PATH).to_owned())
-        );
-        assert_ne!(head.canonical, Some(format!("{SITE_URL}{}", songs::PATH)));
+        assert_eq!(head.canonical, Some(i18n::absolute(songs::PATH).to_owned()));
+        assert_ne!(head.canonical, Some(SITE_URL.to_owned()));
     }
 
     /// A page of the index is its own page: its own number in the title and the
@@ -1068,10 +1027,7 @@ mod tests {
                 .expect("a description")
                 .ends_with("(2/3)")
         );
-        assert_eq!(
-            second.canonical,
-            Some(i18n::url(Lang::Fr, "/himene/page/2"))
-        );
+        assert_eq!(second.canonical, Some(i18n::absolute("/himene/page/2")));
         assert_eq!(
             second.social.as_ref().expect("cards").og_url,
             second.canonical.clone().expect("a canonical URL")
@@ -1117,28 +1073,24 @@ mod tests {
         }
     }
 
-    /// **One canonical per page, and it is the prefixed URL.** The bare URL is
-    /// the `x-default`, not a second canonical, and the three languages each
-    /// name themselves.
+    /// **One canonical per page, and it is the page's own address.** The language
+    /// is not part of a URL any more, so a page canonicalises to itself in every
+    /// language its response can be written in — and the root, the one remaining
+    /// second URL, still points at the front page.
     #[test]
-    fn every_page_canonicalises_to_its_own_language_prefix() {
+    fn every_page_canonicalises_to_its_own_address() {
         for lang in Lang::ALL {
             for path in [HOME, ROOT, songs::PATH, support::PATH] {
                 let head = site_head(path, lang);
                 let canonical = head.canonical.expect("a canonical URL");
 
                 // The root is the front page under a second URL: it canonicalises
-                // to the front page, in the language it was served in.
+                // to the front page.
                 let canonical_path = if path == ROOT { HOME } else { path };
                 assert_eq!(
                     canonical,
-                    i18n::url(lang, canonical_path),
+                    i18n::absolute(canonical_path),
                     "{path} in {}",
-                    lang.code()
-                );
-                assert!(
-                    i18n::at(lang, canonical_path).starts_with(lang.prefix()),
-                    "{path} in {}: {canonical}",
                     lang.code()
                 );
                 assert_eq!(head.social.expect("cards").og_url, canonical);
@@ -1146,23 +1098,23 @@ mod tests {
         }
     }
 
-    /// **The switcher and the `hreflang` cluster are the same three URLs.** Both
-    /// are built from [`Lang::ALL`] and both address a page under its language's
-    /// own prefix, so the served markup points a reader and a crawler at the same
-    /// three addresses. Two lists that can drift are one list that has drifted;
-    /// this is the check that they have not.
+    /// **The switcher names the language and the page, not a second URL.** Each
+    /// of its three links is the language route carrying this page back to
+    /// itself — a page has one address since v4.2, and the switcher must not
+    /// invent three.
     ///
-    /// It also pins the two properties a switcher is easy to get wrong: it
-    /// addresses *this* page (not the front door, and not the other language's
-    /// index), and its own language is among its links rather than left out.
-    ///
-    /// The list starts at [`HOME`] and not at [`ROOT`]: the root is the front
-    /// page under a second URL, and the path both the switcher and the cluster
-    /// are built from is [`addressed_path`]'s answer, which names the page's own
-    /// address — so `/fr`, `/ty` and `/en` are not three members of anybody's
-    /// cluster.
+    /// It also pins the two properties a switcher is easy to get wrong: it names
+    /// *this* page (not the front door, and not another language's index), and
+    /// its own language is among its links rather than left out.
     #[test]
-    fn the_switcher_and_the_hreflang_cluster_name_the_same_urls() {
+    fn the_switcher_links_to_this_page_in_each_language() {
+        // The wire format from the layout's own side: the route, the language,
+        // and the page percent-encoded into `next`.
+        assert_eq!(
+            language::switch(Lang::Ty, songs::PATH),
+            "/language/ty?next=%2Fhimene"
+        );
+
         for path in [
             HOME,
             songs::PATH,
@@ -1172,27 +1124,25 @@ mod tests {
         ] {
             let links: Vec<(Lang, String)> = Lang::ALL
                 .iter()
-                .map(|lang| (*lang, i18n::at(*lang, path)))
+                .map(|lang| (*lang, language::switch(*lang, path)))
                 .collect();
 
             assert_eq!(links.len(), Lang::ALL.len());
+            for (index, (_, left)) in links.iter().enumerate() {
+                for (_, right) in &links[index + 1..] {
+                    assert_ne!(left, right, "two languages share a link: {links:?}");
+                }
+            }
 
             for (lang, href) in &links {
                 assert!(
-                    href.starts_with(lang.prefix()),
+                    href.starts_with(&format!(
+                        "{}/{}?{}=",
+                        language::PATH,
+                        lang.code(),
+                        language::PARAM
+                    )),
                     "{path} in {}: {href}",
-                    lang.code()
-                );
-                assert!(
-                    href.ends_with(path) || path == HOME,
-                    "{path} in {}",
-                    lang.code()
-                );
-                // The head writes the same address, qualified.
-                assert_eq!(
-                    i18n::url(*lang, path),
-                    format!("{SITE_URL}{href}"),
-                    "{path} in {}",
                     lang.code()
                 );
             }

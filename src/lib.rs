@@ -47,13 +47,11 @@ use crate::routes::{language, mcp, negotiation};
 /// `cargo build && topcoat asset bundle && ./target/debug/chansondufenua`.
 /// `cargo run` alone panics here.
 ///
-/// The cookie jar is deliberately **not** registered. It used to be: v4 read a
-/// remembered language out of it on every request. The language now lives in the
-/// URL, and the one request that carries a cookie decision —
-/// [`language::LanguageLayer`]'s bare-URL redirect — runs *outside* the jar, so
-/// it reads the request's own `Cookie` header and writes `Set-Cookie` itself.
-/// Registering a jar nothing reads would be wiring kept for a decision that
-/// moved.
+/// The cookie jar is deliberately **not** registered. The language is read from
+/// the request's own `Cookie` header by [`crate::i18n::resolve`], and the one
+/// request that *writes* a cookie — the language switcher's
+/// `/language/{code}` ([`language`]) — sets its own `Set-Cookie`. Registering a
+/// jar nothing reads would be wiring kept for a decision that moved.
 ///
 /// `.layer(...)` registers the three layers the site has, by hand rather than
 /// discovered. `#[layer]` always carries a path; all of these are *pathless* on
@@ -63,11 +61,13 @@ use crate::routes::{language, mcp, negotiation};
 ///   document instead of the page, and puts the `Link` headers on the HTML
 ///   responses it passes through. Registered because a site that advertises a
 ///   Markdown form has to serve one.
-/// * [`language::LanguageLayer`] makes `/fr/…`, `/ty/…` and `/en/…` work: a
-///   prefixed request is handled internally at the bare path with the language
-///   carried in the request context, and an explicit choice is redirected to the
-///   prefixed URL. It runs *outside* the negotiator, so the negotiator only ever
-///   sees a bare path and the language comes from the context.
+/// * [`language::LanguageLayer`] retires the two spellings that used to name a
+///   language — the `/fr`/`/ty`/`/en` prefixes and `?lang=` — with a `301` to the
+///   address each page has now, and puts `Vary: Cookie, Accept-Language` on every
+///   page, because the same URL answers different readers in different languages.
+///   It runs *outside* the negotiator, so a Markdown response carries the `Vary`
+///   too, and outside every route, so a prefixed path is answered before the
+///   router has to have an opinion about it.
 /// * [`log::AccessLog`] writes one access line per request. Registered *after*
 ///   the other two, and that ordering is the point — among layers sharing a path
 ///   the later one runs first, so the log sits outside the language rewrite and

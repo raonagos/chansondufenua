@@ -240,12 +240,12 @@ pub async fn index_body(cx: &Cx, number: u32) -> Result<impl View> {
 
     let listed = db::songs_page(pool, SongOrder::Newest, PAGE_SIZE, offset(number)).await?;
 
-    // The nav, as data: the number, the URL it is published at in this request's
-    // language, and whether it is the page being served. Built here rather than
-    // in the markup because the URL comes from `page_path` and the language, and
-    // because a page that is not served is not a link.
+    // The nav, as data: the number, the URL it is published at, and whether it
+    // is the page being served. Built here rather than in the markup because the
+    // URL comes from `page_path`, and because a page that is not served is not a
+    // link.
     let numbers: Vec<(u32, String, bool)> = (1..=pages)
-        .map(|n| (n, i18n::link(cx, &page_path(n)), n == number))
+        .map(|n| (n, page_path(n), n == number))
         .collect();
 
     Ok(view! {
@@ -306,7 +306,7 @@ pub async fn index_body(cx: &Cx, number: u32) -> Result<impl View> {
             // link rather than a control of its own, and the page it opens is
             // `noindex` — see `pages::book`.
             <p class=(theme::BOOK_ENTRY)>
-                <a href=(i18n::link(cx, book::PATH)) class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))>
+                <a href=(book::PATH) class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))>
                     (i18n::text(lang, Key::BookOpen))
                 </a>
             </p>
@@ -322,13 +322,8 @@ pub async fn index_body(cx: &Cx, number: u32) -> Result<impl View> {
 #[component]
 pub async fn song_row(cx: &Cx, song: Song) -> Result<impl View> {
     // The route's own parameter, so `/himene/` is spelled in one file: the index
-    // and the home page both link through `pages::song`'s `#[page]` path. The
-    // resolved address is then put through the request's language, so a reader
-    // on `/ty/himene` stays in Tahitian when they open a song.
-    let url = i18n::link(
-        cx,
-        &href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx),
-    );
+    // and the home page both link through `pages::song`'s `#[page]` path.
+    let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
     let title = song.get_title();
     let artists = song
         .get_artists()

@@ -85,14 +85,14 @@ pub fn path_of(id: &str) -> String {
     format!("{PREFIX}{id}")
 }
 
-/// An artist's page, in the request's language — the one place a credit becomes a
-/// link.
+/// An artist's page — the one place a credit becomes a link.
 ///
 /// Through `href!`, so `/taata-himene/{id}` is spelled in this page's own attribute and
 /// nowhere else: a song's credits, the index's artist column and a search result
-/// all come through here, and a route that moved would move them with it.
+/// all come through here, and a route that moved would move them with it. One
+/// URL per page means the request's language has nothing to add to it.
 pub fn link(cx: &Cx, row: &Artist) -> String {
-    i18n::link(cx, &href!(self::artist, Id(row.get_id())).resolve(cx))
+    href!(self::artist, Id(row.get_id())).resolve(cx)
 }
 
 /// The artist page's `<meta name="description">`.
@@ -123,10 +123,11 @@ pub fn description(name: &str) -> String {
 ///   `ItemList` says *which* list on the page is the catalogue — the heading and
 ///   the table are prose and a table to a crawler.
 ///
-/// Every URL is absolute and language-neutral, matching the JSON API's `url`
-/// field: this is a statement about the URL space, not about the response being
-/// served. The `song` rows come from the same read the page renders, so the list
-/// and the markup cannot disagree.
+/// Every URL is absolute, matching the JSON API's `url` field and the pages'
+/// own canonical URLs: this is a statement about the URL space, not about the
+/// response being served — which is why it is the same in every language the
+/// page can be written in. The `song` rows come from the same read the page
+/// renders, so the list and the markup cannot disagree.
 pub fn jsonld(row: &Artist, url: &str, songs: &[Song]) -> String {
     let items = songs
         .iter()

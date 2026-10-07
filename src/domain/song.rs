@@ -174,12 +174,10 @@ impl Song {
         format!("/himene/{}", self.get_segment())
     }
 
-    /// The song's URL with no language prefix — the `x-default` form of it.
-    ///
-    /// Not what a page publishes: a canonical URL carries its language's prefix
-    /// ([`crate::i18n::url`]). This is kept for the places that describe the URL
-    /// *space* rather than a response — a test comparing two spellings, or a
-    /// redirect target that the negotiation layer then prefixes.
+    /// The song's address — one URL per page, and the page, the API and the
+    /// sitemap all spell it the same way. There is no second form to name: the
+    /// response's language is resolved from the request's own headers, not from
+    /// the URL.
     pub fn get_url(&self) -> String {
         format!("{SITE_URL}{}", self.get_path())
     }
@@ -316,10 +314,10 @@ impl Song {
     /// Convert the song into schema.org structure data markup.
     ///
     /// `url` is the canonical URL of the page this markup describes — the caller
-    /// decides it, because the same song is served at a URL per language and
-    /// only the request knows which one this is. Structure data that named a
-    /// different address from the page's `<link rel="canonical">` would be two
-    /// competing canonicals in one `<head>`.
+    /// decides it, because a caller may have a URL the domain does not build
+    /// (the API's own read, for one). Structure data that named a different
+    /// address from the page's `<link rel="canonical">` would be two competing
+    /// canonicals in one `<head>`.
     pub fn to_jsonld(&self, url: &str) -> String {
         use serde_json::json;
 
@@ -356,7 +354,8 @@ impl Song {
     ///
     /// `url` is the canonical URL of the page, as [`Song::to_jsonld`] takes it:
     /// `og:url` and the structure data have to name the address the page is
-    /// published at in the language it is being served in.
+    /// published at — one address, since v4.2, whatever language the response is
+    /// written in.
     pub fn get_meta_data(&self, url: &str) -> MetaSongData {
         let mut page_title = "Chanson du fenua".to_owned();
 
