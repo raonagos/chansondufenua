@@ -18,11 +18,21 @@
 //!
 //! # What the page claims, and what it does not
 //!
-//! It says it is a way to support the site. Nothing more: no charity, no
-//! tax-deductibility, no organisation language, and no other payment method.
-//! The chrome — the heading, the sentence under it and the copy control — is
-//! translated like the rest of the chrome; the chain names and the addresses are
-//! proper nouns and content, so they are not.
+//! It says it is a way to support the site, and — in the languages that have the
+//! words for it ([`money`]) — what the support pays for: the hosting, the domain
+//! name and the coffee. Nothing more: no charity, no tax-deductibility, no
+//! organisation language, and no other payment method. The chrome — the heading,
+//! the sentence under it, the money line and the copy control — is translated
+//! like the rest of the chrome; the chain names and the addresses are proper
+//! nouns and content, so they are not.
+//!
+//! # The marks are decoration, and the words are the site's own
+//!
+//! Each card draws one [`icons::Mark`] per chain its label names — four on the
+//! EVM entry, one on each of the others — hidden from assistive technology
+//! (`aria-hidden`), because the chain's name is in the card's own heading, in
+//! words, and a mark is only ever beside that name rather than instead of it.
+//! The drawing is the site's own geometry, not a logo file.
 //!
 //! # Three forms, joined by the `Link` headers
 //!
@@ -45,7 +55,7 @@ use topcoat::{
 };
 
 use crate::i18n::{self, Key};
-use crate::ui::theme;
+use crate::ui::{icons, theme};
 
 /// `/soutenir` — the address, in one place.
 ///
@@ -63,37 +73,77 @@ pub const PATH: &str = "/soutenir";
 /// search engine shows.
 pub const DESCRIPTION: &str = "Soutenir Chanson du fenua : ce site est gratuit, sans publicité — voici comment aider à payer son hébergement.";
 
-/// One way to support the site: the chains it is for, and the address itself.
+/// One way to support the site: the chains it is for, the address itself, and
+/// the marks drawn beside it.
 ///
-/// Two fields and no more. The label is a proper name — `Bitcoin`, `Solana`, the
-/// four EVM chains — so it is content and is never translated; the address is a
-/// string that must survive every rendering unchanged.
+/// Three fields and no more. The label is a proper name — `Bitcoin`, `Solana`,
+/// the four EVM chains — so it is content and is never translated; the address
+/// is a string that must survive every rendering unchanged; and the marks are
+/// decoration, one per chain the label names, in the order it names them.
 pub struct Entry {
     /// The chains this address is for. A proper name, not a translatable label.
     pub label: &'static str,
     /// The address, exactly as the maintainer wrote it.
     pub address: &'static str,
+    /// One mark per chain in [`Entry::label`], in the order it names them.
+    ///
+    /// `each_entry_carries_one_mark_per_chain_it_names` is what holds the two
+    /// together: a mark whose chain the label does not name is a shape with no
+    /// words beside it, and that is the one thing a decorative mark may not be.
+    pub marks: &'static [icons::Mark],
 }
 
 /// The addresses this page publishes, in the order it shows them.
 ///
 /// Three entries, one per chain group, and the third names all four of the EVM
 /// chains because it is one address on all of them — naming one of the four
-/// would be picking a favourite for a grouping the maintainer did not make.
+/// would be picking a favourite for a grouping the maintainer did not make. It
+/// is also why that entry carries four marks where the other two carry one: the
+/// address is one address, not one chain.
 pub const ADDRESSES: [Entry; 3] = [
     Entry {
         label: "Bitcoin",
         address: "bc1qyc2c0xvh8r0a5up9aef99u0zk3trypnsnga2vp",
+        marks: &[icons::Mark::Bitcoin],
     },
     Entry {
         label: "Solana",
         address: "H5Xz4SawCarhtYPNJL3FQVE6WaiVzVPwAVdXY4HPGx8u",
+        marks: &[icons::Mark::Solana],
     },
     Entry {
         label: "Ethereum · Polygon · BNB Chain · Avalanche",
         address: "0xC97CD33764B39F165Dbd3CeC1a71473C8bC9B6B2",
+        marks: &[
+            icons::Mark::Ethereum,
+            icons::Mark::Polygon,
+            icons::Mark::Bnb,
+            icons::Mark::Avalanche,
+        ],
     },
 ];
+
+/// What a reader's support pays for, in the languages the site can say it in.
+///
+/// One line, or none. French and English have it; `ty` does not, and that empty
+/// slice is deliberate — the Tahitian catalog has no faithful words for hosting,
+/// a domain name or coffee, and an invented sentence would be worse than a
+/// missing one. The site says less in Tahitian and says so out loud rather than
+/// guessing, and `the_money_line_is_written_where_it_has_a_language` keeps it
+/// that way.
+///
+/// It stays out of the [`Key`] catalog for the same reason: a key is a promise
+/// that all three languages have the words, and this line breaks that promise on
+/// purpose. What it claims is bounded too — the hosting, the domain name and the
+/// coffee, and nothing else: no tax deductibility, no organisation, no promise
+/// about what else the money might buy.
+pub fn money(lang: i18n::Lang) -> &'static [&'static str] {
+    match lang {
+        i18n::Lang::Fr => &["Votre soutien paie l'hébergement, le nom de domaine, et le café."],
+        i18n::Lang::En => &["Your support pays for the hosting, the domain name, and the coffee."],
+        i18n::Lang::Ty => &[],
+    }
+}
 
 /// `/soutenir` — the page.
 #[page("/soutenir")]
@@ -101,16 +151,38 @@ pub async fn soutenir(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let copy = i18n::text(lang, Key::SupportCopy);
     let copied = i18n::text(lang, Key::SupportCopied);
+    // Zero or one line: the languages that have the words for it. An empty slice
+    // renders nothing at all, which is what the Tahitian page gets.
+    let lines = money(lang);
 
     Ok(view! {
         <div class=(theme::PAGE)>
             <h1 class=(theme::H1)>(i18n::text(lang, Key::SupportTitle))</h1>
             <p class=(theme::LEAD)>(i18n::text(lang, Key::SupportIntro))</p>
+            // What the money pays for, directly above the addresses it is about.
+            for line in lines {
+                <p class=(theme::SUPPORT_MONEY)>(line)</p>
+            }
 
             <section class=(theme::CARD_GRID)>
                 for entry in ADDRESSES {
                     <div class=(theme::CARD_ROOMY)>
                         <h2 class=(theme::PANEL_TITLE)>(entry.label)</h2>
+                        // The marks are decoration and nothing else: each is
+                        // hidden from assistive technology, and each carries no
+                        // text, because the chain's name is the heading above
+                        // them, in words. One per chain, in the heading's order.
+                        //
+                        // Unescaped, like the editor's script and the layout's
+                        // JSON-LD block: they are compile-time drawings, in a
+                        // format the escaper would mangle (an escaped quote in a
+                        // `path` is not a path), and nothing in them comes from
+                        // a request.
+                        <span class=(theme::SUPPORT_MARKS)>
+                            for mark in entry.marks {
+                                (Unescaped::new_unchecked(mark.svg()))
+                            }
+                        </span>
                         // The address as text, not as an image and not as a link:
                         // a reader with JavaScript off selects it, and a crawler
                         // reads it. Every character is the author's — nothing
@@ -294,6 +366,106 @@ mod tests {
         // No words of its own: both labels come from the markup.
         for word in ["Copier", "Copié", "Copy", "Copied"] {
             assert!(!COPY_JS.contains(word), "the script carries {word:?}");
+        }
+    }
+
+    /// Each entry carries exactly one mark per chain its label names, in the
+    /// order the label names them, and every mark's own name is one of those
+    /// words.
+    ///
+    /// This is the test the icons module's contract rests on: a mark is only ever
+    /// decoration *for* a name, so a shape whose chain the card does not name in
+    /// words would be an unlabelled drawing of a coin — the one thing the page
+    /// must never publish. It also pins the count, which is what keeps the EVM
+    /// entry showing all four marks rather than one.
+    #[test]
+    fn each_entry_carries_one_mark_per_chain_it_names() {
+        assert_eq!(ADDRESSES[0].marks.len(), 1, "Bitcoin has one mark");
+        assert_eq!(ADDRESSES[1].marks.len(), 1, "Solana has one mark");
+        assert_eq!(ADDRESSES[2].marks.len(), 4, "one EVM address, four chains");
+
+        for entry in ADDRESSES {
+            for mark in entry.marks {
+                assert!(
+                    entry.label.contains(mark.name()),
+                    "{} draws {} but its label does not name it",
+                    entry.label,
+                    mark.name()
+                );
+            }
+        }
+
+        let evm: Vec<&str> = ADDRESSES[2].marks.iter().map(|mark| mark.name()).collect();
+        assert_eq!(evm, ["Ethereum", "Polygon", "BNB Chain", "Avalanche"]);
+    }
+
+    /// The money line says the three things and only the three things, in the two
+    /// languages that have it — and `ty` is a named gap rather than a guess.
+    ///
+    /// The empty slice is the deliverable here, not an oversight: the addendum
+    /// behind this change forbids inventing Tahitian, and an invented translation
+    /// is worse than a missing one. A later run that wants to fill it needs a
+    /// native speaker's words, and this test is what will make it say so.
+    #[test]
+    fn the_money_line_is_written_where_it_has_a_language() {
+        assert!(money(i18n::Lang::Ty).is_empty(), "ty was guessed at");
+
+        for (lang, line) in [
+            (i18n::Lang::Fr, money(i18n::Lang::Fr)),
+            (i18n::Lang::En, money(i18n::Lang::En)),
+        ] {
+            assert_eq!(line.len(), 1, "{lang:?} has {} lines", line.len());
+            let words = line[0];
+            // One sentence, short enough to read as a line above a table.
+            assert_eq!(words.matches('.').count(), 1, "{words}");
+            assert!(words.chars().count() <= 100, "{words}");
+            assert!(words.ends_with('.'), "{words}");
+        }
+
+        let french = money(i18n::Lang::Fr)[0];
+        for word in ["hébergement", "domaine", "café"] {
+            assert!(french.contains(word), "the French line does not say {word}");
+        }
+        let english = money(i18n::Lang::En)[0];
+        for word in ["hosting", "domain", "coffee"] {
+            assert!(
+                english.contains(word),
+                "the English line does not say {word}"
+            );
+        }
+
+        // No claim beyond those three things: no tax language, no organisation,
+        // and no translation of an address.
+        for line in [french, english] {
+            let lowered = line.to_lowercase();
+            for banned in [
+                "impôt",
+                "déductible",
+                "association",
+                "tax",
+                "deductib",
+                "charity",
+                "0x",
+                "bc1",
+            ] {
+                assert!(
+                    !lowered.contains(banned),
+                    "the money line claims {banned:?}: {line}"
+                );
+            }
+        }
+    }
+
+    /// The money line is chrome the catalog deliberately does not hold, so the
+    /// page — and not [`Key`] — is where it lives.
+    #[test]
+    fn the_money_line_is_not_a_catalog_key() {
+        for key in Key::ALL {
+            assert!(
+                !i18n::text(i18n::Lang::Fr, key).contains("café")
+                    && !i18n::text(i18n::Lang::En, key).contains("coffee"),
+                "{key:?} carries the money line"
+            );
         }
     }
 

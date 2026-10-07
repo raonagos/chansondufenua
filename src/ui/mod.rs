@@ -7,6 +7,7 @@
 
 pub mod assets;
 pub mod fonts;
+pub mod icons;
 pub mod layout;
 pub mod palette;
 pub mod theme;

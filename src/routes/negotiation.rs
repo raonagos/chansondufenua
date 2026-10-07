@@ -453,6 +453,14 @@ fn support_document(lang: Lang) -> String {
         i18n::text(lang, Key::SupportIntro)
     );
 
+    // The page's warm line, in the languages that have it — the same document as
+    // the HTML, so a reader who asked for Markdown gets the same paragraph. The
+    // Tahitian document has none, and that gap is the page's own decision, not a
+    // formatting one.
+    for line in support::money(lang) {
+        out.push_str(&format!("\n{line}\n"));
+    }
+
     for entry in support::ADDRESSES {
         out.push_str(&format!(
             "\n## {}\n\n```\n{}\n```\n",
@@ -1648,6 +1656,16 @@ mod tests {
         let french = support_document(Lang::Fr);
         assert!(french.starts_with("# Soutenir le site\n"), "{french}");
         assert!(french.ends_with(&format!("Source: {}\n", i18n::url(Lang::Fr, support::PATH))));
+        // The money line is in the two languages that have it, where the HTML
+        // page has it: under the standfirst and above the first address.
+        assert!(
+            french.contains("Votre soutien paie l'hébergement"),
+            "{french}"
+        );
+        assert!(
+            french.find("Votre soutien").unwrap() < french.find("## Bitcoin").unwrap(),
+            "the money line is not above the addresses"
+        );
         for entry in support::ADDRESSES {
             assert!(french.contains(entry.address), "{}", entry.address);
             assert!(french.contains(entry.label), "{}", entry.label);
@@ -1655,6 +1673,10 @@ mod tests {
 
         let english = support_document(Lang::En);
         assert!(english.starts_with("# Support the site\n"), "{english}");
+        assert!(
+            english.contains("Your support pays for the hosting"),
+            "{english}"
+        );
         for entry in support::ADDRESSES {
             assert!(
                 english.contains(entry.address),
@@ -1662,5 +1684,15 @@ mod tests {
                 entry.address
             );
         }
+
+        // The Tahitian document carries the Tahitian chrome and no money line:
+        // there are no faithful words for it, and the page would rather miss one
+        // than invent one.
+        let tahitian = support_document(Lang::Ty);
+        assert!(tahitian.starts_with("# Tauturu i te 'api\n"), "{tahitian}");
+        assert!(
+            !tahitian.contains("café") && !tahitian.contains("coffee"),
+            "{tahitian}"
+        );
     }
 }

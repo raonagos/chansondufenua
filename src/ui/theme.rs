@@ -886,6 +886,24 @@ pub const FORM_ERROR: StaticClass =
 /// Full-strength text: this is the page's content.
 pub const SUPPORT_ADDRESS: StaticClass = class!("block font-mono text-sm break-all text-mist-100");
 
+/// The line above the addresses on the support page: what the money pays for.
+///
+/// A step louder than the standfirst above it — full-strength text against the
+/// muted one — because it is the page's one warm line and everything below it is
+/// a table of strings. The measure and the centring follow the standfirst's, so
+/// the two read as a pair rather than as two blocks.
+pub const SUPPORT_MONEY: StaticClass =
+    class!("mx-auto mb-10 max-w-prose text-balance text-mist-100");
+
+/// The row of chain marks inside a support card.
+///
+/// Decoration only: every mark is a [`crate::ui::icons`] drawing in
+/// `currentColor`, and the chain's name is the card's own heading, so this token
+/// is the whole of the marks' styling. The row is what keeps the four EVM chains
+/// reading as four — laid out in a line, in the order the heading names them,
+/// rather than run together into one wide shape.
+pub const SUPPORT_MARKS: StaticClass = class!("mb-3 flex items-center gap-2 text-tahiti-400");
+
 /// The copy control under an address.
 ///
 /// [`BUTTON_OUTLINE`]'s shape one size down: it is a control on a three-line
@@ -1015,6 +1033,8 @@ mod tests {
         FORM_ERROR,
         SUPPORT_ADDRESS,
         SUPPORT_COPY,
+        SUPPORT_MONEY,
+        SUPPORT_MARKS,
     ];
 
     /// Renders a token to the class string the layout would put in the markup.
