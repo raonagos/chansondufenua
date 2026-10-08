@@ -61,6 +61,16 @@ use crate::ui::{assets, flags, fonts, theme};
 /// else; every other page says what it is first — see [`site_head`].
 const TITLE: &str = "Chanson du Fenua";
 
+/// The id of the header search box's own field.
+///
+/// The box is in the header of **every** page, and one of those pages is the
+/// search page, whose own field is `id="q"`. Two elements with one id is a
+/// document whose label points at whichever the browser found first, so the
+/// header's field is named here and the page's keeps its own. The `name` the two
+/// submit is the same — that is the parameter the search reads, and it is
+/// [`search::PARAM`].
+pub const HEADER_SEARCH_ID: &str = "header-search";
+
 /// Everything the layout needs to write `<head>`.
 ///
 /// Built by [`document_head`] from the request path. The optional fields are
@@ -765,6 +775,11 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                     <span class=(theme::HAMBURGER_BAR_ANIMATED)></span>
                     <span class=(theme::HAMBURGER_BAR_ANIMATED)></span>
                 </label>
+                // After the hamburger and before the nav, in that order, so the
+                // phone's header breaks into two rows — the chrome, then this —
+                // and the nav's own row is the disclosure's. See
+                // [`theme::SEARCH_FORM`].
+                search_box()
                 <nav id="navigation" class=(theme::NAV)>
                     <span class=(theme::NAV_SPACER)></span>
                     <a
@@ -793,6 +808,74 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
             </div>
         </header>
     })
+}
+
+/// The header's search box — the way to `/paimi` from every page.
+///
+/// His review's question was *"I know the `/recherche` path exist but how can I
+/// access to this page"*: the search page existed, the catalogue was indexed for
+/// it, and nothing on the site led a reader to it. This is that link, drawn as
+/// the thing a reader is looking for rather than as a word in the nav.
+///
+/// # A form, and nothing else
+///
+/// `<form method="get" action="/paimi">` with one labeled field and one button:
+/// the browser builds the URL and submits it, with JavaScript off, from any
+/// page. The address it makes is `/paimi?q=…` — the same one the search page's
+/// own form makes and the same one the front page's `SearchAction` template
+/// promises a crawler, through the same two constants ([`search::PATH`],
+/// [`search::PARAM`]).
+///
+/// # The field's id is not the search page's
+///
+/// The box is in the header of every page, `/paimi` among them, and that page's
+/// own field is `id="q"`. The header's field therefore carries
+/// [`HEADER_SEARCH_ID`], and the two agree in `name` — which is the parameter
+/// the search reads — and never in `id`, which is only what a label points at.
+///
+/// # The words come from the catalog
+///
+/// The label is [`Key::SearchLabel`] and the button is [`Key::SearchSubmit`],
+/// the two keys the search page's own box already reads, so the chrome of the
+/// site says *what a search is* in one place. The label is
+/// [`theme::VISUALLY_HIDDEN`] — the box is identified by its button and its
+/// placeholder — but it is a real `<label>`, bound to the field: a placeholder
+/// is not a name, and a box named only by one is a box a screen reader
+/// announces as "edit text".
+#[component]
+pub async fn search_box(cx: &Cx) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
+    let value = search_value(uri(cx).query().unwrap_or(""));
+
+    Ok(view! {
+        <form method="get" action=(search::PATH) role="search" class=(theme::SEARCH_FORM)>
+            <label class=(theme::VISUALLY_HIDDEN) for=(HEADER_SEARCH_ID)>
+                (i18n::text(lang, Key::SearchLabel))
+            </label>
+            <input
+                id=(HEADER_SEARCH_ID)
+                type="search"
+                name=(search::PARAM)
+                value=(value)
+                placeholder=(i18n::text(lang, Key::SearchLabel))
+                class=(class!(theme::SEARCH_INPUT, theme::FOCUS))
+            />
+            <button type="submit" class=(class!(theme::SEARCH_SUBMIT, theme::FOCUS))>
+                (i18n::text(lang, Key::SearchSubmit))
+            </button>
+        </form>
+    })
+}
+
+/// The needle the header's box shows back.
+///
+/// On the search page it is the search itself — the same words the page's own
+/// field holds, read by [`search::needle`] from the page's own query string — so
+/// a reader who searched from the header can refine the search from the header.
+/// Everywhere else it is empty: the site keeps no session, so a box that
+/// remembered the last search would be remembering something it was never told.
+fn search_value(query: &str) -> String {
+    search::needle(query).unwrap_or_default()
 }
 
 /// The language switcher: this page, in each of the site's three languages — a
@@ -1195,6 +1278,41 @@ mod tests {
         for lang in Lang::ALL {
             assert!(!lang.name().trim().is_empty());
             assert_ne!(lang.name(), i18n::text(lang, Key::Language));
+        }
+    }
+
+    /// The header's search box reaches the search page, is named by the search
+    /// page's own parameter, and keeps an id of its own.
+    ///
+    /// The last one is the trap: the box is in the header of *every* page, and
+    /// the search page's own field is `id="q"`. Two fields with one id would be
+    /// a document whose `<label for="q">` points at whichever the browser
+    /// happened to find first — which is the header's, not the page's.
+    #[test]
+    fn the_header_search_box_submits_to_the_search_page_under_its_own_id() {
+        assert_eq!(search::PATH, "/paimi");
+        assert_eq!(search::PARAM, "q");
+        assert_ne!(HEADER_SEARCH_ID, search::PARAM);
+        assert!(!HEADER_SEARCH_ID.is_empty());
+    }
+
+    /// The box shows the reader's own search back, and never anyone else's.
+    ///
+    /// The site keeps no session, so the only search a page can know about is
+    /// the one in its own URL — read here through the same
+    /// [`search::needle`] the search page reads its own query with, so the two
+    /// boxes cannot disagree about what the page is about.
+    #[test]
+    fn the_header_box_shows_the_needle_the_page_is_about() {
+        assert_eq!(search_value("q=ahani"), "ahani");
+        assert_eq!(search_value("q=M%C4%81m%C4%81+Tahiti"), "Māmā Tahiti");
+        assert_eq!(search_value("q=ahani&ref=nav"), "ahani");
+
+        // A page that names no search, and a query that names one under another
+        // form's parameter, leave the box empty rather than showing a needle
+        // this page is not about.
+        for query in ["", "q=", "q=%20", "page=2", "song=ahani", "=ahani"] {
+            assert_eq!(search_value(query), "", "{query}");
         }
     }
 

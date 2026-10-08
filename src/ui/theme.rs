@@ -228,6 +228,50 @@ pub const LANGUAGE_FLAG_CURRENT: StaticClass = class!("ring-2 ring-tahiti-400");
 /// carry: the control's, and each flag's.
 pub const VISUALLY_HIDDEN: StaticClass = class!("sr-only");
 
+/// The header's search box: one field, from every page, to `/paimi`.
+///
+/// A row of two — the field and the button. Below `md` it takes a line of its
+/// own (`basis-full`), because a phone's header has no room left beside the
+/// logo, the switcher and the hamburger and a field squeezed between them would
+/// be narrower than the word it takes; from `md` up it sits in the header row,
+/// between the language switcher and the nav's links, where the row has space to
+/// spare. That order is the markup's own: the box is written after the hamburger
+/// and before the nav, so the phone's header breaks into the chrome's row and
+/// then this one.
+///
+/// **In the header row, not inside the nav.** The nav below `md` is a
+/// disclosure, so a box in it would be behind the hamburger — and a search a
+/// reader has to open a menu to find is the complaint this step answers.
+pub const SEARCH_FORM: StaticClass =
+    class!("flex items-center gap-2 max-md:basis-full max-md:mt-3 md:mr-6");
+
+/// The header's search field.
+///
+/// The form's field grows to the row it is in and stops at a fixed width from
+/// `md` up, so the header is the same width on every page it appears on
+/// regardless of how long a word the catalog holds: `flex-1` below `md` fills
+/// the phone's line, and `md:w-56` is the desktop box. `min-w-0` because a flex
+/// item refuses to shrink below its content without it.
+///
+/// The rest is [`FORM_INPUT`]'s surface at the header's own scale — same border,
+/// same recessed field, same muted placeholder — written out rather than
+/// composed, for the reason that token's doc gives: a [`StaticClass`] is one
+/// string literal and cannot inherit another's classes.
+pub const SEARCH_INPUT: StaticClass = class!(
+    "flex-1 min-w-0 appearance-none rounded-md border border-ink-600 bg-ink-950 px-3 \
+     py-1.5 text-sm text-mist-100 shadow-sm placeholder:text-mist-500 md:w-56 md:flex-none"
+);
+
+/// The header's search button.
+///
+/// [`FORM_SUBMITTER`]'s accent fill at the size of a control that sits in the
+/// chrome: the same two colours, so one button in the header is recognisably the
+/// same action as the one on the search page.
+pub const SEARCH_SUBMIT: StaticClass = class!(
+    "cursor-pointer rounded-md bg-tahiti-500 px-3 py-1.5 text-sm font-semibold \
+     text-ink-950 transition-colors hover:bg-tahiti-300"
+);
+
 // ---------------------------------------------------------------------------
 // Page and footer
 // ---------------------------------------------------------------------------
@@ -1005,6 +1049,9 @@ mod tests {
         LANGUAGE_FLAG,
         LANGUAGE_FLAG_CURRENT,
         VISUALLY_HIDDEN,
+        SEARCH_FORM,
+        SEARCH_INPUT,
+        SEARCH_SUBMIT,
         MAIN,
         PAGE,
         FOOTER,
@@ -1280,6 +1327,10 @@ mod tests {
             ("language menu", &CARD, &LANGUAGE_MENU),
             // A flag and the ring that marks the current one.
             ("language flag", &LANGUAGE_FLAG, &LANGUAGE_FLAG_CURRENT),
+            // The header's search field and its button, each composed with the
+            // one focus rule, which is a state and never a rest state.
+            ("header search field", &SEARCH_INPUT, &FOCUS),
+            ("header search button", &SEARCH_SUBMIT, &FOCUS),
         ];
 
         for (label, one, other) in pairs {
