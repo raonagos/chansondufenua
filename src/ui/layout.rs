@@ -229,9 +229,9 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
         let pages = match db::counts(state::db(cx).pool()).await {
             Ok(counts) => songs::page_count(counts.songs),
             // The page's own read fails the same way, so the response is a 500
-            // with nothing of the catalogue in it: the site's head is the honest
-            // one, and the error is the page's to raise.
-            Err(_) => return site_head(path, lang),
+            // with nothing of the catalogue in it: it names the site and claims
+            // nothing more, and the error is the page's to raise.
+            Err(_) => return no_page_head(),
         };
 
         return match songs::page_number(path).filter(|number| (2..=pages).contains(number)) {
@@ -248,9 +248,9 @@ async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
     if let Some(id) = artist::segment(path) {
         return match db::artist(state::db(cx).pool(), id).await {
             Ok(Some(row)) => artist_head(cx, &row, lang).await,
-            // A read that fails is the page's own read failing too: the response
-            // is a 500 with nothing of the catalogue in it, and the site's head is
-            // the honest one.
+            // An id that names no row is the branded 404 the page handler
+            // raises; a read that fails makes the page raise the `500` instead.
+            // Both heads are the same, and both are `noindex`.
             _ => not_found_head(lang),
         };
     }
@@ -290,8 +290,9 @@ async fn artist_head(cx: &Cx, artist: &Artist, lang: Lang) -> DocumentHead {
     let listed = match db::songs_by_artist(state::db(cx).pool(), &artist.get_id()).await {
         Ok(listed) => listed,
         // The page's own read fails the same way, so the response is a 500 with
-        // nothing of the catalogue in it.
-        Err(_) => return site_head(&artist::path_of(&artist.get_id()), lang),
+        // nothing of the catalogue in it: the head claims nothing the response
+        // does not hold.
+        Err(_) => return no_page_head(),
     };
 
     let name = artist.get_fullname();
@@ -494,15 +495,30 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
         };
     }
 
-    // A path no route claims never reaches the layout at all — the router
-    // answers it — so what arrives here is a page rendered outside the three
-    // above, and the honest head for one is the site's name and nothing more
-    // than that.
+    // Everything else is a URL the site does not serve. A path no route claims
+    // *does* reach this layout: `pages::not_found!` registers a catch-all page
+    // that fails with a `NotFoundError`, precisely so the bare router cannot
+    // answer an unregistered path with nine bytes of text and no chrome. The
+    // head it gets is the 404's — its own headline rather than the front door's
+    // title, and `noindex`, so an address a crawler still holds from an old
+    // link is not indexed as a second copy of the front page.
+    not_found_head(lang)
+}
+
+/// The `<head>` of a response that holds no page at all.
+///
+/// Reached when a page's own read fails before the page can be named: the
+/// response is a `500` with nothing of the catalogue in it, so its head names
+/// the site and claims nothing else — no description, no canonical URL, no card.
+/// `noindex`, because a document that is not a page is not one for a crawler
+/// either; it is not [`not_found_head`], because the response is not a 404 and
+/// its title says so.
+fn no_page_head() -> DocumentHead {
     DocumentHead {
         title: TITLE.to_owned(),
         description: None,
         canonical: None,
-        noindex: false,
+        noindex: true,
         social: None,
         jsonld: None,
     }
@@ -536,9 +552,17 @@ fn page_head(
 ///
 /// A `WebSite` node with a `SearchAction` is what makes a search box appear in a
 /// result for the site's own name, and it is a statement about the site rather
-/// than about a page — so it is written on `/` alone, and it is the same
-/// statement in every language, because the action it describes is the same
-/// address in all of them.
+/// than about a page — so it is written on the front door's own address and not
+/// on the root, which is the same page under a second URL: one description, on
+/// the address the page canonicalises to, rather than two competing with each
+/// other. It is the same statement in every language, because the action it
+/// describes is the same address in all of them.
+///
+/// `url` is that same canonical address, because a `WebSite` node's `url` is the
+/// canonical URL of the site's home page. A node naming the root while the page
+/// carrying it canonicalises to `HOME` would be the duplicate pair this audit
+/// exists to close — declared by the page, contradicted by its own structured
+/// data.
 ///
 /// `urlTemplate` names [`search::PATH`] through its own constant, so the
 /// template and the page cannot drift; the placeholder is schema.org's own
@@ -548,7 +572,7 @@ fn website_jsonld() -> String {
         "@context": "https://schema.org",
         "@type": "WebSite",
         "name": TITLE,
-        "url": SITE_URL,
+        "url": i18n::absolute(HOME),
         "inLanguage": Lang::DEFAULT.code(),
         "potentialAction": {
             "@type": "SearchAction",
@@ -1138,6 +1162,10 @@ mod tests {
     /// The front door names the site and the box that searches it, and the root
     /// — the same page under a second URL — does not repeat either.
     ///
+    /// The node's `url` is the front door's own address: schema.org wants the
+    /// canonical URL of the site's home page there, and anything else would have
+    /// the page's structured data contradict the page's canonical link.
+    ///
     /// The `SearchAction`'s template is the search page's own path and parameter,
     /// through their constants: a template and a form that disagree would send a
     /// client to a URL this site does not answer.
@@ -1148,7 +1176,11 @@ mod tests {
         let document: serde_json::Value = serde_json::from_str(&jsonld).expect("valid JSON");
 
         assert_eq!(document["@type"], "WebSite");
-        assert_eq!(document["url"], SITE_URL);
+        assert_eq!(document["url"], i18n::absolute(HOME));
+        assert_eq!(
+            document["url"],
+            home.canonical.clone().expect("a canonical URL")
+        );
         assert_eq!(document["name"], TITLE);
         assert_eq!(
             document["potentialAction"]["@type"], "SearchAction",
@@ -1421,5 +1453,45 @@ mod tests {
         assert!(head.description.is_none());
         assert!(head.canonical.is_none());
         assert!(head.social.is_none());
+    }
+
+    /// A URL no page claims gets the 404's head too, and never the site's.
+    ///
+    /// The catch-all (`pages::not_found!`) means such a request reaches the
+    /// layout rather than the bare router, so this is the head the branded 404
+    /// is rendered with: `noindex`, and the 404's own headline. The front door's
+    /// title here would be the site claiming a page it does not serve — and,
+    /// because `/` is the front page's second address, another copy of the front
+    /// page's head on an address that is not the front page.
+    #[test]
+    fn a_url_no_page_claims_gets_the_not_found_head() {
+        for path in ["/no-such-page", "/himene/ahani-e/extra", "/reo", "/xx"] {
+            let head = site_head(path, Lang::Fr);
+
+            assert!(head.noindex, "{path} may be indexed");
+            assert!(head.canonical.is_none(), "{path} names a canonical URL");
+            assert!(head.social.is_none(), "{path} carries social cards");
+            assert!(
+                head.title
+                    .contains(i18n::text(Lang::Fr, Key::NotFoundTitle)),
+                "{path}: {}",
+                head.title
+            );
+        }
+    }
+
+    /// A response that holds no page — the `500` a failed read makes — names the
+    /// site and claims nothing else, and is kept out of an index like every other
+    /// document that is not a page.
+    #[test]
+    fn a_response_that_holds_no_page_claims_nothing() {
+        let head = no_page_head();
+
+        assert_eq!(head.title, TITLE);
+        assert!(head.description.is_none());
+        assert!(head.canonical.is_none());
+        assert!(head.social.is_none());
+        assert!(head.jsonld.is_none());
+        assert!(head.noindex);
     }
 }
