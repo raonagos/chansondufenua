@@ -238,7 +238,7 @@ impl Layer for Negotiation {
 /// `301` to `location`, with no body.
 ///
 /// `pub(crate)` because `routes::language` issues the same redirect for the
-/// addresses the site published before v4.2: one spelling of "this document
+/// addresses the site published before v4.1: one spelling of "this document
 /// moved, for good" rather than two that can drift about the code, the body or
 /// the absence of a `Cache-Control`.
 ///
@@ -927,7 +927,7 @@ fn queue_links(cx: &Cx, values: Vec<String>) -> Result<()> {
 /// the 404 promises only the sitemap.
 ///
 /// `lang` is not a parameter any more, and its absence is the point: a page has
-/// one URL since v4.2, so the address a `Link` header promises is the page's own
+/// one URL since v4.1, so the address a `Link` header promises is the page's own
 /// canonical URL and nothing else — there is no second spelling for a header to
 /// point at, and no language to put in front of one.
 ///

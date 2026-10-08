@@ -52,7 +52,7 @@ use crate::ui::theme;
 /// `copy::HERO_TITLE` and never has to wonder whether `HERO_TITLE` was the words
 /// or the styling — `theme::HERO_TITLE` is the styling.
 ///
-/// **The prose is no longer one language.** Until v4.2 every sentence here was a
+/// **The prose is no longer one language.** Until v4.1 every sentence here was a
 /// `const` in French — v3's words, kept byte for byte — and the site served them
 /// to an English reader as they were. The reviewer read them that way ("I read
 /// the descriptions are in french … so it needs to translate all things it can

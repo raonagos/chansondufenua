@@ -354,7 +354,7 @@ impl Song {
     ///
     /// `url` is the canonical URL of the page, as [`Song::to_jsonld`] takes it:
     /// `og:url` and the structure data have to name the address the page is
-    /// published at — one address, since v4.2, whatever language the response is
+    /// published at — one address, since v4.1, whatever language the response is
     /// written in.
     pub fn get_meta_data(&self, url: &str) -> MetaSongData {
         let mut page_title = "Chanson du fenua".to_owned();

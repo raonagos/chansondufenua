@@ -62,6 +62,7 @@ const POLICY: &str = "\
 User-agent: *
 
 Allow: /
+Disallow: /reo
 
 Content-Signal: search=yes, ai-input=yes, ai-train=no
 

@@ -242,7 +242,7 @@ impl Layer for AccessLog {
             // the common path allocates nothing to name the request.
             //
             // The path is the one the reader asked for, not the one being
-            // handled. Since v4.2 nothing in this crate dispatches a request
+            // handled. Since v4.1 nothing in this crate dispatches a request
             // again at a second path — the language is no longer part of a URL,
             // and the spellings that used to say it are answered with a `301` —
             // but Topcoat's router offers that rewrite, and a log line naming an

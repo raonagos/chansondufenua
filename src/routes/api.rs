@@ -137,7 +137,7 @@ pub(crate) struct SongJson {
     artists: Vec<String>,
     /// The song page's address, on the canonical host.
     ///
-    /// The page's own URL — the slug — which since v4.2 is the one address the
+    /// The page's own URL — the slug — which since v4.1 is the one address the
     /// sheet has: the chrome's language is resolved per request and is not part
     /// of the URL, so this document names the same address the page's
     /// `<link rel="canonical">` does.

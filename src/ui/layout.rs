@@ -346,7 +346,7 @@ fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
 ///
 /// The canonical URL is the one this response is served at: the slug's own
 /// address. A song's page is the same document in every language — the lyric is
-/// never translated, only the chrome around it changes — and since v4.2 it is
+/// never translated, only the chrome around it changes — and since v4.1 it is
 /// also the same *URL* in every language, resolved from a cookie or from
 /// `Accept-Language`. The id and the retired-slug forms are not addresses at all;
 /// `routes::negotiation` has already sent them here.
@@ -387,14 +387,14 @@ fn song_head(song: &Song, lang: Lang) -> DocumentHead {
 /// competing with itself.
 ///
 /// **The canonical URL is the page's own address and nothing else.** A page has
-/// exactly one URL since v4.2 — the language is resolved from a cookie or from
+/// exactly one URL since v4.1 — the language is resolved from a cookie or from
 /// `Accept-Language` and is not part of it — so every page canonicalises to
 /// itself, and there is no cluster of alternates to consolidate. The root is the
 /// one remaining second URL, and it does what it always did: it names the front
 /// page's own address.
 fn site_head(path: &str, lang: Lang) -> DocumentHead {
     // `/faariiraa` and `/` are one page under two URLs. The root is the
-    // duplicate — v4.2 made the Tahitian address canonical — and the canonical
+    // duplicate — v4.1 made the Tahitian address canonical — and the canonical
     // URL carries no trailing slash, the form the live site emits.
     if matches!(path, HOME | ROOT) {
         let title = if path == ROOT {
@@ -618,7 +618,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     false => "",
                 }
                 // No `hreflang` cluster, and no `x-default`: a page has one URL
-                // since v4.2 — the language is resolved from a cookie or from
+                // since v4.1 — the language is resolved from a cookie or from
                 // `Accept-Language`, not from the address — so there are no
                 // alternates to declare. The switcher below still marks each
                 // link with the language it leads to, which is a different
@@ -881,7 +881,7 @@ fn search_value(query: &str) -> String {
 /// The language switcher: this page, in each of the site's three languages — a
 /// globe that opens a flag per language.
 ///
-/// Three real links with no script anywhere near them, and since v4.2 they are
+/// Three real links with no script anywhere near them, and since v4.1 they are
 /// not three addresses of the page — a page has one address — but three
 /// *choices*: each link names the language and carries the page the reader is on
 /// (see [`language::switch`]), and the route behind it sets the cookie and sends
@@ -1233,7 +1233,7 @@ mod tests {
 
     /// **The switcher names the language and the page, not a second URL.** Each
     /// of its three links is the language route carrying this page back to
-    /// itself — a page has one address since v4.2, and the switcher must not
+    /// itself — a page has one address since v4.1, and the switcher must not
     /// invent three.
     ///
     /// It also pins the two properties a switcher is easy to get wrong: it names
@@ -1245,7 +1245,7 @@ mod tests {
         // and the page percent-encoded into `next`.
         assert_eq!(
             language::switch(Lang::Ty, songs::PATH),
-            "/language/ty?next=%2Fhimene"
+            "/reo/ty?next=%2Fhimene"
         );
 
         for path in [

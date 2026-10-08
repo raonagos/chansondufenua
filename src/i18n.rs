@@ -25,7 +25,7 @@
 //! # What is translated, and what is not
 //!
 //! The chrome and the labels around the content — the navigation, the 404, the
-//! fixed action labels on the home, index and song pages — **and, since v4.2,
+//! fixed action labels on the home, index and song pages — **and, since v4.1,
 //! the site's own prose**: the front page's sentences, the footer's, and the
 //! `<meta name="description">` each page hands a search engine. A page served in
 //! English says everything the site writes in English; the reviewer's "I read
@@ -66,7 +66,7 @@
 //!
 //! **One URL per page.** A page has exactly one address — the Tahitian one the
 //! reviewer named — and no language is spelled in it. `/fr/himene`, `/ty/himene`
-//! and `/en/himene` are not three pages; they were, until v4.2 retired them for
+//! and `/en/himene` are not three pages; they were, until v4.1 retired them for
 //! good (see [`crate::routes::language`]), and `/himene?lang=fr` is retired with
 //! them.
 //!

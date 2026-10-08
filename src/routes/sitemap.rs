@@ -24,11 +24,11 @@
 //! The root is not listed. It is the home page under a second URL and its own
 //! canonical link says so; a sitemap lists canonical URLs.
 //!
-//! **"Canonical" means the page's own address.** Since v4.2 a page has exactly
+//! **"Canonical" means the page's own address.** Since v4.1 a page has exactly
 //! one URL — the language is resolved per request from a cookie or from
 //! `Accept-Language` and is not part of the address — so a sitemap entry is the
 //! page's own path, and there is no cluster of alternates to pick from. (Until
-//! v4.2 the sitemaps listed the French `/fr/…` addresses and the other two
+//! v4.1 the sitemaps listed the French `/fr/…` addresses and the other two
 //! languages were discovered from each page's `hreflang` cluster; both are gone.)
 
 use topcoat::{

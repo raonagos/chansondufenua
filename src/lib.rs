@@ -50,7 +50,7 @@ use crate::routes::{language, mcp, negotiation};
 /// The cookie jar is deliberately **not** registered. The language is read from
 /// the request's own `Cookie` header by [`crate::i18n::resolve`], and the one
 /// request that *writes* a cookie — the language switcher's
-/// `/language/{code}` ([`language`]) — sets its own `Set-Cookie`. Registering a
+/// `/reo/{code}` ([`language`]) — sets its own `Set-Cookie`. Registering a
 /// jar nothing reads would be wiring kept for a decision that moved.
 ///
 /// `.layer(...)` registers the three layers the site has, by hand rather than

@@ -1,6 +1,6 @@
 //! The addresses the site used to publish, and where they went.
 //!
-//! v4.2 moved every page that was addressed in French (or in v3's
+//! v4.1 moved every page that was addressed in French (or in v3's
 //! transliteration of a Tahitian word) onto the Tahitian address the reviewer
 //! named: `/recherche` → `/paimi`, `/soutenir` → `/tauturu`,
 //! `/artiste/{id}` → `/taata-himene/{id}`, `/himene/pluriel` → `/puta-himene`,
@@ -29,15 +29,15 @@
 
 use crate::pages::{artist, book, home, search, support};
 
-/// The addresses that were published before v4.2, and the page that answers
+/// The addresses that were published before v4.1, and the page that answers
 /// them now.
 ///
 /// In the order the site grew them. The strings are data — an address a reader
 /// may still hold — so they are spelled here and nowhere else.
 pub const RETIRED: [(&str, &str); 4] = [
-    // v3's transliteration of *fa'ari'ira'a*, and until v4.2 the front page's
+    // v3's transliteration of *fa'ari'ira'a*, and until v4.1 the front page's
     // Tahitian address: `/aepa` and `/` were the same page under two URLs, and
-    // v4.2 keeps the path the reviewer named as the standard.
+    // v4.1 keeps the path the reviewer named as the standard.
     ("/aepa", home::PATH),
     ("/recherche", search::PATH),
     ("/soutenir", support::PATH),

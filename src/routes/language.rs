@@ -1,13 +1,13 @@
 //! The language a page is served in, the addresses that used to say it, and the
 //! one address that sets it.
 //!
-//! Since v4.2 **a page has exactly one URL**, and the language is not part of
+//! Since v4.1 **a page has exactly one URL**, and the language is not part of
 //! it. The reader's language is resolved by [`crate::i18n::resolve`] — the `lang`
 //! cookie, then `Accept-Language`, then French — and this module is what makes
 //! that safe and what retires the two spellings that used to name a language:
 //!
 //! 0. **A retired spelling.** `/fr`, `/ty` and `/en` were language *prefixes*
-//!    until v4.2 — `/fr/himene` was a page's canonical URL — and `?lang=` was a
+//!    until v4.1 — `/fr/himene` was a page's canonical URL — and `?lang=` was a
 //!    redirect to one. Both are gone: a prefixed path and any `?lang=` parameter
 //!    answer **`301`** to the address the page has now (`/fr/himene` →
 //!    `/himene`), because v4.1 published those URLs and a link already in the
@@ -25,7 +25,7 @@
 //!    reader's language to everybody, which is the defect the v4 URL rules
 //!    existed to prevent — and the review's "default is the system" is the
 //!    decision that bought it back.
-//! 3. **The switcher's address** — `/language/{code}`, the one route here. It
+//! 3. **The switcher's address** — `/reo/{code}`, the one route here. It
 //!    sets the cookie and `302`s back to the page the reader was on, which the
 //!    switcher put in the link's own `next` parameter. It is not a page: no
 //!    `<head>`, no layout, no Markdown form, and nothing links to it that a
@@ -56,7 +56,7 @@ use crate::pages::{artist, book, editor, home, retired, search, songs, support};
 use crate::routes::negotiation;
 
 /// The prefix the language switcher's own address lives under.
-pub const PATH: &str = "/language";
+pub const PATH: &str = "/reo";
 
 /// The query parameter a switcher link carries the page it came from in.
 ///
@@ -115,7 +115,7 @@ pub fn switch(lang: Lang, next: &str) -> String {
     format!("{PATH}/{}?{PARAM}={}", lang.code(), encode(next))
 }
 
-/// `GET /language/{code}` — the language switcher's target.
+/// `GET /reo/{code}` — the language switcher's target.
 ///
 /// A `302` back to the page the reader came from, with the choice remembered in
 /// a cookie. `302` and not `301`: what is being answered is a *preference*, and
@@ -125,7 +125,7 @@ pub fn switch(lang: Lang, next: &str) -> String {
 ///
 /// A code the site does not speak is a `404`: the address exists (it is a route)
 /// but names no language, the same rule every other unknown segment follows.
-#[route(GET "/language/{code}")]
+#[route(GET "/reo/{code}")]
 async fn choose(cx: &Cx) -> Result<Response> {
     let code: &str = path_param::<Code>(cx);
 
@@ -315,7 +315,7 @@ impl Layer for LanguageLayer {
 /// The address `path` has now, when `path` is a spelling this step retired.
 ///
 /// Two retirements, in one answer, so a client makes one hop rather than two:
-/// the language prefix (`/ty/himene` → `/himene`) and the page names v4.2 moved
+/// the language prefix (`/ty/himene` → `/himene`) and the page names v4.1 moved
 /// ([`crate::pages::retired`]). `None` for a path that is already canonical —
 /// including one that merely resembles a retired address, which is nobody's page
 /// and is left to the router.
@@ -529,7 +529,7 @@ mod tests {
             "/artiste/a/b",
             "/recherche/x",
             "/api/songs",
-            "/language/ty",
+            "/reo/ty",
         ] {
             assert_eq!(canonical_address(path), None, "{path}");
         }
@@ -554,15 +554,15 @@ mod tests {
     /// a path cannot end the parameter it is written in.
     #[test]
     fn the_switcher_links_to_a_language_and_back_to_the_page() {
-        assert_eq!(switch(Lang::Ty, "/himene"), "/language/ty?next=%2Fhimene");
-        assert_eq!(switch(Lang::Fr, "/"), "/language/fr?next=%2F");
+        assert_eq!(switch(Lang::Ty, "/himene"), "/reo/ty?next=%2Fhimene");
+        assert_eq!(switch(Lang::Fr, "/"), "/reo/fr?next=%2F");
         assert_eq!(
             switch(Lang::En, "/puta-himene?s=a&s=b"),
-            "/language/en?next=%2Fputa-himene%3Fs%3Da%26s%3Db"
+            "/reo/en?next=%2Fputa-himene%3Fs%3Da%26s%3Db"
         );
         assert_eq!(
             switch(Lang::Ty, "/paimi?q=h%C4%ABmene"),
-            "/language/ty?next=%2Fpaimi%3Fq%3Dh%25C4%25ABmene"
+            "/reo/ty?next=%2Fpaimi%3Fq%3Dh%25C4%25ABmene"
         );
     }
 
@@ -659,7 +659,7 @@ mod tests {
             "/.well-known/api-catalog",
             "/api/openapi.json",
             PATH,
-            "/language/ty",
+            "/reo/ty",
             "/drive/site",
             "/nobody",
         ] {
@@ -667,13 +667,13 @@ mod tests {
         }
     }
 
-    /// The switcher's path is `/language`, and every link it builds lives under
+    /// The switcher's path is `/reo`, and every link it builds lives under
     /// it — the constant a link is built from and the literal the route is
     /// declared with are one string. `.run/step34.sh` asserts the literal too,
     /// against the source and against the running server.
     #[test]
     fn the_switcher_path_is_the_routes_own() {
-        assert_eq!(PATH, "/language");
+        assert_eq!(PATH, "/reo");
 
         for lang in Lang::ALL {
             let link = switch(lang, "/himene");
