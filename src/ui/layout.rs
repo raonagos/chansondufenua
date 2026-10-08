@@ -47,7 +47,7 @@ use crate::i18n::{self, Key, Lang};
 use crate::pages::{
     artist, book, editor,
     home::{self, PATH as HOME, ROOT},
-    search, songs, support,
+    search, songs, support, terms,
 };
 use crate::routes::{language, negotiation, og};
 use crate::state;
@@ -474,6 +474,24 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
             lang,
             None,
         );
+    }
+
+    // The terms page. `noindex, follow` and **no canonical**, the multi-lyric
+    // page's decision over again and for a different reason (see
+    // `pages::terms`): the page is not written to be found — it is reached from
+    // the footer and from a link in a rights conversation — and a canonical URL
+    // on a page a crawler is told not to index names a preferred address for
+    // nothing. Its own title all the same: a crawler that reads it anyway reads
+    // what it is, and the page's statements are the site's own.
+    if path == terms::PATH {
+        return DocumentHead {
+            title: format!("{} | {TITLE}", terms::title(lang)),
+            description: None,
+            canonical: None,
+            noindex: true,
+            social: None,
+            jsonld: None,
+        };
     }
 
     // A path no route claims never reaches the layout at all — the router
@@ -984,6 +1002,13 @@ fn names_the_index(path: &str) -> bool {
 /// is a real link to a page of this site, on every page, with no script and
 /// nothing fetched from a third party: a reader with JavaScript off can follow
 /// it as easily as any other link, which is the whole of what it has to do.
+///
+/// Under it, since step 46, the site's one other foot-of-the-page link: the
+/// terms page ([`terms::PATH`]). It carries no drawing — the support link's
+/// heart is the exception, not the shape — and its word is the page's own name,
+/// so the footer, the heading and the `<title>` cannot drift apart. The two are
+/// stacked rather than put on one line, because a way to give and a statement of
+/// rights are not two halves of one control.
 #[component]
 pub async fn footer(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
@@ -1016,6 +1041,14 @@ pub async fn footer(cx: &Cx) -> Result<impl View> {
                 (Unescaped::new_unchecked(icons::DONATE))
                 (i18n::text(lang, Key::FooterDonate))
             </a>
+            // The terms page's link, on every page, one step under the support
+            // one. The word is the page's own name — [`Key::TermsTitle`], the
+            // same string its `<h1>` and its `<title>` carry — because a link
+            // that called the page something else would be a second name for it,
+            // and there is no second name this catalog could keep true.
+            <a href=(terms::PATH) class=(class!(theme::LINK, theme::TERMS_LINK))>
+                (terms::title(lang))
+            </a>
         </footer>
     })
 }
@@ -1027,8 +1060,17 @@ mod tests {
     use super::*;
     use crate::domain::song::DESCRIPTION_MAX;
 
-    /// Every page the router serves, in the order this module decides them.
-    const PAGES: [&str; 5] = [HOME, ROOT, songs::PATH, editor::PATH, support::PATH];
+    /// Every page whose `<head>` this module decides, in the order it decides
+    /// them. The pages that carry a path of their own — a song, an artist, a page
+    /// of the index — are decided by functions of their own and are not here.
+    const PAGES: [&str; 6] = [
+        HOME,
+        ROOT,
+        songs::PATH,
+        editor::PATH,
+        support::PATH,
+        terms::PATH,
+    ];
 
     /// `<title>` is the one field a search result leads with, and two URLs
     /// answering with the same one tells a crawler they are the same page. Three
@@ -1253,6 +1295,7 @@ mod tests {
             songs::PATH,
             editor::PATH,
             support::PATH,
+            terms::PATH,
             "/himene/ahani-e",
         ] {
             let links: Vec<(Lang, String)> = Lang::ALL
@@ -1330,16 +1373,35 @@ mod tests {
         }
     }
 
-    /// The create-song page is the one page kept out of an index; everything else
-    /// the router serves may be indexed, and a 404 never is.
+    /// Two pages are written not to be found, and both say so the same way: the
+    /// create-song form (step 12), and the terms page (step 46), which a reader
+    /// reaches from the footer.
+    ///
+    /// All three halves are asserted together because they are one decision —
+    /// `noindex`, and no canonical, and nothing for a snippet to quote. A
+    /// canonical URL on a page a crawler is told not to index names a preferred
+    /// address for nothing, and a card whose `og:url` is that address is the same
+    /// promise made to a different machine. Every other page may be indexed, and
+    /// a 404 never is.
     #[test]
-    fn only_the_create_song_page_is_kept_out_of_an_index() {
+    fn only_the_pages_written_not_to_be_found_are_kept_out_of_an_index() {
+        const KEPT_OUT: [&str; 2] = [editor::PATH, terms::PATH];
+
         for path in PAGES {
             assert_eq!(
                 site_head(path, Lang::Fr).noindex,
-                path == editor::PATH,
+                KEPT_OUT.contains(&path),
                 "{path}"
             );
+        }
+
+        for path in KEPT_OUT {
+            let head = site_head(path, Lang::Fr);
+
+            assert!(head.noindex, "{path}");
+            assert!(head.canonical.is_none(), "{path} names a canonical URL");
+            assert!(head.description.is_none(), "{path} offers a snippet");
+            assert!(head.social.is_none(), "{path} carries social cards");
         }
 
         assert!(not_found_head(Lang::Fr).noindex);

@@ -52,7 +52,7 @@ use topcoat::{
 };
 
 use crate::i18n::{self, Lang};
-use crate::pages::{artist, book, editor, home, retired, search, songs, support};
+use crate::pages::{artist, book, editor, home, retired, search, songs, support, terms};
 use crate::routes::negotiation;
 
 /// The prefix the language switcher's own address lives under.
@@ -381,6 +381,10 @@ fn with_query(path: String, query: &str) -> String {
 ///
 /// A retired or prefixed address is never one: it is answered by a `301` before
 /// this list is consulted. What is left is exactly the pages the router serves.
+/// A page added and forgotten here is a page served without `Vary`, which is how
+/// one reader's language reaches another — which is why step 46's page is in the
+/// list and why `.run/step46.sh` asserts the header on the live response instead
+/// of trusting it.
 fn is_page(path: &str) -> bool {
     path == home::PATH
         || path == home::ROOT
@@ -389,6 +393,7 @@ fn is_page(path: &str) -> bool {
         || path == book::PATH
         || path == search::PATH
         || path == support::PATH
+        || path == terms::PATH
         || artist::segment(path).is_some()
         || songs::page_segment(path).is_some()
         || negotiation::song_segment(path).is_some()
@@ -413,6 +418,7 @@ mod tests {
             book::PATH,
             search::PATH,
             support::PATH,
+            terms::PATH,
             artist::PREFIX,
             songs::PAGE_PREFIX,
             PATH,
@@ -522,6 +528,7 @@ mod tests {
             "/himene",
             "/paimi",
             "/tauturu",
+            terms::PATH,
             "/puta-himene",
             "/himene/ahani-e",
             "/himene/page/2",
@@ -640,6 +647,7 @@ mod tests {
             book::PATH,
             search::PATH,
             support::PATH,
+            terms::PATH,
             "/himene/ahani-e",
             "/himene/page/2",
             "/taata-himene/1kvm9y2tcplm43wgeuni",

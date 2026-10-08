@@ -25,6 +25,7 @@ pub mod search;
 pub mod song;
 pub mod songs;
 pub mod support;
+pub mod terms;
 
 // Every URL that matches nothing else.
 //

@@ -1107,6 +1107,41 @@ pub const SUPPORT_COPY: StaticClass = class!(
 );
 
 // ---------------------------------------------------------------------------
+// Terms page
+// ---------------------------------------------------------------------------
+
+/// The column the terms page's statements are read in.
+///
+/// The standfirst's measure and colour, and one step apart per paragraph: each
+/// statement is a separate promise about rights, and a reader who cannot see
+/// where one ends is a reader who cannot tell which sentence to quote. The
+/// spacing is the container's rather than each paragraph's, so a statement added
+/// to the list is spaced by the page and not by whoever writes the next one.
+///
+/// Centred like every other block of prose on this site — the measure is what
+/// keeps a line readable, and the margins are what keep that measure off the
+/// page's own edge.
+pub const TERMS_PROSE: StaticClass =
+    class!("mx-auto max-w-prose space-y-4 text-lg leading-8 text-mist-300 text-pretty");
+
+/// The "last updated" line at the foot of the terms page.
+///
+/// Quieter than the statements above it — a smaller, muted step — because it is
+/// a fact about the page rather than one of the claims on it, and set apart by
+/// one step of its own so it does not read as a seventh statement.
+pub const TERMS_UPDATED: StaticClass = class!("mt-10 text-center text-sm text-mist-500");
+
+/// The footer's link to the terms page.
+///
+/// Composed with [`LINK`], which carries the word's colour, underline and focus
+/// ring — this token is only where the link sits, and it adds nothing LINK would
+/// have to fight over. A block of its own under the support link rather than
+/// beside it on the same line: the two are different kinds of thing — a way to
+/// give, and a statement of rights — and a row that put them side by side would
+/// read as one control with two halves.
+pub const TERMS_LINK: StaticClass = class!("mt-3 block");
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -1433,6 +1468,9 @@ mod tests {
             // The footer's link to the support page: the shared link styling,
             // and the row's own shape around the drawing beside the word.
             ("footer support link", &LINK, &SUPPORT_LINK),
+            // The footer's link to the terms page: the same shared link styling,
+            // and the one step that puts it under the link above.
+            ("footer terms link", &LINK, &TERMS_LINK),
             // The share row's two links: the same shared link styling, and the
             // same drawing-beside-a-word shape (without the footer's margin).
             ("share link", &LINK, &SHARE_LINK),

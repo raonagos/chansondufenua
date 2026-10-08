@@ -465,11 +465,32 @@ pub enum Key {
     ArtistDescription,
     /// The support page's `<meta name="description">`.
     SupportDescription,
+    /// The terms page's heading, its `<title>`, and the footer's link to it.
+    ///
+    /// One key for the three: the page has one name, and a link that called it
+    /// something else would be a second name to keep true.
+    TermsTitle,
+    /// The line under it: what the site is.
+    TermsIntro,
+    /// Who hosts and edits the site.
+    TermsPublisher,
+    /// Whose the lyrics are — the site's, and not the site's.
+    TermsLyrics,
+    /// What the code is licensed under.
+    TermsCode,
+    /// What is *not* kept on the site.
+    TermsData,
+    /// A rights holder's way to have a song taken down.
+    TermsRemoval,
+    /// What to do about a lyric that is wrong.
+    TermsCorrections,
+    /// The label over the date the page was last changed.
+    TermsUpdated,
 }
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 59] = [
+    pub const ALL: [Key; 68] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -529,23 +550,38 @@ impl Key {
         Key::IndexDescription,
         Key::ArtistDescription,
         Key::SupportDescription,
+        Key::TermsTitle,
+        Key::TermsIntro,
+        Key::TermsPublisher,
+        Key::TermsLyrics,
+        Key::TermsCode,
+        Key::TermsData,
+        Key::TermsRemoval,
+        Key::TermsCorrections,
+        Key::TermsUpdated,
     ];
 
     /// The keys whose Tahitian is deliberately the English.
     ///
     /// Every other key is the chrome, and the chrome is a first pass written in
     /// all three languages. These are the maintainer's own prose — the front
-    /// page's sentences, the footer's, and the descriptions a search engine
-    /// reads — and the reviewer's rule for prose is the other way round: **where
-    /// there are no Tahitian words, serve the English**. So none of them has a
-    /// line in `locales/ty.toml`, the catalog's `ty → en → fr` order hands back
-    /// the English, and `every_key_is_translated_and_actually_differs` asserts
+    /// page's sentences, the footer's, the descriptions a search engine reads,
+    /// and (step 46) the terms page's statements about the site — and the
+    /// reviewer's rule for prose is the other way round: **where there are no
+    /// Tahitian words, serve the English**. So none of them has a line in
+    /// `locales/ty.toml`, the catalog's `ty → en → fr` order hands back the
+    /// English, and `every_key_is_translated_and_actually_differs` asserts
     /// exactly that rather than treating the fallback as a missing translation.
+    ///
+    /// The terms page's nine are prose for a second reason as well: they are
+    /// statements about who holds the rights to a lyric and who answers for one
+    /// that is wrong. Inventing a Tahitian sentence for them would be a claim
+    /// nobody has made, which is worse than serving a reader the English.
     ///
     /// A line added to `ty.toml` for one of these is served like any other and
     /// has to be removed from this list — which is what makes the list a claim
     /// about the shipped files rather than a switch.
-    pub const PROSE: [Key; 18] = [
+    pub const PROSE: [Key; 27] = [
         Key::HomeHeroSubtitle,
         Key::HomeCardSongsTitle,
         Key::HomeCardSongsBody,
@@ -564,6 +600,15 @@ impl Key {
         Key::IndexDescription,
         Key::ArtistDescription,
         Key::SupportDescription,
+        Key::TermsTitle,
+        Key::TermsIntro,
+        Key::TermsPublisher,
+        Key::TermsLyrics,
+        Key::TermsCode,
+        Key::TermsData,
+        Key::TermsRemoval,
+        Key::TermsCorrections,
+        Key::TermsUpdated,
     ];
 
     /// Whether this key's Tahitian is the English (see [`Key::PROSE`]).
@@ -639,6 +684,15 @@ impl Key {
             Key::IndexDescription => "index_description",
             Key::ArtistDescription => "artist_description",
             Key::SupportDescription => "support_description",
+            Key::TermsTitle => "terms_title",
+            Key::TermsIntro => "terms_intro",
+            Key::TermsPublisher => "terms_publisher",
+            Key::TermsLyrics => "terms_lyrics",
+            Key::TermsCode => "terms_code",
+            Key::TermsData => "terms_data",
+            Key::TermsRemoval => "terms_removal",
+            Key::TermsCorrections => "terms_corrections",
+            Key::TermsUpdated => "terms_updated",
         }
     }
 
@@ -876,6 +930,24 @@ mod tests {
         // for that reason: the French of every one of them is byte-for-byte what
         // v3 wrote, and the English beside it is new writing (see `Key::PROSE`).
 
+        // Step 46's nine: the terms page's own statements — who publishes the
+        // site, whose the lyrics are, what is not kept, how a right holder gets
+        // a song taken down, and what to do about a lyric that is wrong. Prose
+        // like step 36's, and they join it in `Key::PROSE`: the English is what a
+        // Tahitian reader is served, and a French sentence that nobody wrote
+        // would be a claim the site cannot make.
+        const PROSE_AT_STEP_46: [Key; 9] = [
+            Key::TermsTitle,
+            Key::TermsIntro,
+            Key::TermsPublisher,
+            Key::TermsLyrics,
+            Key::TermsCode,
+            Key::TermsData,
+            Key::TermsRemoval,
+            Key::TermsCorrections,
+            Key::TermsUpdated,
+        ];
+
         // Step 28's own work, and the only French in this test that is not
         // step 21's: the 404's body, the one line the "funny 404" step rewrote
         // on purpose. Pinned in all three languages because the joke is the
@@ -903,10 +975,11 @@ mod tests {
         // towards the catalog even though the table has one row per language.
         assert_eq!(NOT_FOUND_AT_STEP_28.len(), Lang::ALL.len());
 
-        // The prose is the third group and the last: step 36's eighteen keys,
-        // separate from the chrome because their Tahitian is the English. Every
-        // one of them is in `Key::PROSE`, which is what makes the French above a
-        // statement about the shipped files and not about a table in a test.
+        // The prose is the third group and the last: step 36's eighteen keys and
+        // step 46's nine, separate from the chrome because their Tahitian is the
+        // English. Every one of them is in `Key::PROSE`, which is what makes the
+        // French above a statement about the shipped files and not about a table
+        // in a test.
         const PROSE_AT_STEP_36: [Key; 18] = [
             Key::HomeHeroSubtitle,
             Key::HomeCardSongsTitle,
@@ -928,13 +1001,16 @@ mod tests {
             Key::SupportDescription,
         ];
 
-        for key in PROSE_AT_STEP_36 {
+        for key in PROSE_AT_STEP_36.into_iter().chain(PROSE_AT_STEP_46) {
             assert!(
                 key.falls_back_to_english(),
                 "{key:?} is prose but not listed as prose"
             );
         }
-        assert_eq!(PROSE_AT_STEP_36.len(), Key::PROSE.len());
+        assert_eq!(
+            PROSE_AT_STEP_36.len() + PROSE_AT_STEP_46.len(),
+            Key::PROSE.len()
+        );
         assert_eq!(
             Key::ALL.len(),
             FRENCH_AT_STEP_21.len()
@@ -943,11 +1019,13 @@ mod tests {
                 + ADDED_AT_STEP_42.len()
                 + 1
                 + PROSE_AT_STEP_36.len()
+                + PROSE_AT_STEP_46.len()
         );
         for added in ADDED_SINCE
             .into_iter()
             .chain(ADDED_AT_STEP_38)
             .chain(ADDED_AT_STEP_42)
+            .chain(PROSE_AT_STEP_46)
         {
             assert!(
                 !FRENCH_AT_STEP_21.iter().any(|(key, _)| *key == added),

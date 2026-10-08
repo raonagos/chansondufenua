@@ -80,3 +80,22 @@ footer_contributing = "Contribuer à ce projet"
 index_description = "Toutes les chansons du fenua : paroles et accords des chansons tahitiennes et polynésiennes."
 artist_description = " : paroles et accords de ses chansons, à retrouver sur Chanson du fenua."
 support_description = "Soutenir Chanson du fenua : ce site est gratuit, sans publicité — voici comment aider à payer son hébergement."
+
+# --- the terms page (step 46) ---
+#
+# The owner's own statements about the site — who publishes it, whose the lyrics
+# are, what happens to a lyric that is wrong. Prose like the block above, and in
+# `i18n::Key::PROSE` for the same reason: none of it has a `ty.toml` line, so a
+# Tahitian reader is served the English rather than an invented translation.
+#
+# `terms_title` is also the footer link's word: the page has one name, and a
+# second word for the same page would be a second thing to keep true.
+terms_title = "Mentions légales"
+terms_intro = "Chanson du fenua est un recueil de chansons de Polynésie française : les paroles, avec les accords écrits là où ils se jouent. Le catalogue est petit, public et sans but commercial."
+terms_publisher = "Le site est hébergé et édité par Rao Nagos."
+terms_lyrics = "Les paroles ne sont pas les nôtres : elles appartiennent à leurs auteurs."
+terms_code = "Le code du site est sous licence GPL-3.0."
+terms_data = "Aucune information sensible vous concernant n'est sauvegardée sur ce site."
+terms_removal = "Si vous détenez des droits sur une chanson et que vous souhaitez qu'elle soit retirée, écrivez à contact@chansondufenua.pf — ou à contact@rao-nagos.pf si la première adresse ne vous répond pas."
+terms_corrections = "Nous ne sommes pas responsables si une parole est erronée : demandez la correction, et elle est corrigée. Voilà."
+terms_updated = "Dernière mise à jour :"

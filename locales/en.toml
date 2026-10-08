@@ -74,3 +74,19 @@ footer_contributing = "Contributing to this project"
 index_description = "Every song of the fenua: lyrics and chords for Tahitian and Polynesian songs."
 artist_description = ": lyrics and chords for their songs, at Chanson du fenua."
 support_description = "Support Chanson du fenua: the site is free, with no advertising — here is how to help pay for its hosting."
+
+# --- the terms page (step 46) ---
+#
+# The owner's own statements about the site. Prose, so the Tahitian side of
+# these is this English (`i18n::Key::PROSE`): the words are his, and an invented
+# Tahitian sentence about who holds the rights to a lyric would be a claim
+# nobody made.
+terms_title = "Legal notice"
+terms_intro = "Chanson du fenua is a collection of French Polynesian songs: the lyrics, with the chords written where they are played. The catalogue is small, public and non-commercial."
+terms_publisher = "The site is hosted and edited by Rao Nagos."
+terms_lyrics = "The lyrics are not ours: they belong to their authors."
+terms_code = "The site's code is under the GPL-3.0 licence."
+terms_data = "No sensitive user information is backed up on this site."
+terms_removal = "If you hold the rights to a song and want it removed, write to contact@chansondufenua.pf — or to contact@rao-nagos.pf if the first address does not answer you."
+terms_corrections = "We are not responsible if a lyric is wrong: ask for the correction, and it is fixed."
+terms_updated = "Last updated:"
