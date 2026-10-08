@@ -696,6 +696,19 @@ pub const CHORDED: StaticClass = class!("relative leading-none");
 /// still reads as the accent without v3's washed-out look. On paper it becomes
 /// `tahiti-900`, 9.1:1 on white; left as `tahiti-200` a printed chord would be
 /// invisible.
+///
+/// **The accidental and the quality inside this box are slanted** — the chord
+/// module writes them in an `<i>`, which is the reviewer's "… in ital" + "ic
+/// tag", and the one place the site asks for a slanted text run. (The word is
+/// split for the reason `SLANTED` is: Tailwind scans this file's text, and the
+/// whole word is also a utility name.) No family here ships a slanted cut (see
+/// [`crate::ui::fonts`]), so the browser synthesises the oblique rather than a
+/// type designer drawing it: the same synthesis
+/// `every_weight_a_token_asks_for_is_a_face_that_ships` exists to keep out of
+/// *tokens*, taken here because the distinction it draws is the point of the
+/// chord — the root is what a language says, `#m7` is what every musician reads.
+/// It is markup, not a token, which is why no rule reaches the stylesheet for
+/// it.
 pub const CHORD: StaticClass = class!(
     "absolute top-auto bottom-full left-1/2 -translate-x-1/2 font-mono text-sm \
      leading-none whitespace-nowrap text-tahiti-200 print:text-tahiti-900"

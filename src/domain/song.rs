@@ -964,8 +964,9 @@ mod tests {
     }
 
     /// The Markdown form can be stepped like the page, and its chords keep the
-    /// canonical spelling: `Do dièse` is chrome, and a machine reading this wants
-    /// `C#`. At zero it is the document it has always been, byte for byte.
+    /// canonical spelling: a root read in the chrome's own words is chrome, and
+    /// a machine reading this wants `C#`. At zero it is the document it has
+    /// always been, byte for byte.
     #[test]
     fn markdown_transposes_without_renaming_a_chord() {
         let song = song_with(REAL_LYRICS);

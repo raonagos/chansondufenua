@@ -81,7 +81,7 @@ use sqlx::SqlitePool;
 use crate::db::{self, DbResult, SongOrder};
 use crate::domain::Song;
 use crate::domain::chord;
-use crate::i18n::{self, Key, Lang};
+use crate::i18n::{self, Key};
 use crate::pages::song::lyric_line;
 use crate::state;
 use crate::ui::theme;
@@ -284,8 +284,8 @@ pub async fn book(cx: &Cx) -> Result<impl View> {
 
 /// One chosen song: its title, its credits, and its whole lyric with the chords.
 ///
-/// French chrome names the chords in solfège on the sheet page, and it does here
-/// too — the same words for the same chords in the same language, from the same
+/// The chords are prepared here the way the sheet prepares them — the same words
+/// for the same chords in the same language, from the same
 /// [`chord::localised_line`] at the author's own offset. The Markdown and JSON
 /// forms of this page keep the canonical spelling, for the reason they do
 /// everywhere else: those are the forms a machine reads.
@@ -298,7 +298,7 @@ async fn chosen_sheet(cx: &Cx, sheet: Song) -> Result<impl View> {
     let lines = sheet
         .lyrics_lines()
         .into_iter()
-        .map(|line| chord::localised_line(line, 0, lang == Lang::Fr))
+        .map(|line| chord::localised_line(line, 0, lang))
         .collect::<Vec<_>>();
 
     Ok(view! {

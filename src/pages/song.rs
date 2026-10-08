@@ -42,7 +42,7 @@ use topcoat::{
 use crate::db;
 use crate::domain::chord;
 use crate::domain::song::{LyricLine, LyricSpan, Song};
-use crate::i18n::{self, Key, Lang};
+use crate::i18n::{self, Key};
 use crate::pages::artist;
 use crate::state;
 use crate::ui::theme;
@@ -113,15 +113,13 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
     // stored chords, so a step is a function of the sheet and the offset and
     // never of the step before it: at zero the author's spelling comes back
     // untouched, which is what makes stepping away and back land on the page the
-    // reader opened. French is the one chrome that names the chords in solfege;
-    // the other two languages read the canonical spelling. See
-    // `crate::domain::chord`.
+    // reader opened. The root is then read in the page's language and the
+    // accidental with the quality ride in an `<i>`; see `crate::domain::chord`.
     let offset = chord::offset(uri(cx).query().unwrap_or(""));
-    let french = lang == Lang::Fr;
     let lines = sheet
         .lyrics_lines()
         .into_iter()
-        .map(|line| chord::localised_line(line, offset, french))
+        .map(|line| chord::localised_line(line, offset, lang))
         .collect::<Vec<_>>();
     let transpose = i18n::text(lang, Key::Transpose);
     let scroll = i18n::text(lang, Key::Scroll);
@@ -350,6 +348,14 @@ const AUTOSCROLL_JS: &str = r##"
 /// A chord keeps v3's `data-nosnippet`. That attribute is not decoration: a
 /// search engine that quotes the page prints the chords inline with the words,
 /// where they read as typos.
+///
+/// The label is written **unescaped**, because it is markup: [`chord::label`]
+/// puts the accidental and the quality in an `<i>` tag, which is what the
+/// reviewer asked for — the root is the word the language says, and `#m7` is the
+/// same four characters on every sheet. It is the one string in this component
+/// that is not escaped, and it is safe because the chord module writes every tag
+/// in it itself and escapes every character of the label it did not write. See
+/// [`crate::domain::chord`].
 #[component]
 pub async fn lyric_line(line: LyricLine) -> Result<impl View> {
     let blank = line.is_empty();
@@ -361,7 +367,7 @@ pub async fn lyric_line(line: LyricLine) -> Result<impl View> {
                 match chunk {
                     Chunk::Text(text) => { (text) },
                     Chunk::Syllable { anchor, chord } => {
-                        <span class=(theme::CHORDED)>(anchor)<sup class=(theme::CHORD) data-nosnippet="true">(chord)</sup></span>
+                        <span class=(theme::CHORDED)>(anchor)<sup class=(theme::CHORD) data-nosnippet="true">(Unescaped::new_unchecked(chord))</sup></span>
                     },
                 }
             }
