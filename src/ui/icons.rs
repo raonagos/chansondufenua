@@ -1,4 +1,5 @@
-//! The chain marks on the support page — `/tauturu`.
+//! The site's own drawings: the chain marks on the support page — `/tauturu` —
+//! and the heart the footer's link to that page carries.
 //!
 //! Six marks, one per chain the site accepts support on, drawn here as geometry:
 //! a 20×20 viewBox, one colour — `currentColor`, so a mark follows the theme the
@@ -15,6 +16,15 @@
 //! card. `pages::support`'s tests fail if an entry grows a mark whose name its
 //! own label does not contain, so an unlabelled shape cannot ship, and no mark
 //! can be the only place a chain is named.
+//!
+//! # One drawing that is not a chain mark
+//!
+//! [`DONATE`] is the footer's link to `/tauturu` — *support the site*, which the
+//! reviewer asked for "hiding on an icon and the text `donate` … `don` … or
+//! `tautururaa`". It is drawn by the rules above: a box, one colour that follows
+//! the theme, `aria-hidden`, and not one word of its own. Its meaning is the
+//! catalog's word beside it (`Key::FooterDonate`), in the page's own language,
+//! which is why a drawing here never has to be translated.
 //!
 //! # Why the markup is a string
 //!
@@ -106,6 +116,21 @@ const AVALANCHE: &str = r#"<svg viewBox="0 0 20 20" width="20" height="20" aria-
 
 /// Solana's three slanted bars, cut the way the chain's mark cuts them.
 const SOLANA: &str = r#"<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M6.6 4.2h9.4l-2.6 2.3H4Z"/><path d="M4 9h9.4l-2.6 2.3H1.4Z"/><path d="M6.6 13.8h9.4l-2.6 2.3H4Z"/></svg>"#;
+
+/// The heart the footer's link to the support page is drawn with.
+///
+/// A heart is the one shape a reader already reads as *give*, and it is here
+/// rather than in a page module because it is a drawing and not a page: the same
+/// box the marks use, the same `currentColor` that follows the theme, the same
+/// `aria-hidden`, and nothing in it a reader could be asked to translate.
+///
+/// Two semicircles and one point: each lobe is one arc on a circle a radius from
+/// the middle, and the two sides are straight lines that meet at the point
+/// below them, so the whole shape is four numbers and nothing is free-hand. It
+/// is a little smaller than a mark, because the word it sits beside is
+/// footer-sized text rather than a card's heading; the viewBox is the marks'
+/// own and the size attributes scale it.
+pub const DONATE: &str = r#"<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M10 17.2 3.6 8a3.2 3.2 0 0 1 6.4 0 3.2 3.2 0 0 1 6.4 0Z"/></svg>"#;
 
 #[cfg(test)]
 mod tests {
@@ -227,5 +252,42 @@ mod tests {
                 "Solana"
             ]
         );
+    }
+
+    /// The footer's heart is the same kind of drawing a mark is, by the same
+    /// rules: a closed `<svg>` of the agreed box, hidden from assistive
+    /// technology, one colour that follows the theme, geometry and nothing else
+    /// — no words of its own, no referenced file, no class — and every number in
+    /// it inside the box it declares.
+    ///
+    /// It is also not a mark: a footer that drew a shape one of the six chain
+    /// cards draws would be a drawing of a coin with nothing saying which — the
+    /// one thing this module's contract forbids.
+    #[test]
+    fn the_footer_heart_is_a_decoration_the_way_a_mark_is() {
+        assert!(DONATE.starts_with("<svg "), "{DONATE}");
+        assert!(DONATE.ends_with("</svg>"), "{DONATE}");
+        assert!(DONATE.contains("viewBox=\"0 0 20 20\""), "{DONATE}");
+        assert!(DONATE.contains("aria-hidden=\"true\""), "{DONATE}");
+        assert!(DONATE.contains("fill=\"currentColor\""), "{DONATE}");
+
+        for banned in [
+            "<title", "<text", "<use", "<image", "href", "xlink", "url(", "http", "class=",
+        ] {
+            assert!(!DONATE.contains(banned), "the heart contains {banned:?}");
+        }
+
+        let numbers = path_numbers(DONATE);
+        assert!(!numbers.is_empty(), "the heart draws nothing");
+        for number in numbers {
+            assert!(
+                number.abs() <= 20.0,
+                "the heart draws {number}, larger than its 0..20 box"
+            );
+        }
+
+        for mark in ALL {
+            assert_ne!(DONATE, mark.svg(), "the heart is {mark}'s own shape");
+        }
     }
 }

@@ -42,6 +42,10 @@ support_intro = "This site is free, with no advertising. To help pay for its hos
 support_copy = "Copy"
 support_copied = "Copied"
 
+# The footer's link to the support page (step 38): the word beside the
+# heart, which is the link's whole meaning — the drawing says nothing.
+footer_donate = "Donate"
+
 # --- the site's own prose (step 36) ---
 #
 # Not chrome: the maintainer's sentences. This file is where an English reader

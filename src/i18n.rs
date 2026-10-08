@@ -442,6 +442,13 @@ pub enum Key {
     /// writes two readable sentences instead of four fragments that have to fit
     /// between them.
     FooterContributing,
+    /// The word beside the footer's link to the support page — the icon's text.
+    ///
+    /// The reviewer's own three: `don` in French, `donate` in English,
+    /// `tautururaa` in Tahitian. Chrome and not prose, which is why it carries a
+    /// `ty.toml` line: he gave the Tahitian himself, so the fallback rule that
+    /// applies to prose does not apply to it (see [`Key::PROSE`]).
+    FooterDonate,
     /// The song index's `<meta name="description">`.
     IndexDescription,
     /// The tail of an artist page's `<meta name="description">` — the artist's
@@ -453,7 +460,7 @@ pub enum Key {
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 57] = [
+    pub const ALL: [Key; 58] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -508,6 +515,7 @@ impl Key {
         Key::HomeTagline,
         Key::FooterRights,
         Key::FooterContributing,
+        Key::FooterDonate,
         Key::IndexDescription,
         Key::ArtistDescription,
         Key::SupportDescription,
@@ -616,6 +624,7 @@ impl Key {
             Key::HomeTagline => "home_tagline",
             Key::FooterRights => "footer_rights",
             Key::FooterContributing => "footer_contributing",
+            Key::FooterDonate => "footer_donate",
             Key::IndexDescription => "index_description",
             Key::ArtistDescription => "artist_description",
             Key::SupportDescription => "support_description",
@@ -837,6 +846,12 @@ mod tests {
             Key::SupportCopied,
         ];
 
+        // Step 38's one: the footer's link to the support page, which the
+        // reviewer asked for as an icon and a word. Chrome, not prose — he gave
+        // the Tahitian himself (`tautururaa`), so it is written in all three
+        // files instead of falling back to English like the prose does.
+        const ADDED_AT_STEP_38: [Key; 1] = [Key::FooterDonate];
+
         // Step 36's eighteen: the same move, for the maintainer's own prose —
         // the front page's sentences, the footer's two clauses, and the
         // descriptions a search engine reads. Not chrome, and pinned separately
@@ -904,9 +919,13 @@ mod tests {
         assert_eq!(PROSE_AT_STEP_36.len(), Key::PROSE.len());
         assert_eq!(
             Key::ALL.len(),
-            FRENCH_AT_STEP_21.len() + ADDED_SINCE.len() + 1 + PROSE_AT_STEP_36.len()
+            FRENCH_AT_STEP_21.len()
+                + ADDED_SINCE.len()
+                + ADDED_AT_STEP_38.len()
+                + 1
+                + PROSE_AT_STEP_36.len()
         );
-        for added in ADDED_SINCE {
+        for added in ADDED_SINCE.into_iter().chain(ADDED_AT_STEP_38) {
             assert!(
                 !FRENCH_AT_STEP_21.iter().any(|(key, _)| *key == added),
                 "{added:?} is not new chrome"

@@ -51,7 +51,7 @@ use crate::pages::{
 };
 use crate::routes::{language, negotiation, og};
 use crate::state;
-use crate::ui::{assets, flags, fonts, theme};
+use crate::ui::{assets, flags, fonts, icons, theme};
 
 /// The site's name — v3's `<Title text="Chanson du Fenua"/>`.
 ///
@@ -965,15 +965,25 @@ fn names_the_index(path: &str) -> bool {
 }
 
 /// The site footer. v3's sentence, split into its two clauses so that each can
-/// be written in the page's own language.
+/// be written in the page's own language — and, under it, the way to the page
+/// that asks for support.
 ///
-/// It used to be one literal string — French rights, then English words around a
-/// link to the project — and it stayed that way on purpose, because a single
-/// sentence with two links spliced into the middle of it is not four catalog
-/// fragments. It is two *clauses*, though, and each one is a whole phrase with one
-/// link in it: [`Key::FooterRights`] and [`Key::FooterContributing`], each written
-/// once per language, and the markup does no more than put the year and the two
-/// anchors between them.
+/// The sentence used to be one literal string — French rights, then English words
+/// around a link to the project — and it stayed that way on purpose, because a
+/// single sentence with two links spliced into the middle of it is not four
+/// catalog fragments. It is two *clauses*, though, and each one is a whole phrase
+/// with one link in it: [`Key::FooterRights`] and [`Key::FooterContributing`],
+/// each written once per language, and the markup does no more than put the year
+/// and the two anchors between them.
+///
+/// The support link is the reviewer's "the link to the support page would be add
+/// to the footer section, hiding on an icon and the text `donate` … `don` … or
+/// `tautururaa`": one `<a>` to [`support::PATH`], a drawing beside a word. The
+/// drawing is [`icons::DONATE`] and is `aria-hidden` — decoration has no
+/// accessible name, and the link is named by the word the catalog supplies. It
+/// is a real link to a page of this site, on every page, with no script and
+/// nothing fetched from a third party: a reader with JavaScript off can follow
+/// it as easily as any other link, which is the whole of what it has to do.
 #[component]
 pub async fn footer(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
@@ -1002,6 +1012,10 @@ pub async fn footer(cx: &Cx) -> Result<impl View> {
                 </a>
                 "."
             </p>
+            <a href=(support::PATH) class=(class!(theme::LINK, theme::SUPPORT_LINK))>
+                (Unescaped::new_unchecked(icons::DONATE))
+                (i18n::text(lang, Key::FooterDonate))
+            </a>
         </footer>
     })
 }

@@ -292,6 +292,22 @@ pub const PAGE: StaticClass = class!("max-md:px-0 max-md:py-0 px-8 py-12");
 pub const FOOTER: StaticClass =
     class!("border-t border-ink-700 p-8 text-center text-sm text-mist-500 print:hidden");
 
+/// The footer's link to the support page: a heart, and the word beside it.
+///
+/// Composed with [`LINK`], which carries the word's colour, underline and focus
+/// ring — this token is only the row's shape, and it adds nothing LINK would
+/// have to fight over. Two things it says: the drawing and the word sit on one
+/// line with a gap between them rather than on two, and the link is set apart
+/// from the sentence above it by the one margin that is this link's own. An
+/// inline flex box, because that is what holds an icon and a word on one
+/// baseline; the footer's own centring applies to it like any other inline
+/// content.
+///
+/// The gap is written as a flex gap rather than a space in the markup: the
+/// two halves are an element and a text node, and whitespace between them is the
+/// browser's to collapse.
+pub const SUPPORT_LINK: StaticClass = class!("mt-6 inline-flex items-center gap-2");
+
 // ---------------------------------------------------------------------------
 // Typography
 // ---------------------------------------------------------------------------
@@ -1055,6 +1071,7 @@ mod tests {
         MAIN,
         PAGE,
         FOOTER,
+        SUPPORT_LINK,
         H1,
         LEAD,
         LINK,
@@ -1331,6 +1348,9 @@ mod tests {
             // one focus rule, which is a state and never a rest state.
             ("header search field", &SEARCH_INPUT, &FOCUS),
             ("header search button", &SEARCH_SUBMIT, &FOCUS),
+            // The footer's link to the support page: the shared link styling,
+            // and the row's own shape around the drawing beside the word.
+            ("footer support link", &LINK, &SUPPORT_LINK),
         ];
 
         for (label, one, other) in pairs {

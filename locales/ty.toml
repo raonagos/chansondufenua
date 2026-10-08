@@ -48,6 +48,10 @@ support_intro = "'Aita e moni e titauhia i teie 'api. 'A tauturu mai, i raro nei
 support_copy = "Rave"
 support_copied = "'Ua rave"
 
+# The footer's link to the support page (step 38): the word beside the
+# heart, which is the link's whole meaning — the drawing says nothing.
+footer_donate = "Tautururaa"
+
 # The site's own prose — the front page's sentences, the footer's two clauses and
 # the descriptions a search engine reads — has no line here, on purpose: where
 # there are no Tahitian words the site serves the English (`i18n::Key::PROSE`).
