@@ -6,6 +6,7 @@
 //! no build step beyond Tailwind's own.
 
 pub mod assets;
+pub mod flags;
 pub mod fonts;
 pub mod icons;
 pub mod layout;

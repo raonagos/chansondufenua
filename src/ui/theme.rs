@@ -147,7 +147,8 @@ pub const NAV_LINK: StaticClass =
 pub const NAV_LINK_CURRENT: StaticClass =
     class!("text-mist-100 underline decoration-tahiti-400 decoration-2 underline-offset-8");
 
-/// The language switcher: one link per language, in the header of every page.
+/// The language switcher: a globe that opens the flag list, in the header of
+/// every page.
 ///
 /// **In the header row, not inside [`NAV`].** The nav below `md` is a disclosure
 /// with a fixed open height, and a third line inside it would either overflow
@@ -155,28 +156,77 @@ pub const NAV_LINK_CURRENT: StaticClass =
 /// on every width, always drawn, and needs no script to reach. It is chrome, so
 /// [`HEADER`]'s `print:hidden` already keeps it out of a printed songbook.
 ///
-/// The colour lives on the container, for the reason [`NAV`]'s does: a link is
-/// always composed with one of two colour states, and two colour utilities in
-/// one class list are resolved by stylesheet order rather than by intent.
+/// The colour lives on the container, for the reason [`NAV`]'s does: the summary
+/// is composed with a colour state of its own, and two colour utilities in one
+/// class list are resolved by stylesheet order rather than by intent. The globe
+/// is drawn in `currentColor`, so it takes this value too.
+///
+/// `relative` because the flag list hangs from this box: the nav is what does not
+/// move when the disclosure opens, so the list is positioned against it rather
+/// than against the header.
 ///
 /// `flex-none` rather than the more familiar no-shrink utility: that one's name
 /// contains the text of a colour this palette does not define, and
 /// `every_colour_used_by_a_token_exists` reads class *names* as text — it would
 /// read that utility as `ink-0` and fail.
 pub const LANGUAGE_SWITCH: StaticClass =
-    class!("mr-3 md:mr-6 flex flex-none items-center gap-2 md:gap-3 text-sm text-mist-300");
+    class!("relative mr-3 md:mr-6 flex flex-none items-center text-sm text-mist-300");
 
-/// A language link. Layout and motion only — the colour comes from
-/// [`LANGUAGE_SWITCH`].
-pub const LANGUAGE_LINK: StaticClass = class!("transition-colors hover:text-mist-100");
+/// The control that opens the flag list: the globe, and the word that names it.
+///
+/// A `<summary>`, so the disclosure is the browser's own and needs no script:
+/// closed it shows the globe, and open it heads the list below. Its name is
+/// [`VISUALLY_HIDDEN`] — a drawing cannot be read aloud, so the control is named
+/// by the catalog's word for *language*, in the page's own language.
+///
+/// `cursor-pointer` because a `<summary>` is a control and does not say so with a
+/// pointer on its own. `list-none` and the WebKit rule remove the browser's
+/// marker: the globe is this design's affordance, and a second, browser-styled
+/// one beside it would be a triangle nothing here chose. The rule is an arbitrary
+/// variant because the marker was never a class of ours to name.
+pub const LANGUAGE_SUMMARY: StaticClass = class!(
+    "flex cursor-pointer list-none items-center transition-colors hover:text-mist-100 \
+     [&::-webkit-details-marker]:hidden"
+);
+
+/// The flag list: one flag per language, hanging under the summary.
+///
+/// Composed with [`CARD`], the site's one raised panel, so the list is the same
+/// surface as everything else that floats over a page; this token adds where it
+/// sits and how the flags are stacked. `right-0` because the switcher is at the
+/// right of the header — a list aligned to its left edge would hang off the page
+/// on a phone — and the z-index clears the header's, where the mobile nav's own
+/// box reaches up beside it.
+///
+/// The padding is this token's rather than [`CARD`]'s for [`CARD_ROOMY`]'s
+/// reason: the panel is the surface and the padding is chosen where it is placed.
+pub const LANGUAGE_MENU: StaticClass =
+    class!("absolute right-0 top-full z-50 mt-2 flex flex-col items-end gap-2 p-2");
+
+/// One flag in the list.
+///
+/// A bare box: the drawing is the whole of it. `rounded-xs` is there for the
+/// current language's ring, so the ring follows the flag's own corner instead of
+/// drawing a rectangle around it.
+pub const LANGUAGE_FLAG: StaticClass =
+    class!("block rounded-xs transition-opacity hover:opacity-80");
 
 /// The language the page is already in.
 ///
-/// Underlined in the accent, not merely recoloured — the same reason
-/// [`NAV_LINK_CURRENT`] is: colour is already spoken for by the hover state, and
-/// a reader who cannot tell two shades apart still has to find the current one.
-pub const LANGUAGE_LINK_CURRENT: StaticClass =
-    class!("text-mist-100 underline decoration-tahiti-400 decoration-2 underline-offset-4");
+/// **A ring, not the underline [`NAV_LINK_CURRENT`] uses.** A link's content is a
+/// drawing now, and `text-decoration` has no text to underline — marked the old
+/// way, the current language would be marked invisibly, which is the failure
+/// [`NAV_LINK_CURRENT`]'s own comment warns about. The accent is the one the
+/// nav's underline and every focus ring here use, so the three agree.
+pub const LANGUAGE_FLAG_CURRENT: StaticClass = class!("ring-2 ring-tahiti-400");
+
+/// Text for assistive technology only: the words that name a drawing.
+///
+/// Tailwind's own visually-hidden utility, named once here so that no view spells
+/// a class — [`NAV_TOGGLE`] uses the same one to hide a checkbox that is still
+/// focusable, and the switcher uses it for the two names its pictures cannot
+/// carry: the control's, and each flag's.
+pub const VISUALLY_HIDDEN: StaticClass = class!("sr-only");
 
 // ---------------------------------------------------------------------------
 // Page and footer
@@ -950,8 +1000,11 @@ mod tests {
         NAV_LINK,
         NAV_LINK_CURRENT,
         LANGUAGE_SWITCH,
-        LANGUAGE_LINK,
-        LANGUAGE_LINK_CURRENT,
+        LANGUAGE_SUMMARY,
+        LANGUAGE_MENU,
+        LANGUAGE_FLAG,
+        LANGUAGE_FLAG_CURRENT,
+        VISUALLY_HIDDEN,
         MAIN,
         PAGE,
         FOOTER,
@@ -1222,6 +1275,11 @@ mod tests {
             // The pagination nav and its links: the container owns the layout
             // and the print hide, each link owns its own box.
             ("pagination nav", &PAGINATION, &PAGINATION_LINK),
+            // The switcher's list: the raised panel, and the position and
+            // stacking rule that hangs it under the summary.
+            ("language menu", &CARD, &LANGUAGE_MENU),
+            // A flag and the ring that marks the current one.
+            ("language flag", &LANGUAGE_FLAG, &LANGUAGE_FLAG_CURRENT),
         ];
 
         for (label, one, other) in pairs {

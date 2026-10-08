@@ -16,10 +16,11 @@
 //! * the document declares which language it is in, because the shell is where
 //!   the chrome's words live. `crate::i18n` decides the language; this file only
 //!   asks for the strings, and
-//! * the three languages are also a visible switcher — three plain links in the
-//!   header, in the served HTML of every page. Choosing one sets a cookie and
-//!   comes back to the same page, so the choice is a navigation a reader can make
-//!   with no script at all, and
+//! * the three languages are also a visible switcher — a globe that opens a flag
+//!   per language, in the header of the served HTML of every page. Choosing one
+//!   sets a cookie and comes back to the same page, and the list opens and closes
+//!   on its own: the control is a `<details>`, so the whole switcher is a
+//!   navigation a reader can make with no script at all, and
 //! * the three images the browser fetches are embedded in the binary and served
 //!   from content-hashed URLs, rather than handed out of a static directory the
 //!   way v3's web server did it. v3's own files, under a URL that cannot go
@@ -50,7 +51,7 @@ use crate::pages::{
 };
 use crate::routes::{language, negotiation, og};
 use crate::state;
-use crate::ui::{assets, fonts, theme};
+use crate::ui::{assets, flags, fonts, theme};
 
 /// The site's name — v3's `<Title text="Chanson du Fenua"/>`.
 ///
@@ -793,25 +794,32 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
     })
 }
 
-/// The language switcher: this page, in each of the site's three languages.
+/// The language switcher: this page, in each of the site's three languages — a
+/// globe that opens a flag per language.
 ///
 /// Three real links with no script anywhere near them, and since v4.2 they are
 /// not three addresses of the page — a page has one address — but three
 /// *choices*: each link names the language and carries the page the reader is on
 /// (see [`language::switch`]), and the route behind it sets the cookie and sends
 /// the reader back to the same page written in that language. With JavaScript
-/// off it is a full navigation like any other; the cookie is what makes the
-/// choice stick for the pages that follow.
+/// off the list still opens: the control is a `<details>` and the browser toggles
+/// it, so the whole switcher is a navigation a reader can make with nothing
+/// running.
+///
+/// **A flag per language, and the flags are drawings** ([`flags`]) rather than
+/// the letters that spell a flag on a machine whose fonts have them: the same
+/// page has to look the same on a reader's Chromium and on their phone. The
+/// drawings are `aria-hidden`; the words are still there, [`VISUALLY_HIDDEN`], so
+/// a screen reader reads a language and not a picture.
 ///
 /// `hreflang` says which language a link leads to and `lang` says which language
-/// its own label is written in — the pair is what lets a screen reader say *Reo
+/// its own name is written in — the pair is what lets a screen reader say *Reo
 /// Tahiti* in Tahitian while reading an English page.
 ///
-/// The current language is a link like the others. A switcher that turns it into
-/// plain text reads as "you cannot go here", and following it re-states the
-/// language the reader is already reading — which is what a reader does after a
-/// cookie went missing. The one difference is `aria-current`, which is what tells
-/// a reader which of the three they are on when the underline is not enough.
+/// The current language is a link like the others, marked with `aria-current` and
+/// a ring. A switcher that turns it into plain text reads as "you cannot go
+/// here", and following it re-states the language the reader is already reading —
+/// which is what a reader does after a cookie went missing.
 #[component]
 pub async fn language_switcher(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
@@ -822,21 +830,36 @@ pub async fn language_switcher(cx: &Cx) -> Result<impl View> {
 
     Ok(view! {
         <nav class=(theme::LANGUAGE_SWITCH) aria-label=(i18n::text(lang, Key::Language))>
-            for target in Lang::ALL {
-                <a
-                    href=(language::switch(target, &next))
-                    hreflang=(target.code())
-                    lang=(target.code())
-                    aria-current=((target == lang).then_some("true"))
-                    class=(class!(
-                        theme::LANGUAGE_LINK,
-                        theme::FOCUS,
-                        theme::LANGUAGE_LINK_CURRENT if target == lang,
-                    ))
-                >
-                    (target.name())
-                </a>
-            }
+            // The disclosure: the globe is the control, the word beside it names
+            // it for a reader who cannot see the globe, and the list below is
+            // what it opens. No `open` attribute: the list starts closed, which
+            // is the state a reader who does not want it should find it in.
+            <details>
+                <summary class=(theme::LANGUAGE_SUMMARY)>
+                    (Unescaped::new_unchecked(flags::GLOBE))
+                    <span class=(theme::VISUALLY_HIDDEN)>
+                        (i18n::text(lang, Key::Language))
+                    </span>
+                </summary>
+                <div class=(class!(theme::LANGUAGE_MENU, theme::CARD))>
+                    for target in Lang::ALL {
+                        <a
+                            href=(language::switch(target, &next))
+                            hreflang=(target.code())
+                            lang=(target.code())
+                            aria-current=((target == lang).then_some("true"))
+                            class=(class!(
+                                theme::LANGUAGE_FLAG,
+                                theme::FOCUS,
+                                theme::LANGUAGE_FLAG_CURRENT if target == lang,
+                            ))
+                        >
+                            (Unescaped::new_unchecked(flags::svg(target)))
+                            <span class=(theme::VISUALLY_HIDDEN)>(target.name())</span>
+                        </a>
+                    }
+                </div>
+            </details>
         </nav>
     })
 }
