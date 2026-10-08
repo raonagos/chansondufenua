@@ -68,10 +68,18 @@ pub const GLOBE: &str = r##"<svg viewBox="0 0 20 20" width="18" height="18" aria
 const FRANCE: &str = r##"<svg viewBox="0 0 24 16" width="30" height="20" aria-hidden="true"><rect width="8" height="16" fill="#002395"/><rect x="8" width="8" height="16" fill="#ffffff"/><rect x="16" width="8" height="16" fill="#ed2939"/></svg>"##;
 
 /// French Polynesia: the red, white and red bands, with the emblem's disc in the
-/// middle — a sail over the water line, drawn as two shapes rather than copied
-/// from the country's own artwork. The disc is what tells this flag from the red
-/// and white bands it would otherwise share with another country's.
-const FRENCH_POLYNESIA: &str = r##"<svg viewBox="0 0 24 16" width="30" height="20" aria-hidden="true"><rect width="24" height="5.4" fill="#ce1126"/><rect y="5.4" width="24" height="5.2" fill="#ffffff"/><rect y="10.6" width="24" height="5.4" fill="#ce1126"/><circle cx="12" cy="8" r="4.4" fill="#0b3f87"/><circle cx="12" cy="8" r="3.6" fill="#ffffff"/><path d="M9.4 9.6h5.2" stroke="#0b3f87" stroke-width="0.9"/><path d="M12 4.9 13.8 9h-3.6Z" fill="#ce1126"/></svg>"##;
+/// middle of them — the pahi under sail, the sea below it, and the five stars of
+/// the five archipelagos. The disc is what tells this flag from the red and white
+/// bands it would otherwise share with another country's; the colours are the
+/// emblem's own, and the disc stays inside the white band, where the artwork keeps
+/// it.
+///
+/// Drawn for the size it is seen at rather than for the artwork it comes from. On
+/// the page the disc is under seven pixels across, so the sea is one lens of blue,
+/// the pahi is one orange sail over one dark hull line, and each of the five stars
+/// is one dot: a traced star, a traced sail and a traced wave would be the same
+/// pixels smeared, which is what "it renders ugly" was.
+const FRENCH_POLYNESIA: &str = r##"<svg viewBox="0 0 24 16" width="30" height="20" aria-hidden="true"><rect width="24" height="5.333" fill="#ce1126"/><rect y="5.333" width="24" height="5.334" fill="#ffffff"/><rect y="10.667" width="24" height="5.333" fill="#ce1126"/><path d="M9.5 8.9c0.07 1.05 1.19 1.77 2.5 1.77s2.43 -0.72 2.5 -1.77z" fill="#083e9d"/><path d="M10.4 9.4h3.2" stroke="#630810" stroke-width="0.6"/><path d="M12 5.6 13.5 7.5h-3z" fill="#ff9d11" stroke="#ce1126" stroke-width="0.5"/><circle cx="10.2" cy="8.25" r="0.28" fill="#630810"/><circle cx="11.1" cy="8.25" r="0.28" fill="#630810"/><circle cx="12" cy="8.25" r="0.28" fill="#630810"/><circle cx="12.9" cy="8.25" r="0.28" fill="#630810"/><circle cx="13.8" cy="8.25" r="0.28" fill="#630810"/></svg>"##;
 
 /// The United Kingdom: the blue field, the white saltire with the red one over
 /// it, and the white cross with the red cross over that — the four strokes the
