@@ -689,9 +689,9 @@ fn search_document(needle: &str, found: &search::Results, lang: Lang, query: &st
 ///
 /// The same content the HTML page carries, in the same order: the hero, the
 /// three cards, the synopsis, the two tables and the closing block. The prose is
-/// [`home::copy`]'s, which is what the HTML renders, so the two cannot drift;
-/// the two button labels are chrome and come from [`crate::i18n`] like the
-/// page's.
+/// [`home::copy`]'s, in the language this response is written in, so the two
+/// forms of the page cannot disagree about a word; the two button labels are
+/// chrome and come from [`crate::i18n`] like the page's.
 ///
 /// **The tables list titles, not lyric lines.** The HTML's newest table leads
 /// with the lyric because it can truncate it to one line with a utility class;
@@ -705,24 +705,27 @@ async fn home_document(cx: &Cx, lang: Lang) -> Result<String> {
     let most_viewed = db::songs(pool, SongOrder::MostViewed, Some(home::ROWS)).await?;
 
     let mut out = format!("# {}\n\n", home::copy::HERO_TITLE);
-    out.push_str(&format!("_{}_\n\n", home::copy::HERO_SUBTITLE));
+    out.push_str(&format!("_{}_\n\n", home::copy::hero_subtitle(lang)));
     out.push_str(&format!(
         "[{}]({})\n\n",
         i18n::text(lang, Key::HomeDiscover),
         i18n::absolute(songs::PATH)
     ));
 
-    for (title, text) in home::copy::CARDS {
+    for (title, text) in home::copy::cards(lang) {
         out.push_str(&format!("## {title}\n\n{text}\n\n"));
     }
 
-    out.push_str(&format!("{}\n\n", home::copy::SYNOPSIS));
-    out.push_str(&format!("## {}\n\n", home::copy::TABLE_LATEST));
+    out.push_str(&format!("{}\n\n", home::copy::synopsis(lang)));
+    out.push_str(&format!("## {}\n\n", home::copy::table_latest(lang)));
     out.push_str(&song_list(&latest));
-    out.push_str(&format!("\n\n## {}\n\n", home::copy::TABLE_MOST_VIEWED));
+    out.push_str(&format!(
+        "\n\n## {}\n\n",
+        home::copy::table_most_viewed(lang)
+    ));
     out.push_str(&song_list(&most_viewed));
-    out.push_str(&format!("\n\n## {}\n\n", home::copy::FOOT_TITLE));
-    out.push_str(&format!("{}\n\n", home::copy::FOOT_TEXT));
+    out.push_str(&format!("\n\n## {}\n\n", home::copy::foot_title(lang)));
+    out.push_str(&format!("{}\n\n", home::copy::foot_text(lang)));
     // The two closing buttons. The first is a brand name and is not translated;
     // the second is the create-song page's label.
     out.push_str(&format!(

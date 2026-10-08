@@ -48,3 +48,27 @@ support_title = "Soutenir le site"
 support_intro = "Ce site est gratuit, sans publicité. Pour aider à payer son hébergement, voici comment."
 support_copy = "Copier"
 support_copied = "Copié"
+
+# --- the site's own prose (step 36) ---
+#
+# Not chrome: the maintainer's sentences, translated once into English. There is
+# no `ty.toml` line for any of these, deliberately — `i18n::Key::PROSE` is the
+# list, and the catalog serves the English where the Tahitian is silent.
+home_hero_subtitle = "L'élégance de la musique polynésienne"
+home_card_songs_title = "Chansons exquises"
+home_card_songs_body = "Plongez dans une collection raffinée de chansons tahitiennes, alliant tradition et modernité."
+home_card_lyrics_title = "Paroles envoûtantes"
+home_card_lyrics_body = "Laissez-vous séduire par la poésie des paroles, une fenêtre sur l'âme tahitienne."
+home_card_chords_title = "Harmonies divines"
+home_card_chords_body = "Maîtrisez l'art des accords et élevez votre musique vers de nouveaux sommets."
+home_synopsis = "Découvrez un monde musical unique où l'art des accords et la maîtrise des mélodies élèvent votre musique vers de nouveaux sommets. Laissez-vous séduire par la poésie des paroles, véritable fenêtre sur l'âme tahitienne, qui vous transporte dans un voyage lyrique et émouvant. Plongez dans une collection raffinée de chansons tahitiennes, savamment sélectionnées pour allier tradition et modernité, offrant une expérience musicale enrichissante et inoubliable. Découvrez des mélodies envoûtantes et des rythmes captivants, célébrant la richesse culturelle de Tahiti et invitant les auditeurs à explorer et apprécier la beauté et la profondeur de cette culture unique."
+home_table_latest = "Les dernières ajouts"
+home_table_most_viewed = "Les plus vues"
+home_foot_title = "Votre odyssée musicale commence ici"
+home_foot_text = "Rejoignez la communauté des passionnés de la musique polynésienne"
+home_tagline = "Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes."
+footer_rights = "2024 Chanson du fenua. Tous droits réservés"
+footer_contributing = "Contribuer à ce projet"
+index_description = "Toutes les chansons du fenua : paroles et accords des chansons tahitiennes et polynésiennes."
+artist_description = " : paroles et accords de ses chansons, à retrouver sur Chanson du fenua."
+support_description = "Soutenir Chanson du fenua : ce site est gratuit, sans publicité — voici comment aider à payer son hébergement."

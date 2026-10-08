@@ -61,7 +61,7 @@ Two rules the boot enforces:
 
 Where the files are found: `LOCALES_DIR` if it is set, otherwise `./locales`, otherwise `locales/` beside the binary. A deployment can therefore ship the directory next to the executable and be edited in place.
 
-The song lyrics are the content and are never translated — the catalog is only the chrome around them.
+The song lyrics are the content and are never translated. The catalog holds the chrome — the labels around the content — and, since v4.2, the site's own prose: the front page's sentences, the footer's, and the description each page hands a search engine. That prose is written once in French (v3's words) and once in English; a key the Tahitian file does not carry is served from English.
 
 ## Agent readiness
 

@@ -24,18 +24,23 @@
 //!
 //! # What is translated, and what is not
 //!
-//! Only the chrome and the labels around the content: the navigation, the 404,
-//! and the fixed action labels on the home, index and song pages. The song
-//! lyrics are the content and are never translated; neither is the French prose
-//! the home page has carried since v3 (the hero, the three cards, the synopsis,
-//! the teaching paragraph). Translating prose is writing, and a rewrite should
-//! not put new words in the maintainer's mouth — that is a separate decision
-//! from giving the chrome a language.
+//! The chrome and the labels around the content — the navigation, the 404, the
+//! fixed action labels on the home, index and song pages — **and, since v4.2,
+//! the site's own prose**: the front page's sentences, the footer's, and the
+//! `<meta name="description">` each page hands a search engine. A page served in
+//! English says everything the site writes in English; the reviewer's "I read
+//! the descriptions are in french" is what that answers.
 //!
-//! The one deliberate omission inside the chrome is the footer sentence. It is
-//! not a label: it is a single sentence with two links spliced into the middle
-//! of it, and splitting it into catalog fragments would leave both languages
-//! ungrammatical. It stays exactly as v3 wrote it, English words and all.
+//! The prose is translated once, into English. Its Tahitian is the English, by
+//! the same rule — "if don't know how to translate in tahitian, just rely on
+//! english version" — so none of it has a line in `locales/ty.toml` and the
+//! catalog's `ty → en → fr` order does the rest: see [`Key::PROSE`], which is the
+//! list and the assertion.
+//!
+//! What is *not* translated: the song lyrics, which are the content; a proper
+//! name, which is not a translation unit — the site's own name, `Facebook`, the
+//! four chains on the support page; and the catalogue's own words as they are
+//! stored, which the Markdown and JSON forms hand over unchanged.
 //!
 //! The one place the chrome names a *language* is the switcher, and its links
 //! are each language's own name rather than a translation of it —
@@ -401,11 +406,54 @@ pub enum Key {
     SupportCopy,
     /// The same control, once the address has been copied.
     SupportCopied,
+    /// The front page's standfirst, under the site's name.
+    HomeHeroSubtitle,
+    /// The first card's heading — the songs.
+    HomeCardSongsTitle,
+    /// The first card's body.
+    HomeCardSongsBody,
+    /// The second card's heading — the lyrics.
+    HomeCardLyricsTitle,
+    /// The second card's body.
+    HomeCardLyricsBody,
+    /// The third card's heading — the chords.
+    HomeCardChordsTitle,
+    /// The third card's body.
+    HomeCardChordsBody,
+    /// The front page's long paragraph, between the cards and the two tables.
+    HomeSynopsis,
+    /// The heading over the newest songs.
+    HomeTableLatest,
+    /// The heading over the most-read songs.
+    HomeTableMostViewed,
+    /// The heading of the closing block.
+    HomeFootTitle,
+    /// The line under it.
+    HomeFootText,
+    /// The tail of the front page's `<meta name="description">` — the phrase
+    /// that is not on the page, and the one that says what the site is.
+    HomeTagline,
+    /// The footer's first clause: the site, the year, and the rights.
+    FooterRights,
+    /// The footer's second clause — the link to the project on GitHub.
+    ///
+    /// A clause rather than the words around a link: the sentence has two links
+    /// in it, and the whole of each clause is one link's text, so a translator
+    /// writes two readable sentences instead of four fragments that have to fit
+    /// between them.
+    FooterContributing,
+    /// The song index's `<meta name="description">`.
+    IndexDescription,
+    /// The tail of an artist page's `<meta name="description">` — the artist's
+    /// name goes in front of it.
+    ArtistDescription,
+    /// The support page's `<meta name="description">`.
+    SupportDescription,
 }
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 39] = [
+    pub const ALL: [Key; 57] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -445,7 +493,65 @@ impl Key {
         Key::SupportIntro,
         Key::SupportCopy,
         Key::SupportCopied,
+        Key::HomeHeroSubtitle,
+        Key::HomeCardSongsTitle,
+        Key::HomeCardSongsBody,
+        Key::HomeCardLyricsTitle,
+        Key::HomeCardLyricsBody,
+        Key::HomeCardChordsTitle,
+        Key::HomeCardChordsBody,
+        Key::HomeSynopsis,
+        Key::HomeTableLatest,
+        Key::HomeTableMostViewed,
+        Key::HomeFootTitle,
+        Key::HomeFootText,
+        Key::HomeTagline,
+        Key::FooterRights,
+        Key::FooterContributing,
+        Key::IndexDescription,
+        Key::ArtistDescription,
+        Key::SupportDescription,
     ];
+
+    /// The keys whose Tahitian is deliberately the English.
+    ///
+    /// Every other key is the chrome, and the chrome is a first pass written in
+    /// all three languages. These are the maintainer's own prose — the front
+    /// page's sentences, the footer's, and the descriptions a search engine
+    /// reads — and the reviewer's rule for prose is the other way round: **where
+    /// there are no Tahitian words, serve the English**. So none of them has a
+    /// line in `locales/ty.toml`, the catalog's `ty → en → fr` order hands back
+    /// the English, and `every_key_is_translated_and_actually_differs` asserts
+    /// exactly that rather than treating the fallback as a missing translation.
+    ///
+    /// A line added to `ty.toml` for one of these is served like any other and
+    /// has to be removed from this list — which is what makes the list a claim
+    /// about the shipped files rather than a switch.
+    pub const PROSE: [Key; 18] = [
+        Key::HomeHeroSubtitle,
+        Key::HomeCardSongsTitle,
+        Key::HomeCardSongsBody,
+        Key::HomeCardLyricsTitle,
+        Key::HomeCardLyricsBody,
+        Key::HomeCardChordsTitle,
+        Key::HomeCardChordsBody,
+        Key::HomeSynopsis,
+        Key::HomeTableLatest,
+        Key::HomeTableMostViewed,
+        Key::HomeFootTitle,
+        Key::HomeFootText,
+        Key::HomeTagline,
+        Key::FooterRights,
+        Key::FooterContributing,
+        Key::IndexDescription,
+        Key::ArtistDescription,
+        Key::SupportDescription,
+    ];
+
+    /// Whether this key's Tahitian is the English (see [`Key::PROSE`]).
+    pub fn falls_back_to_english(self) -> bool {
+        Self::PROSE.contains(&self)
+    }
 
     /// The key's name: the line it is spelled by in `locales/*.toml`, and the
     /// name it is reported by in a test.
@@ -495,6 +601,24 @@ impl Key {
             Key::SupportIntro => "support_intro",
             Key::SupportCopy => "support_copy",
             Key::SupportCopied => "support_copied",
+            Key::HomeHeroSubtitle => "home_hero_subtitle",
+            Key::HomeCardSongsTitle => "home_card_songs_title",
+            Key::HomeCardSongsBody => "home_card_songs_body",
+            Key::HomeCardLyricsTitle => "home_card_lyrics_title",
+            Key::HomeCardLyricsBody => "home_card_lyrics_body",
+            Key::HomeCardChordsTitle => "home_card_chords_title",
+            Key::HomeCardChordsBody => "home_card_chords_body",
+            Key::HomeSynopsis => "home_synopsis",
+            Key::HomeTableLatest => "home_table_latest",
+            Key::HomeTableMostViewed => "home_table_most_viewed",
+            Key::HomeFootTitle => "home_foot_title",
+            Key::HomeFootText => "home_foot_text",
+            Key::HomeTagline => "home_tagline",
+            Key::FooterRights => "footer_rights",
+            Key::FooterContributing => "footer_contributing",
+            Key::IndexDescription => "index_description",
+            Key::ArtistDescription => "artist_description",
+            Key::SupportDescription => "support_description",
         }
     }
 
@@ -521,15 +645,35 @@ mod tests {
     /// and reads the words through the same runtime catalog a page does. The
     /// difference half is what catches a key that was given its French words and
     /// a placeholder equal to them.
+    ///
+    /// A [`Key::PROSE`] key is the deliberate exception on the Tahitian side: its
+    /// Tahitian *is* the English, and asserting that is stronger than letting it
+    /// fall outside the table — a prose key that quietly grew a `ty.toml` line
+    /// would fail here, and that is the moment to move it out of [`Key::PROSE`].
     #[test]
     fn every_key_is_translated_and_actually_differs() {
         for key in Key::ALL {
-            for lang in Lang::ALL {
+            for lang in [Lang::Fr, Lang::En] {
                 assert!(
                     !text(lang, key).trim().is_empty(),
                     "{key:?} has no words in {}",
                     lang.code()
                 );
+            }
+
+            if key.falls_back_to_english() {
+                assert_eq!(
+                    text(Lang::Ty, key),
+                    text(Lang::En, key),
+                    "{key:?} is prose with words of its own in ty.toml — take it \
+                     out of Key::PROSE"
+                );
+                assert_ne!(
+                    text(Lang::Fr, key),
+                    text(Lang::En, key),
+                    "{key:?} says the same thing in French and in English"
+                );
+                continue;
             }
 
             for (first, second) in [
@@ -546,6 +690,24 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The prose list is a list of keys, and every one of them is a key: a name
+    /// that no variant owns would make the fallback assertion above vacuous.
+    #[test]
+    fn the_prose_keys_are_keys_and_are_listed_once() {
+        let mut names = std::collections::BTreeSet::new();
+
+        for key in Key::PROSE {
+            assert!(Key::ALL.contains(&key), "{key:?} is not a key");
+            assert!(names.insert(key.name()), "{key:?} is listed twice");
+        }
+
+        assert_eq!(names.len(), Key::PROSE.len());
+        assert!(
+            Key::PROSE.len() < Key::ALL.len(),
+            "every key cannot be prose"
+        );
     }
 
     /// A name is the line a key is written on in `locales/*.toml`: one per key,
@@ -675,6 +837,12 @@ mod tests {
             Key::SupportCopied,
         ];
 
+        // Step 36's eighteen: the same move, for the maintainer's own prose —
+        // the front page's sentences, the footer's two clauses, and the
+        // descriptions a search engine reads. Not chrome, and pinned separately
+        // for that reason: the French of every one of them is byte-for-byte what
+        // v3 wrote, and the English beside it is new writing (see `Key::PROSE`).
+
         // Step 28's own work, and the only French in this test that is not
         // step 21's: the 404's body, the one line the "funny 404" step rewrote
         // on purpose. Pinned in all three languages because the joke is the
@@ -701,9 +869,42 @@ mod tests {
         // The 404's body is one key pinned in every language, so it counts once
         // towards the catalog even though the table has one row per language.
         assert_eq!(NOT_FOUND_AT_STEP_28.len(), Lang::ALL.len());
+
+        // The prose is the third group and the last: step 36's eighteen keys,
+        // separate from the chrome because their Tahitian is the English. Every
+        // one of them is in `Key::PROSE`, which is what makes the French above a
+        // statement about the shipped files and not about a table in a test.
+        const PROSE_AT_STEP_36: [Key; 18] = [
+            Key::HomeHeroSubtitle,
+            Key::HomeCardSongsTitle,
+            Key::HomeCardSongsBody,
+            Key::HomeCardLyricsTitle,
+            Key::HomeCardLyricsBody,
+            Key::HomeCardChordsTitle,
+            Key::HomeCardChordsBody,
+            Key::HomeSynopsis,
+            Key::HomeTableLatest,
+            Key::HomeTableMostViewed,
+            Key::HomeFootTitle,
+            Key::HomeFootText,
+            Key::HomeTagline,
+            Key::FooterRights,
+            Key::FooterContributing,
+            Key::IndexDescription,
+            Key::ArtistDescription,
+            Key::SupportDescription,
+        ];
+
+        for key in PROSE_AT_STEP_36 {
+            assert!(
+                key.falls_back_to_english(),
+                "{key:?} is prose but not listed as prose"
+            );
+        }
+        assert_eq!(PROSE_AT_STEP_36.len(), Key::PROSE.len());
         assert_eq!(
             Key::ALL.len(),
-            FRENCH_AT_STEP_21.len() + ADDED_SINCE.len() + 1
+            FRENCH_AT_STEP_21.len() + ADDED_SINCE.len() + 1 + PROSE_AT_STEP_36.len()
         );
         for added in ADDED_SINCE {
             assert!(

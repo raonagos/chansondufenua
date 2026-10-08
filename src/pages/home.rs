@@ -45,62 +45,89 @@ use crate::pages::songs;
 use crate::state;
 use crate::ui::theme;
 
-/// The page's prose, exactly as v3 wrote it.
+/// The page's prose, in the language the response is written in.
 ///
 /// A module rather than a flat list of constants so that a call site reads
 /// `copy::HERO_TITLE` and never has to wonder whether `HERO_TITLE` was the words
 /// or the styling — `theme::HERO_TITLE` is the styling.
 ///
-/// **The action labels are not here.** The two buttons and the closing call to
-/// action are chrome, so they live in [`crate::i18n`] with the rest of the
-/// chrome: this module is the French prose a reader reads, and that one is the
-/// words that change with the site's language.
+/// **The prose is no longer one language.** Until v4.2 every sentence here was a
+/// `const` in French — v3's words, kept byte for byte — and the site served them
+/// to an English reader as they were. The reviewer read them that way ("I read
+/// the descriptions are in french … so it needs to translate all things it can
+/// be translate") and they now live in `locales/*.toml` with the chrome, under
+/// their own keys: see [`Key::PROSE`](crate::i18n::Key::PROSE). The French is
+/// still v3's, character for character; the English beside it in `en.toml` is
+/// new, and a Tahitian page reads the English (his rule for prose — see
+/// [`crate::i18n`]).
+///
+/// Two strings are *not* here, because neither is a translation unit: the site's
+/// name ([`copy::HERO_TITLE`]) and a brand ([`copy::FOOT_FACEBOOK`]). The two
+/// button labels are chrome like every other control's and live in
+/// [`crate::i18n`] too.
 pub mod copy {
-    /// The hero's headline.
+    use crate::i18n::{self, Key, Lang};
+
+    /// The hero's headline — the site's own name, which is not translated.
     pub const HERO_TITLE: &str = "Chanson du fenua";
-    /// The hero's standfirst.
-    pub const HERO_SUBTITLE: &str = "L'élégance de la musique polynésienne";
 
-    /// The three "why" cards, in v3's order: title, then body.
-    pub const CARDS: &[(&str, &str)] = &[
-        (
-            "Chansons exquises",
-            "Plongez dans une collection raffinée de chansons tahitiennes, alliant tradition et modernité.",
-        ),
-        (
-            "Paroles envoûtantes",
-            "Laissez-vous séduire par la poésie des paroles, une fenêtre sur l'âme tahitienne.",
-        ),
-        (
-            "Harmonies divines",
-            "Maîtrisez l'art des accords et élevez votre musique vers de nouveaux sommets.",
-        ),
-    ];
-
-    /// The synopsis between the hero and the tables.
-    pub const SYNOPSIS: &str = "Découvrez un monde musical unique où l'art des accords et la maîtrise des mélodies élèvent votre musique vers de nouveaux sommets. Laissez-vous séduire par la poésie des paroles, véritable fenêtre sur l'âme tahitienne, qui vous transporte dans un voyage lyrique et émouvant. Plongez dans une collection raffinée de chansons tahitiennes, savamment sélectionnées pour allier tradition et modernité, offrant une expérience musicale enrichissante et inoubliable. Découvrez des mélodies envoûtantes et des rythmes captivants, célébrant la richesse culturelle de Tahiti et invitant les auditeurs à explorer et apprécier la beauté et la profondeur de cette culture unique.";
-
-    /// The first table's title — five newest songs.
-    pub const TABLE_LATEST: &str = "Les dernières ajouts";
-    /// The second table's title — five most-viewed songs.
-    pub const TABLE_MOST_VIEWED: &str = "Les plus vues";
-
-    /// The closing block.
-    pub const FOOT_TITLE: &str = "Votre odyssée musicale commence ici";
-    /// The line under it.
-    pub const FOOT_TEXT: &str = "Rejoignez la communauté des passionnés de la musique polynésienne";
     /// The first closing button. A brand name, so it is the same in both
     /// languages and stays a constant rather than becoming a key.
     pub const FOOT_FACEBOOK: &str = "Facebook";
 
-    /// The tail of the meta description — the phrase that is not on the page.
-    pub const TAGLINE: &str =
-        "Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes.";
+    /// The hero's standfirst.
+    pub fn hero_subtitle(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeHeroSubtitle)
+    }
+
+    /// The three "why" cards, in v3's order: title, then body.
+    pub fn cards(lang: Lang) -> [(&'static str, &'static str); 3] {
+        [
+            (
+                i18n::text(lang, Key::HomeCardSongsTitle),
+                i18n::text(lang, Key::HomeCardSongsBody),
+            ),
+            (
+                i18n::text(lang, Key::HomeCardLyricsTitle),
+                i18n::text(lang, Key::HomeCardLyricsBody),
+            ),
+            (
+                i18n::text(lang, Key::HomeCardChordsTitle),
+                i18n::text(lang, Key::HomeCardChordsBody),
+            ),
+        ]
+    }
+
+    /// The synopsis between the hero and the tables.
+    pub fn synopsis(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeSynopsis)
+    }
+
+    /// The first table's title — five newest songs.
+    pub fn table_latest(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeTableLatest)
+    }
+
+    /// The second table's title — five most-viewed songs.
+    pub fn table_most_viewed(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeTableMostViewed)
+    }
+
+    /// The closing block.
+    pub fn foot_title(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeFootTitle)
+    }
+
+    /// The line under it.
+    pub fn foot_text(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeFootText)
+    }
 
     /// The home page's `<meta name="description">`.
     ///
-    /// The hero's standfirst, then [`TAGLINE`] — the sentence the front page
-    /// does not show, which says what the site is. 125 characters, inside the
+    /// The hero's standfirst, then the tagline — the sentence the front page does
+    /// not show, which says what the site is. 125 characters in French, 103 in
+    /// English, inside the
     /// [`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX) a snippet is
     /// read at.
     ///
@@ -108,12 +135,18 @@ pub mod copy {
     /// card's body, then the tagline into this field — 842 characters, of which
     /// a search engine shows the first ~155, so every result for the front door
     /// led with two paragraphs that never said "chansons tahitiennes". The prose
-    /// itself is untouched: it is still the page, [`SYNOPSIS`] and all.
+    /// itself is untouched: it is still the page, [`synopsis`] and all.
     ///
-    /// Written out rather than assembled with `format!` because it has to be a
-    /// `const`; `the_description_is_the_copy_it_claims_to_be` is what keeps the
-    /// pieces from drifting apart.
-    pub const DESCRIPTION: &str = "L'élégance de la musique polynésienne — Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes.";
+    /// Assembled from the two keys rather than written out, because the pieces
+    /// and the description cannot drift if there is only one of each;
+    /// `the_description_is_the_copy_it_claims_to_be` is what says so.
+    pub fn description(lang: Lang) -> String {
+        format!(
+            "{} — {}",
+            hero_subtitle(lang),
+            i18n::text(lang, Key::HomeTagline)
+        )
+    }
 }
 
 /// How many songs each table lists. v3 asked both for five.
@@ -189,7 +222,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
         <div class=(theme::PAGE)>
             <section class=(theme::HERO)>
                 <h1 class=(theme::HERO_TITLE)>(copy::HERO_TITLE)</h1>
-                <p class=(theme::HERO_SUBTITLE)>(copy::HERO_SUBTITLE)</p>
+                <p class=(theme::HERO_SUBTITLE)>(copy::hero_subtitle(lang))</p>
                 <a
                     href=(songs_href)
                     class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))
@@ -199,7 +232,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             </section>
 
             <section class=(theme::CARD_GRID)>
-                for &(title, text) in copy::CARDS {
+                for &(title, text) in copy::cards(lang).iter() {
                     <div class=(theme::CARD_ROOMY)>
                         <h2 class=(theme::PANEL_TITLE)>(title)</h2>
                         <p>(text)</p>
@@ -208,7 +241,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             </section>
 
             <section class="mb-20">
-                <p class=(theme::SYNOPSIS)>(copy::SYNOPSIS)</p>
+                <p class=(theme::SYNOPSIS)>(copy::synopsis(lang))</p>
             </section>
 
             // "Les dernières ajouts" and "Les plus vues". The same panel, the
@@ -217,7 +250,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             // most-viewed table with the title; kept.
             <section class=(theme::TABLE_SECTION)>
                 <div class=(class!(theme::TABLE_PANEL, "md:text-right", "md:ml-auto"))>
-                    <h2 class=(theme::PANEL_TITLE)>(copy::TABLE_LATEST)</h2>
+                    <h2 class=(theme::PANEL_TITLE)>(copy::table_latest(lang))</h2>
                     <table class="max-md:mr-auto ml-auto">
                         <tbody>
                             for song in latest {
@@ -230,7 +263,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
 
             <section class=(theme::TABLE_SECTION)>
                 <div class=(theme::TABLE_PANEL)>
-                    <h2 class=(theme::PANEL_TITLE)>(copy::TABLE_MOST_VIEWED)</h2>
+                    <h2 class=(theme::PANEL_TITLE)>(copy::table_most_viewed(lang))</h2>
                     <table class="max-md:mx-auto">
                         <tbody>
                             for song in most_viewed {
@@ -242,8 +275,8 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             </section>
 
             <section class=(theme::FOOT_SECTION)>
-                <h2 class=(theme::FOOT_TITLE)>(copy::FOOT_TITLE)</h2>
-                <p class=(theme::FOOT_TEXT)>(copy::FOOT_TEXT)</p>
+                <h2 class=(theme::FOOT_TITLE)>(copy::foot_title(lang))</h2>
+                <p class=(theme::FOOT_TEXT)>(copy::foot_text(lang))</p>
                 <div class=(theme::FOOT_LINKS)>
                     <a
                         href="https://facebook.com/chansondufenua"
@@ -322,32 +355,66 @@ pub async fn song_row(cx: &Cx, song: Song, #[default] inverse: bool) -> Result<i
 mod tests {
     use super::*;
     use crate::db::{Db, fixtures};
+    use crate::i18n::Lang;
 
     /// The description is the page's own two sentences, and it fits in a
-    /// snippet. Editing the standfirst or the tagline without editing the
-    /// description is exactly the drift this catches — and the length is what
-    /// v3's 842-character paragraph got wrong.
+    /// snippet — in every language the page is served in. Editing the standfirst
+    /// or the tagline without editing the description is exactly the drift this
+    /// catches, and the length is what v3's 842-character paragraph got wrong.
+    ///
+    /// The French is pinned to v3's own sentence: it is the one description a
+    /// search engine has been reading for years, and a translation pass is not a
+    /// rewrite of it.
     #[test]
     fn the_description_is_the_copy_it_claims_to_be() {
+        for lang in Lang::ALL {
+            let description = copy::description(lang);
+
+            assert_eq!(
+                description,
+                format!(
+                    "{} — {}",
+                    copy::hero_subtitle(lang),
+                    i18n::text(lang, Key::HomeTagline)
+                ),
+                "{lang:?}"
+            );
+            assert!(
+                description.chars().count() <= crate::domain::song::DESCRIPTION_MAX,
+                "{lang:?}: the description is longer than a snippet"
+            );
+            // A prose key's Tahitian is the English, so the two agree by rule.
+            if lang == Lang::Ty {
+                assert_eq!(description, copy::description(Lang::En));
+            }
+        }
+
         assert_eq!(
-            copy::DESCRIPTION,
-            format!("{} — {}", copy::HERO_SUBTITLE, copy::TAGLINE)
-        );
-        assert!(
-            copy::DESCRIPTION.chars().count() <= crate::domain::song::DESCRIPTION_MAX,
-            "the description is longer than a snippet"
+            copy::description(Lang::Fr),
+            "L'élégance de la musique polynésienne — Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes."
         );
     }
 
-    /// Three cards, each with something to say. A card with an empty body would
-    /// render as a heading over blank space and nothing else would notice.
+    /// Three cards, each with something to say — in every language, and with
+    /// three different titles, because three cards saying the same thing are one
+    /// card drawn three times. A card with an empty body would render as a
+    /// heading over blank space and nothing else would notice.
     #[test]
     fn every_card_has_a_title_and_a_body() {
-        assert_eq!(copy::CARDS.len(), 3, "v3 has three cards");
-        for (title, text) in copy::CARDS {
-            assert!(!title.trim().is_empty(), "a card has no title");
-            assert!(!text.trim().is_empty(), "card {title:?} has no body");
+        for lang in Lang::ALL {
+            let cards = copy::cards(lang);
+
+            assert_eq!(cards.len(), 3, "v3 has three cards");
+
+            let mut titles = std::collections::BTreeSet::new();
+            for (title, text) in cards {
+                assert!(!title.trim().is_empty(), "{lang:?}: a card has no title");
+                assert!(!text.trim().is_empty(), "card {title:?} has no body");
+                assert!(titles.insert(title), "{lang:?}: {title:?} is drawn twice");
+            }
         }
+
+        assert_eq!(copy::cards(Lang::Fr)[0].0, "Chansons exquises");
     }
 
     /// The page's two tables are two *orderings*, not two copies of one.

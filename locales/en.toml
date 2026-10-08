@@ -41,3 +41,28 @@ support_title = "Support the site"
 support_intro = "This site is free, with no advertising. To help pay for its hosting, here is how."
 support_copy = "Copy"
 support_copied = "Copied"
+
+# --- the site's own prose (step 36) ---
+#
+# Not chrome: the maintainer's sentences. This file is where an English reader
+# reads them, and also where the Tahitian comes from — none of these keys has a
+# `ty.toml` line, so `ty → en → fr` serves the English on a Tahitian page (see
+# `i18n::Key::PROSE`). The French on the other side is v3's, byte for byte.
+home_hero_subtitle = "The elegance of Polynesian music"
+home_card_songs_title = "Exquisite songs"
+home_card_songs_body = "Dive into a refined collection of Tahitian songs, bringing tradition and modernity together."
+home_card_lyrics_title = "Captivating lyrics"
+home_card_lyrics_body = "Let the poetry of the lyrics carry you away — a window on the Tahitian soul."
+home_card_chords_title = "Divine harmonies"
+home_card_chords_body = "Master the art of chords and lift your music to new heights."
+home_synopsis = "Discover a musical world of its own, where the art of chords and a command of melody lift your music to new heights. Let the poetry of the lyrics carry you away — a true window on the Tahitian soul, and a lyrical, moving journey. Dive into a refined collection of Tahitian songs, carefully chosen to bring tradition and modernity together, for a rewarding and unforgettable musical experience. Discover captivating melodies and rhythms that celebrate the cultural wealth of Tahiti, and invite every listener to explore and enjoy the beauty and depth of this unique culture."
+home_table_latest = "Latest additions"
+home_table_most_viewed = "Most viewed"
+home_foot_title = "Your musical odyssey starts here"
+home_foot_text = "Join the community of Polynesian music lovers"
+home_tagline = "Chanson du fenua, find your Tahitian and Polynesian song lyrics."
+footer_rights = "2024 Chanson du fenua. All rights reserved"
+footer_contributing = "Contributing to this project"
+index_description = "Every song of the fenua: lyrics and chords for Tahitian and Polynesian songs."
+artist_description = ": lyrics and chords for their songs, at Chanson du fenua."
+support_description = "Support Chanson du fenua: the site is free, with no advertising — here is how to help pay for its hosting."

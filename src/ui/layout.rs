@@ -286,7 +286,7 @@ async fn artist_head(cx: &Cx, artist: &Artist, lang: Lang) -> DocumentHead {
 
     let name = artist.get_fullname();
     let title = format!("{name} | {TITLE}");
-    let description = artist::description(&name);
+    let description = artist::description(&name, lang);
     let canonical = i18n::absolute(&artist::path_of(&artist.get_id()));
 
     DocumentHead {
@@ -321,7 +321,7 @@ fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
         "{} ({number}/{pages}) | {TITLE}",
         i18n::text(lang, Key::IndexTitle)
     );
-    let description = format!("{} ({number}/{pages})", songs::DESCRIPTION);
+    let description = format!("{} ({number}/{pages})", songs::description(lang));
 
     page_head(
         title,
@@ -401,7 +401,7 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
 
         return page_head(
             title,
-            home::copy::DESCRIPTION,
+            &home::copy::description(lang),
             &i18n::absolute(HOME),
             lang,
             jsonld,
@@ -411,7 +411,7 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
     if path == songs::PATH {
         return page_head(
             format!("{} | {TITLE}", i18n::text(lang, Key::IndexTitle)),
-            songs::DESCRIPTION,
+            songs::description(lang),
             &i18n::absolute(songs::PATH),
             lang,
             None,
@@ -453,12 +453,13 @@ fn site_head(path: &str, lang: Lang) -> DocumentHead {
 
     // The support page. A page with prose of its own — what it is for, and the
     // addresses — so it takes a description, a canonical URL and a card, the
-    // same way the index and an artist's page do. Its title is chrome; its
-    // description is the catalogue's own French, like every other page's.
+    // same way the index and an artist's page do. Its title and its description
+    // are the site's words, and both follow the request's language; the
+    // addresses in it never do.
     if path == support::PATH {
         return page_head(
             format!("{} | {TITLE}", i18n::text(lang, Key::SupportTitle)),
-            support::DESCRIPTION,
+            support::description(lang),
             &i18n::absolute(support::PATH),
             lang,
             None,
@@ -880,13 +881,25 @@ fn names_the_index(path: &str) -> bool {
     path == songs::PATH || songs::page_segment(path).is_some()
 }
 
-/// The site footer. v3's wording, kept, including the link to the maintainer's site.
+/// The site footer. v3's sentence, split into its two clauses so that each can
+/// be written in the page's own language.
+///
+/// It used to be one literal string — French rights, then English words around a
+/// link to the project — and it stayed that way on purpose, because a single
+/// sentence with two links spliced into the middle of it is not four catalog
+/// fragments. It is two *clauses*, though, and each one is a whole phrase with one
+/// link in it: [`Key::FooterRights`] and [`Key::FooterContributing`], each written
+/// once per language, and the markup does no more than put the year and the two
+/// anchors between them.
 #[component]
-pub async fn footer() -> Result<impl View> {
+pub async fn footer(cx: &Cx) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
+
     Ok(view! {
         <footer class=(theme::FOOTER)>
             <p>
-                "2024 Chanson du fenua. Tous droits réservés "
+                (i18n::text(lang, Key::FooterRights))
+                " "
                 <a
                     class=(theme::LINK)
                     href="https://www.rao-nagos.pf"
@@ -895,14 +908,14 @@ pub async fn footer() -> Result<impl View> {
                 >
                     "❤️"
                 </a>
-                ". Contributing to this "
+                ". "
                 <a
                     class=(theme::LINK)
                     href="https://github.com/raonagos/chansondufenua"
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    "project"
+                    (i18n::text(lang, Key::FooterContributing))
                 </a>
                 "."
             </p>

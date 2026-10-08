@@ -53,7 +53,7 @@ use topcoat::{
 
 use crate::db::{self, SongOrder};
 use crate::domain::Song;
-use crate::i18n::{self, Key};
+use crate::i18n::{self, Key, Lang};
 use crate::pages::{artist, book, song as sheet};
 use crate::state;
 use crate::ui::theme;
@@ -120,12 +120,14 @@ pub const PAGE_SIZE: i64 = 20;
 /// [`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX) is what a search
 /// engine shows.
 ///
-/// French, like the rest of this page's prose: the lyrics are never translated
-/// and neither is the catalogue's own copy. The `<title>` above does follow the
-/// request's language, because a title is chrome. Pages after the first append
-/// their own number to this sentence — see `ui/layout.rs`'s `index_head`.
-pub const DESCRIPTION: &str =
-    "Toutes les chansons du fenua : paroles et accords des chansons tahitiennes et polynésiennes.";
+/// The sentence follows the request's language, like the `<title>` above it and
+/// the rest of the page's prose (step 36): a search result for a page written in
+/// English leads with an English sentence. The lyrics are still never translated.
+/// Pages after the first append their own number to this sentence — see
+/// `ui/layout.rs`'s `index_head`.
+pub fn description(lang: Lang) -> &'static str {
+    i18n::text(lang, Key::IndexDescription)
+}
 
 /// The page segment of a `/himene/page/{n}` path, if the path has that shape.
 ///

@@ -54,7 +54,7 @@ use topcoat::{
     view::{Unescaped, View, class, view},
 };
 
-use crate::i18n::{self, Key};
+use crate::i18n::{self, Key, Lang};
 use crate::ui::{icons, theme};
 
 /// `/tauturu` — the address, in one place.
@@ -67,11 +67,14 @@ pub const PATH: &str = "/tauturu";
 
 /// The page's `<meta name="description">`.
 ///
-/// French, like the index's, an artist's and every song's: the catalogue's copy
-/// is not the chrome, and the languages never reach it. Same budget as a song's
-/// ([`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX)), which is what a
-/// search engine shows.
-pub const DESCRIPTION: &str = "Soutenir Chanson du fenua : ce site est gratuit, sans publicité — voici comment aider à payer son hébergement.";
+/// The sentence follows the request's language, like the page's own heading and
+/// the rest of its prose (step 36): a search result for the page in English leads
+/// with an English sentence. The addresses themselves never change with it. Same
+/// budget as a song's ([`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX)),
+/// which is what a search engine shows.
+pub fn description(lang: Lang) -> &'static str {
+    i18n::text(lang, Key::SupportDescription)
+}
 
 /// One way to support the site: the chains it is for, the address itself, and
 /// the marks drawn beside it.
@@ -343,15 +346,28 @@ mod tests {
         assert_ne!(evm[2..], evm[2..].to_ascii_uppercase(), "{evm}");
     }
 
-    /// The description fits a snippet, and says what the page is.
+    /// The description fits a snippet, and says what the page is — in every
+    /// language the page can be served in, with the addresses never changing.
     #[test]
     fn the_description_fits_and_names_the_page() {
+        for lang in Lang::ALL {
+            let description = description(lang);
+
+            assert!(
+                description.chars().count() <= crate::domain::song::DESCRIPTION_MAX,
+                "{lang:?}: the description is {} characters",
+                description.chars().count()
+            );
+        }
+
         assert!(
-            DESCRIPTION.chars().count() <= crate::domain::song::DESCRIPTION_MAX,
-            "the description is {} characters",
-            DESCRIPTION.chars().count()
+            description(Lang::Fr).starts_with("Soutenir"),
+            "the French moved"
         );
-        assert!(DESCRIPTION.starts_with("Soutenir"), "{DESCRIPTION}");
+        assert!(
+            description(Lang::En).starts_with("Support"),
+            "the English is missing"
+        );
     }
 
     /// The script is the kind of script this project allows: inline, and it

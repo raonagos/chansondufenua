@@ -113,8 +113,9 @@ const INSTRUCTIONS: &str = "\
 Read-only access to Chanson du fenua, a songbook of Tahitian songs with lyrics \
 and chords. Use list_songs to page through the catalogue and get_song to read \
 one song as a Markdown chord sheet. The lyrics are published exactly as their \
-authors wrote them and are never translated; only the site's chrome exists in \
-French, Tahitian and English. Nothing here can add, change or delete a song.";
+authors wrote them and are never translated; the site's own words — its chrome \
+and its pages — exist in French, Tahitian and English. Nothing here can add, \
+change or delete a song.";
 
 /// `POST /mcp` — one JSON-RPC message in, one out.
 ///

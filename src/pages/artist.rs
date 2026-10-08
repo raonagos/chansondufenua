@@ -45,7 +45,7 @@ use topcoat::{
 
 use crate::db;
 use crate::domain::{Artist, Song};
-use crate::i18n::{self, Key};
+use crate::i18n::{self, Key, Lang};
 use crate::pages::songs::song_row;
 use crate::state;
 use crate::ui::theme;
@@ -98,13 +98,14 @@ pub fn link(cx: &Cx, row: &Artist) -> String {
 /// The artist page's `<meta name="description">`.
 ///
 /// The name first — what a reader searching for the songs is looking for — then
-/// what the page holds. French, like the index's and every song's own: the
-/// catalogue's copy is not the chrome, and the languages never reach it. Same
-/// budget as a song's ([`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX)),
-/// and the name gives way first, so a very long credit is cut rather than the
-/// sentence being left half-written.
-pub fn description(name: &str) -> String {
-    let tail = " : paroles et accords de ses chansons, à retrouver sur Chanson du fenua.";
+/// what the page holds. The sentence after the name follows the request's
+/// language, like the page's own heading (step 36); the name itself is the
+/// artist's and never changes. Same budget as a song's
+/// ([`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX)), and the name gives
+/// way first, so a very long credit is cut rather than the sentence being left
+/// half-written.
+pub fn description(name: &str, lang: Lang) -> String {
+    let tail = i18n::text(lang, Key::ArtistDescription);
     let tail = crate::domain::song::truncate_chars(tail, crate::domain::song::DESCRIPTION_MAX);
     let room = crate::domain::song::DESCRIPTION_MAX - tail.chars().count();
 
@@ -259,18 +260,33 @@ mod tests {
     /// The description leads with the name and stays inside a snippet's budget,
     /// even for a name at the schema's own ceiling — a name that swallowed the
     /// sentence would be cut rather than the sentence being left half-written.
+    /// The name is the same in every language; the sentence after it is not.
     #[test]
     fn the_description_leads_with_the_name_and_fits_a_snippet() {
-        let short = description("Maruia");
-        assert!(short.starts_with("Maruia"), "{short}");
-        assert!(short.contains("paroles"), "{short}");
-
-        for name in ["Maruia", &"n".repeat(crate::domain::artist::FULLNAME_MAX)] {
+        for lang in Lang::ALL {
+            let short = description("Maruia", lang);
+            assert!(short.starts_with("Maruia"), "{lang:?}: {short}");
             assert!(
-                description(name).chars().count() <= crate::domain::song::DESCRIPTION_MAX,
-                "the description is over budget for {name:?}"
+                short.len() > "Maruia".len(),
+                "{lang:?}: the name is the whole description"
             );
+
+            for name in ["Maruia", &"n".repeat(crate::domain::artist::FULLNAME_MAX)] {
+                assert!(
+                    description(name, lang).chars().count() <= crate::domain::song::DESCRIPTION_MAX,
+                    "{lang:?}: the description is over budget for {name:?}"
+                );
+            }
         }
+
+        assert!(
+            description("Maruia", Lang::Fr).contains("paroles"),
+            "the French sentence is not v3's"
+        );
+        assert!(
+            description("Maruia", Lang::En).contains("lyrics"),
+            "the English sentence is not there"
+        );
     }
 
     /// An artist and their songs: the songs are the published ones credited to

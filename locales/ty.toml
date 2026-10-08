@@ -47,3 +47,9 @@ support_title = "Tauturu i te 'api"
 support_intro = "'Aita e moni e titauhia i teie 'api. 'A tauturu mai, i raro nei te mau vāhi."
 support_copy = "Rave"
 support_copied = "'Ua rave"
+
+# The site's own prose — the front page's sentences, the footer's two clauses and
+# the descriptions a search engine reads — has no line here, on purpose: where
+# there are no Tahitian words the site serves the English (`i18n::Key::PROSE`).
+# Adding a line for one of those keys below is how a translator fills the gap,
+# and `every_key_is_translated_and_actually_differs` is what says so.
