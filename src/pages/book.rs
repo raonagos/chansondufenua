@@ -46,10 +46,15 @@
 //!   the chords are the author's, the way the Markdown and JSON forms of a
 //!   selection are. A reader who wants a different key follows a title to its
 //!   sheet, which is where the control and the reader's own choice live.
-//! * **No auto-scroll**, the sheet's other control: it crawls *one* lyric, and a
-//!   page of four needs the reader's own scrolling. The script stays where it
-//!   belongs, and this page has none at all — so it is complete with JavaScript
-//!   off by construction rather than by argument.
+//! * **Auto-scroll, where there is something to read.** A selection carries the
+//!   sheet's own speed bar — [`crate::ui::autoscroll`], not a copy of it, because
+//!   the control is the reader's and not either page's. The reviewer asked for
+//!   exactly this on 2026-10-07: auto-scroll "is a reading aid for the lyrics,
+//!   not a song-picker", so it belongs on the page where a reader reads several
+//!   lyrics and *not* on the picker, which is a form with no lyric to crawl.
+//!   The bar arrives `hidden` and the shared script un-hides it, so a selection
+//!   read with JavaScript off draws no unusable control — the same guarantee a
+//!   sheet makes, made the same way.
 //! * **No view is counted.** A served sheet counts as a view ([`crate::pages::song`]),
 //!   and this page serves the lyric without being the song's page: counting here
 //!   would make one reader of a four-song selection four views of four songs, and
@@ -73,7 +78,7 @@ use topcoat::{
     Result,
     context::Cx,
     router::{error::RouterErrorExt, page, request::uri},
-    view::{View, class, component, view},
+    view::{Unescaped, View, class, component, view},
 };
 
 use sqlx::SqlitePool;
@@ -84,6 +89,7 @@ use crate::domain::chord;
 use crate::i18n::{self, Key};
 use crate::pages::song::lyric_line;
 use crate::state;
+use crate::ui::autoscroll::{self, speed_bar};
 use crate::ui::theme;
 
 /// `/puta-himene` — the address, in one place.
@@ -236,9 +242,17 @@ pub async fn book(cx: &Cx) -> Result<impl View> {
 
             match chosen {
                 Some(sheets) => {
+                    // The reader's own control over the selection, before the
+                    // first sheet: the bar the sheet carries, from the one module
+                    // that owns it. It arrives hidden, and the script at the foot
+                    // of this page is the only thing that draws it.
+                    <div class=(theme::BOOK_HEAD)>
+                        speed_bar()
+                    </div>
                     for sheet in sheets {
                         chosen_sheet(sheet: sheet)
                     }
+                    <script type="text/javascript">(Unescaped::new_unchecked(autoscroll::SCRIPT))</script>
                 },
                 None => {
                     <p class=(theme::LEAD)>(i18n::text(lang, Key::BookHint))</p>

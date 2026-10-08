@@ -45,6 +45,7 @@ use crate::domain::song::{LyricLine, LyricSpan, Song};
 use crate::i18n::{self, Key};
 use crate::pages::artist;
 use crate::state;
+use crate::ui::autoscroll::{self, speed_bar};
 use crate::ui::theme;
 
 use std::collections::VecDeque;
@@ -122,10 +123,6 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
         .map(|line| chord::localised_line(line, offset, lang))
         .collect::<Vec<_>>();
     let transpose = i18n::text(lang, Key::Transpose);
-    let scroll = i18n::text(lang, Key::Scroll);
-    let speed = i18n::text(lang, Key::ScrollSpeed);
-    let scroll_start = i18n::text(lang, Key::ScrollStart);
-    let scroll_stop = i18n::text(lang, Key::ScrollStop);
     let step = if offset == 0 {
         "0".to_owned()
     } else {
@@ -168,38 +165,12 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                     >("+")</a>
                 </div>
                 // The reader's other control over the lyric: a speed bar that
-                // crawls the sheet. It is drawn only by the script at the foot
-                // of this article, and it is hidden until then, so a sheet read
-                // with JavaScript off shows no button that could not work. Every
-                // word it needs is rendered here — the group's name, the
-                // range's label, and the button's two — so the script carries
-                // no language of its own and a translator never opens it.
-                <div
-                    id="autoscroll"
-                    class=(theme::AUTOSCROLL)
-                    role="group"
-                    aria-label=(scroll)
-                    hidden="hidden"
-                >
-                    <label for="autoscroll-speed" class=(theme::AUTOSCROLL_SPEED)>(speed)</label>
-                    <input
-                        id="autoscroll-speed"
-                        type="range"
-                        min="1"
-                        max="5"
-                        step="1"
-                        value="3"
-                        class=(class!(theme::AUTOSCROLL_RANGE, theme::FOCUS))
-                    />
-                    <button
-                        type="button"
-                        id="autoscroll-toggle"
-                        aria-pressed="false"
-                        data-start=(scroll_start)
-                        data-stop=(scroll_stop)
-                        class=(class!(theme::AUTOSCROLL_BUTTON, theme::FOCUS))
-                    >(scroll_start)</button>
-                </div>
+                // crawls the sheet. It is the same control the book carries —
+                // `ui::autoscroll` owns the panel, the words and the script,
+                // because the control is the reader's and not this page's — and
+                // it is drawn only by that script, so a sheet read with
+                // JavaScript off shows no button that could not work.
+                speed_bar()
                 <a
                     href=(crate::pages::editor::PATH)
                     class=(class!(theme::BUTTON_SMALL, theme::FOCUS))
@@ -214,7 +185,7 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                 }
             </div>
 
-            <script type="text/javascript">(Unescaped::new_unchecked(AUTOSCROLL_JS))</script>
+            <script type="text/javascript">(Unescaped::new_unchecked(autoscroll::SCRIPT))</script>
         </article>
     })
 }
@@ -234,98 +205,6 @@ fn step_link(path: &str, offset: i32) -> String {
         format!("{base}?tr={stepped}")
     }
 }
-
-/// The sheet's script: the reader's speed bar.
-///
-/// The page's only script. The sheet is complete and printable without one —
-/// that is what the control's hidden attribute buys — and this is written so it
-/// stays that way: it un-hides the control only once it can work it, and it
-/// returns before that if the reader has asked their system for less motion.
-/// Auto-scroll is motion nobody asked the page for, so a reader who asked for
-/// less of it is not offered any.
-///
-/// Unescaped into the page, like the editor's script and the layout's JSON-LD,
-/// because a script element is raw text: escaping it would leave the browser
-/// showing the code rather than running it. Nothing here comes from a request,
-/// so there is nothing in it to escape.
-///
-/// Three rules it keeps, each of them a thing this codebase has already paid
-/// for once:
-///
-/// * **No scroll listener.** The sheet is moved by `requestAnimationFrame`,
-///   which the browser runs at the screen's own pace and suspends when the tab
-///   is hidden; a scroll handler would instead fire on every position change —
-///   including the ones this script causes — and would be a layout read per
-///   event.
-/// * **Compositor work only.** The loop changes the scroll offset and nothing
-///   else: no size, no position, no margin, no blur. Movement is never a reason
-///   for the lyric to be laid out again.
-/// * **One measurement, then a stop condition.** The sheet's height is read
-///   once, when the reader asks to move, because a lyric does not change height
-///   while it is being read; the loop ends on the frame that finds nothing left
-///   below the fold, and the button goes back to its start word.
-///
-/// The words on the button are not in here: both are rendered into the two data
-/// attributes and read back, so the script carries no language.
-const AUTOSCROLL_JS: &str = r##"
-(function () {
-  var panel = document.getElementById("autoscroll");
-  var bar = document.getElementById("autoscroll-speed");
-  var toggle = document.getElementById("autoscroll-toggle");
-  if (!panel || !bar || !toggle) return;
-
-  var calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
-  if (calm && calm.matches) return;
-
-  panel.removeAttribute("hidden");
-
-  var frame = 0;
-  var last = 0;
-  var edge = 0;
-  var running = false;
-
-  var draw = function () {
-    toggle.textContent = toggle.getAttribute(running ? "data-stop" : "data-start");
-    toggle.setAttribute("aria-pressed", running ? "true" : "false");
-  };
-
-  var stop = function () {
-    running = false;
-    if (frame) {
-      window.cancelAnimationFrame(frame);
-      frame = 0;
-    }
-    draw();
-  };
-
-  var step = function (now) {
-    if (!running) return;
-    var elapsed = last ? Math.min(now - last, 100) : 16;
-    last = now;
-    var left = edge - window.scrollY;
-    if (left <= 1) {
-      stop();
-      return;
-    }
-    var distance = (Number(bar.value) * 40 * elapsed) / 1000;
-    window.scrollBy(0, Math.min(distance, left));
-    frame = window.requestAnimationFrame(step);
-  };
-
-  toggle.addEventListener("click", function () {
-    if (running) {
-      stop();
-      return;
-    }
-    edge = document.documentElement.scrollHeight - window.innerHeight;
-    if (edge <= window.scrollY) return;
-    running = true;
-    last = 0;
-    draw();
-    frame = window.requestAnimationFrame(step);
-  });
-})();
-"##;
 
 /// One line of the lyric.
 ///
@@ -676,54 +555,6 @@ mod tests {
         assert_eq!(lines.len(), 3);
         assert!(lines[1].is_empty());
         assert!(!lines[0].is_empty());
-    }
-
-    // ---- the speed bar -----------------------------------------------------
-
-    /// The sheet's script is the page's only script, and it has to stay the
-    /// kind of script this project allows: inline, compositor-only, with a stop
-    /// condition, and deferring to a reader who asked for less motion.
-    ///
-    /// The markup is asserted against the served page instead — a page cannot
-    /// be rendered under `cargo test` without a real asset bundle — but the
-    /// script's own shape is a fact about this string, and this is where the
-    /// rules that would otherwise be a reviewer's memory are pinned.
-    #[test]
-    fn the_autoscroll_script_is_inline_compositor_only_and_stoppable() {
-        assert!(
-            AUTOSCROLL_JS.contains("prefers-reduced-motion"),
-            "the script would move a reader who asked it not to"
-        );
-        assert!(AUTOSCROLL_JS.contains("requestAnimationFrame"));
-        assert!(
-            AUTOSCROLL_JS.contains("cancelAnimationFrame"),
-            "a stopped loop would keep a frame alive"
-        );
-        assert!(
-            AUTOSCROLL_JS.contains(r#"removeAttribute("hidden")"#),
-            "the control would never be drawn"
-        );
-        assert!(
-            AUTOSCROLL_JS.contains("left <= 1"),
-            "the loop has no stop condition at the end of the sheet"
-        );
-
-        // One listener, and it is not a scroll one: the loop moves the page.
-        assert_eq!(AUTOSCROLL_JS.matches("addEventListener").count(), 1);
-        assert!(
-            !AUTOSCROLL_JS.contains(r#""scroll""#),
-            "a scroll event drives the animation"
-        );
-
-        // Compositor work only: nothing in the loop writes a layout property,
-        // and nothing rebuilds the lyric.
-        assert!(!AUTOSCROLL_JS.contains(".style."));
-        assert!(!AUTOSCROLL_JS.contains("innerHTML"));
-        assert!(!AUTOSCROLL_JS.contains("scrollTop"));
-
-        for id in ["autoscroll-speed", "autoscroll-toggle"] {
-            assert!(AUTOSCROLL_JS.contains(id), "{id} is not wired");
-        }
     }
 
     // ---- placing the chords ------------------------------------------------

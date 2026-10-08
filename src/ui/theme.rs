@@ -766,14 +766,15 @@ pub const TRANSPOSE_LINK: StaticClass =
 pub const TRANSPOSE_VALUE: StaticClass =
     class!("w-8 text-center font-mono tabular-nums text-mist-100");
 
-/// The auto-scroll control in a sheet header: the reader's speed bar.
+/// The reader's speed bar: the pill a lyric page carries.
 ///
-/// [`TRANSPOSE`]'s pill again, beside it on the same row, because both are the
-/// reader's controls over the lyric rather than actions on the song. The pill is
-/// drawn only once a script has un-hidden it — the attribute that hides it is
-/// the one the script removes — so a sheet read with JavaScript off carries no
-/// control that cannot work, and the page is what it was before this step. On
-/// paper it is hidden for [`TRANSPOSE`]'s reason: a speed bar is for a screen.
+/// [`TRANSPOSE`]'s pill again, beside it on the same row of a sheet, because both
+/// are the reader's controls over the lyric rather than actions on the song; on
+/// the book it is the whole of [`BOOK_HEAD`]. The pill is drawn only once a
+/// script has un-hidden it — the attribute that hides it is the one the script
+/// removes — so a page read with JavaScript off carries no control that cannot
+/// work, and the page is what it was before this step. On paper it is hidden for
+/// [`TRANSPOSE`]'s reason: a speed bar is for a screen.
 ///
 /// `flex-none` rather than its `shrink` synonym for the reason
 /// [`LANGUAGE_SWITCH`] gives.
@@ -811,6 +812,19 @@ pub const AUTOSCROLL_BUTTON: StaticClass = class!(
 // ---------------------------------------------------------------------------
 // Several songs on one page
 // ---------------------------------------------------------------------------
+
+/// The book's reading row: the auto-scroll bar, above the first chosen song.
+///
+/// A row of its own rather than a line inside the page's heading, because the
+/// bar is the whole of it. It is `flex` for the bar's sake: [`AUTOSCROLL`] is
+/// `flex-none`, which is a fact about a flex item and means nothing in ordinary
+/// flow — without a flex row around it, the pill would stretch across the page.
+///
+/// Its margin is [`BOOK_ITEM`]'s own step, so the space between the bar and the
+/// first song is the space between two songs; and it is hidden on paper, as the
+/// bar itself is, because a row that would print empty is a gap with no reason
+/// in a songbook.
+pub const BOOK_HEAD: StaticClass = class!("mb-8 flex print:hidden");
 
 /// One chosen song on `/puta-himene`: the step between two sheets, and the
 /// rule that keeps a lyric off a page break.
@@ -1156,6 +1170,7 @@ mod tests {
         AUTOSCROLL_SPEED,
         AUTOSCROLL_RANGE,
         AUTOSCROLL_BUTTON,
+        BOOK_HEAD,
         BOOK_ITEM,
         BOOK_ENTRY,
         PAGINATION,
@@ -1423,6 +1438,31 @@ mod tests {
         let shell = rendered(&SHELL);
         assert!(shell.contains("print:bg-white"));
         assert!(shell.contains("print:text-black"));
+    }
+
+    /// The book's reading row is the bar's row: it is `flex` for [`AUTOSCROLL`]'s
+    /// `flex-none` — which means nothing outside a flex container, and without
+    /// the row would leave the pill stretched across the page — it is spaced by
+    /// the step [`BOOK_ITEM`] puts between two songs, and it is printed away
+    /// with the bar it holds, because a row that prints empty is a gap in a
+    /// songbook.
+    #[test]
+    fn the_books_reading_row_is_sized_by_the_bar_it_holds() {
+        let row = classes(&BOOK_HEAD);
+        assert!(row.contains(&"flex"));
+        assert!(classes(&AUTOSCROLL).contains(&"flex-none"));
+
+        let step = classes(&BOOK_ITEM)
+            .into_iter()
+            .find(|name| name.starts_with("mb-"))
+            .expect("the step the book puts between two songs");
+        assert!(
+            row.contains(&step),
+            "the bar and the first song are spaced unlike two songs"
+        );
+
+        assert!(row.contains(&"print:hidden"));
+        assert!(classes(&AUTOSCROLL).contains(&"print:hidden"));
     }
 
     /// ...and the sheet repaints itself, which cancelling the page background
