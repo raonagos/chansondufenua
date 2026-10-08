@@ -79,6 +79,13 @@ footer_rights = "2024 Chanson du fenua. Tous droits réservés"
 footer_contributing = "Contribuer à ce projet"
 index_description = "Toutes les chansons du fenua : paroles et accords des chansons tahitiennes et polynésiennes."
 artist_description = " : paroles et accords de ses chansons, à retrouver sur Chanson du fenua."
+# The song page's own sentence (step 50). The title goes in front of it, and
+# `{artists}` is filled with the credits; a song with no credited artist takes
+# the solo line, which is the same sentence without the clause. The French is
+# v3's, byte for byte — moving the sentence here is what lets an English or
+# Tahitian page hand a search engine its own language.
+song_description = " — paroles et accords de {artists}, à retrouver sur Chanson du fenua."
+song_description_solo = " — paroles et accords, à retrouver sur Chanson du fenua."
 support_description = "Soutenir Chanson du fenua : ce site est gratuit, sans publicité — voici comment aider à payer son hébergement."
 
 # --- the terms page (step 46) ---

@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use super::artist::Artist;
 use super::chord;
 use super::error::{AppError, AppResult};
+use crate::i18n::{self, Key, Lang};
 
 type Datetime = DateTime<Utc>;
 
@@ -356,7 +357,14 @@ impl Song {
     /// `og:url` and the structure data have to name the address the page is
     /// published at — one address, since v4.1, whatever language the response is
     /// written in.
-    pub fn get_meta_data(&self, url: &str) -> MetaSongData {
+    ///
+    /// `lang` is the language the response is written in, and the **description
+    /// is the one field that follows it**: the title names the song and the
+    /// structured data quotes the lyric, so neither is translated, but the
+    /// sentence around the title is the site's own and a page served in English
+    /// must say it in English (step 50). See [`description_sentence`]; the words
+    /// live in the catalog.
+    pub fn get_meta_data(&self, url: &str, lang: Lang) -> MetaSongData {
         let mut page_title = "Chanson du fenua".to_owned();
 
         let artists_name = self
@@ -378,7 +386,7 @@ impl Song {
         // title, and stops inside the ~155 characters a search engine will show.
         // `clean_lyrics` is still what the JSON-LD carries, where the whole text
         // is the point.
-        let description = description_sentence(&self.title, &artists_name);
+        let description = description_sentence(&self.title, &artists_name, lang);
         let meta_description = description.clone();
         let meta_og_description = description;
 
@@ -411,23 +419,30 @@ impl Song {
 
 // html meta tag helper
 
-/// The one-sentence description of a song page.
+/// The one-sentence description of a song page, in the page's own language.
 ///
 /// The title first — what a reader is looking for is the song — then what the
 /// page holds (its lyrics and its chords), then who wrote it and where it lives.
-/// French, like the front page's own description; the chrome's language is a
-/// separate question that does not reach the content.
+/// The title and the credits are the song's own words and are never translated;
+/// the sentence around them is the site's and is, in the catalog.
+///
+/// It follows the response's language, which is the whole of step 50: the line
+/// used to be assembled in French whatever the page was served in, so a song
+/// page at `en`/`ty` handed a search engine a French sentence. The French is v3's
+/// sentence byte for byte, so the default page reads exactly as it did.
 ///
 /// The result is at most [`DESCRIPTION_MAX`] characters. The tail is kept whole
 /// and the title gives way first, so a very long title is cut rather than the
 /// sentence being left half-written.
-fn description_sentence(title: &str, artists: &str) -> String {
-    let mut tail = String::from(" — paroles et accords");
-    if !artists.is_empty() {
-        tail.push_str(" de ");
-        tail.push_str(artists);
-    }
-    tail.push_str(", à retrouver sur Chanson du fenua.");
+fn description_sentence(title: &str, artists: &str, lang: Lang) -> String {
+    // A song with no credited artist takes the sentence without the credits
+    // clause rather than the same sentence with a hole where the names go: the
+    // clause and its connector are the language's, and the two forms are two
+    // lines in the catalog.
+    let tail = match artists.is_empty() {
+        true => i18n::text(lang, Key::SongDescriptionSolo).to_owned(),
+        false => i18n::fill(lang, Key::SongDescription, "artists", artists),
+    };
 
     // Defensive: ten artists at the schema's own maximum could in principle
     // swallow the whole budget. The corpus never comes close — the longest title
@@ -1009,7 +1024,7 @@ mod tests {
     fn song_metadata_without_artist() {
         let song = song_with("Song Lyrics");
 
-        let meta_data = song.get_meta_data(&song.get_url());
+        let meta_data = song.get_meta_data(&song.get_url(), Lang::Fr);
         assert_eq!(meta_data.page_title, "Song Title | Chanson du fenua");
         assert_eq!(
             meta_data.meta_description,
@@ -1038,7 +1053,7 @@ mod tests {
             Utc::now(),
         );
 
-        let meta_data = song.get_meta_data(&song.get_url());
+        let meta_data = song.get_meta_data(&song.get_url(), Lang::Fr);
         assert_eq!(
             meta_data.page_title,
             "Song Title - Artist Name | Chanson du fenua"
@@ -1071,7 +1086,21 @@ mod tests {
     #[test]
     fn the_description_leads_with_the_title_and_fits_a_snippet() {
         let song = song_with(REAL_LYRICS);
-        let meta = song.get_meta_data(&song.get_url());
+        let meta = song.get_meta_data(&song.get_url(), Lang::Fr);
+        for lang in Lang::ALL {
+            let meta = song.get_meta_data(&song.get_url(), lang);
+            assert!(
+                meta.meta_description.chars().count() <= DESCRIPTION_MAX,
+                "{lang:?}: {} characters: {:?}",
+                meta.meta_description.chars().count(),
+                meta.meta_description
+            );
+            assert!(
+                meta.meta_description.starts_with("Song Title"),
+                "{lang:?}: {:?}",
+                meta.meta_description
+            );
+        }
 
         assert!(
             meta.meta_description.starts_with("Song Title"),
@@ -1107,7 +1136,7 @@ mod tests {
             ));
         }
 
-        let meta = song.get_meta_data(&song.get_url());
+        let meta = song.get_meta_data(&song.get_url(), Lang::Fr);
         assert!(
             meta.meta_description
                 .contains("paroles et accords de 2B Brothers Tahiti, T'Angelo"),
@@ -1116,8 +1145,81 @@ mod tests {
         );
     }
 
+    /// **The sentence follows the page's language (step 50).** The title and the
+    /// credits are the song's own words and are the same in every language; the
+    /// sentence around them is the site's and is served in the language the
+    /// response is written in. The review item this closes is the next line but
+    /// one: a song page at `en`/`ty` used to hand a search engine the French
+    /// sentence.
+    ///
+    /// The French is v3's sentence byte for byte, so the default page reads
+    /// exactly as it did before the sentence moved into the catalog.
+    #[test]
+    fn the_description_speaks_the_language_the_page_is_served_in() {
+        let artist = Artist::new(
+            "Artist ID".to_string(),
+            "Artist Name".to_string(),
+            Utc::now(),
+            Utc::now(),
+        );
+        let song = Song::new(
+            "Song ID".to_string(),
+            Some("song-title".to_owned()),
+            "Song Title".to_string(),
+            "Song Lyrics".to_string(),
+            100,
+            vec![artist],
+            true,
+            Utc::now(),
+            Utc::now(),
+        );
+
+        let sentence = |lang| song.get_meta_data(&song.get_url(), lang).meta_description;
+
+        assert_eq!(
+            sentence(Lang::Fr),
+            "Song Title — paroles et accords de Artist Name, à retrouver sur Chanson du fenua."
+        );
+        assert_eq!(
+            sentence(Lang::En),
+            "Song Title — lyrics and chords by Artist Name, at Chanson du fenua."
+        );
+        // Tahitian is prose: the catalog serves the English, by the site's rule.
+        assert_eq!(sentence(Lang::Ty), sentence(Lang::En));
+
+        // The trap, stated as a test: an English page does not say it in French.
+        assert!(!sentence(Lang::En).contains("paroles"));
+        assert!(!sentence(Lang::Ty).contains("paroles"));
+    }
+
+    /// The same claim for a song with no credited artist: the credits clause is
+    /// not a fragment cut out of one sentence, so the no-artist form is a line of
+    /// its own — in the page's language like the sentence with credits in it.
+    #[test]
+    fn a_song_with_no_credited_artist_says_so_in_its_own_language() {
+        let song = song_with("Song Lyrics");
+
+        assert_eq!(
+            song.get_meta_data(&song.get_url(), Lang::Fr)
+                .meta_description,
+            "Song Title — paroles et accords, à retrouver sur Chanson du fenua."
+        );
+        assert_eq!(
+            song.get_meta_data(&song.get_url(), Lang::En)
+                .meta_description,
+            "Song Title — lyrics and chords, at Chanson du fenua."
+        );
+        assert_eq!(
+            song.get_meta_data(&song.get_url(), Lang::Ty)
+                .meta_description,
+            song.get_meta_data(&song.get_url(), Lang::En)
+                .meta_description
+        );
+    }
+
     /// A title longer than the budget is cut, and the sentence survives whole:
-    /// the ellipsis lands inside the title, never on the tail.
+    /// the ellipsis lands inside the title, never on the tail — in every
+    /// language, since the tail is now the language's own.
     #[test]
     fn a_long_title_gives_way_before_the_sentence() {
         let long = "Ā".repeat(TITLE_MAX);
@@ -1133,11 +1235,25 @@ mod tests {
             Utc::now(),
         );
 
-        let description = song.get_meta_data(&song.get_url()).meta_description;
-        assert_eq!(description.chars().count(), DESCRIPTION_MAX);
-        assert!(description.ends_with(", à retrouver sur Chanson du fenua."));
-        assert!(description.contains('…'));
-        assert!(long.starts_with(&description[..description.find('…').unwrap()]));
+        for (lang, tail) in [
+            (Lang::Fr, ", à retrouver sur Chanson du fenua."),
+            (Lang::En, ", at Chanson du fenua."),
+            (Lang::Ty, ", at Chanson du fenua."),
+        ] {
+            let description = song.get_meta_data(&song.get_url(), lang).meta_description;
+
+            assert_eq!(
+                description.chars().count(),
+                DESCRIPTION_MAX,
+                "{lang:?}: {description:?}"
+            );
+            assert!(description.ends_with(tail), "{lang:?}: {description:?}");
+            assert!(description.contains('…'), "{lang:?}: {description:?}");
+            assert!(
+                long.starts_with(&description[..description.find('…').unwrap()]),
+                "{lang:?}: {description:?}"
+            );
+        }
     }
 
     #[test]

@@ -449,6 +449,7 @@ mod tests {
     use super::*;
     use crate::db::fixtures;
     use crate::domain::song::SITE_URL;
+    use crate::i18n::Lang;
 
     fn sheet(index: usize) -> Song {
         let fixture = &fixtures::SONGS[index];
@@ -472,7 +473,7 @@ mod tests {
     /// `og:image` rather than spelling it out, for the same reason.
     #[test]
     fn the_meta_urls_name_the_routes_this_module_serves() {
-        let meta = sheet(0).get_meta_data(&sheet(0).get_url());
+        let meta = sheet(0).get_meta_data(&sheet(0).get_url(), Lang::Fr);
 
         let og = meta
             .meta_img_url_og

@@ -73,6 +73,12 @@ footer_rights = "2024 Chanson du fenua. All rights reserved"
 footer_contributing = "Contributing to this project"
 index_description = "Every song of the fenua: lyrics and chords for Tahitian and Polynesian songs."
 artist_description = ": lyrics and chords for their songs, at Chanson du fenua."
+# The song page's own sentence (step 50), the English of the French line: the
+# title goes in front of it, `{artists}` is filled with the credits, and a song
+# with no credited artist takes the solo line. A Tahitian page is served this
+# English, like every other line in this block.
+song_description = " — lyrics and chords by {artists}, at Chanson du fenua."
+song_description_solo = " — lyrics and chords, at Chanson du fenua."
 support_description = "Support Chanson du fenua: the site is free, with no advertising — here is how to help pay for its hosting."
 
 # --- the terms page (step 46) ---

@@ -99,7 +99,7 @@ use crate::domain::song::SITE_URL;
 
 pub mod catalog;
 
-pub use catalog::{init, text};
+pub use catalog::{fill, init, text};
 
 /// The name of the cookie a reader's language choice is kept in.
 pub const COOKIE: &str = "lang";
@@ -463,6 +463,19 @@ pub enum Key {
     /// The tail of an artist page's `<meta name="description">` — the artist's
     /// name goes in front of it.
     ArtistDescription,
+    /// The tail of a song page's `<meta name="description">` — the title goes in
+    /// front of it, and `{artists}` is filled with the song's credits.
+    ///
+    /// The sentence is in the catalog rather than in the metadata builder because
+    /// the page is served in three languages and the sentence has to follow it
+    /// (step 50): a song page at `en`/`ty` used to hand a search engine the
+    /// French sentence with the title's own words in it. The placeholder is
+    /// filled by [`fill`]; a song with no credited artist takes the twin below,
+    /// because the credits clause is not a fragment that can be dropped from
+    /// this line — the connector belongs to the language.
+    SongDescription,
+    /// The same sentence for a song with no credited artist.
+    SongDescriptionSolo,
     /// The support page's `<meta name="description">`.
     SupportDescription,
     /// The terms page's heading, its `<title>`, and the footer's link to it.
@@ -490,7 +503,7 @@ pub enum Key {
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 68] = [
+    pub const ALL: [Key; 70] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -549,6 +562,8 @@ impl Key {
         Key::Share,
         Key::IndexDescription,
         Key::ArtistDescription,
+        Key::SongDescription,
+        Key::SongDescriptionSolo,
         Key::SupportDescription,
         Key::TermsTitle,
         Key::TermsIntro,
@@ -578,10 +593,15 @@ impl Key {
     /// that is wrong. Inventing a Tahitian sentence for them would be a claim
     /// nobody has made, which is worse than serving a reader the English.
     ///
+    /// Step 50's two are the song page's description and its solo twin: prose
+    /// because they are the site's own sentence about a page, and because the
+    /// words around a song's title are not the song's — the French is v3's,
+    /// byte for byte, and the English is new writing like the rest.
+    ///
     /// A line added to `ty.toml` for one of these is served like any other and
     /// has to be removed from this list — which is what makes the list a claim
     /// about the shipped files rather than a switch.
-    pub const PROSE: [Key; 27] = [
+    pub const PROSE: [Key; 29] = [
         Key::HomeHeroSubtitle,
         Key::HomeCardSongsTitle,
         Key::HomeCardSongsBody,
@@ -599,6 +619,8 @@ impl Key {
         Key::FooterContributing,
         Key::IndexDescription,
         Key::ArtistDescription,
+        Key::SongDescription,
+        Key::SongDescriptionSolo,
         Key::SupportDescription,
         Key::TermsTitle,
         Key::TermsIntro,
@@ -683,6 +705,8 @@ impl Key {
             Key::Share => "share",
             Key::IndexDescription => "index_description",
             Key::ArtistDescription => "artist_description",
+            Key::SongDescription => "song_description",
+            Key::SongDescriptionSolo => "song_description_solo",
             Key::SupportDescription => "support_description",
             Key::TermsTitle => "terms_title",
             Key::TermsIntro => "terms_intro",
@@ -980,6 +1004,12 @@ mod tests {
         // English. Every one of them is in `Key::PROSE`, which is what makes the
         // French above a statement about the shipped files and not about a table
         // in a test.
+
+        // Step 50's two: the song page's description sentence and its twin for a
+        // song with no credited artist. Prose, and prose for the reason that
+        // matters here — the words around the song's own title are the *site's*,
+        // so an English or Tahitian page has to be able to say them, and the
+        // fallback is what a Tahitian reader gets.
         const PROSE_AT_STEP_36: [Key; 18] = [
             Key::HomeHeroSubtitle,
             Key::HomeCardSongsTitle,
@@ -1001,14 +1031,20 @@ mod tests {
             Key::SupportDescription,
         ];
 
-        for key in PROSE_AT_STEP_36.into_iter().chain(PROSE_AT_STEP_46) {
+        const PROSE_AT_STEP_50: [Key; 2] = [Key::SongDescription, Key::SongDescriptionSolo];
+
+        for key in PROSE_AT_STEP_36
+            .into_iter()
+            .chain(PROSE_AT_STEP_46)
+            .chain(PROSE_AT_STEP_50)
+        {
             assert!(
                 key.falls_back_to_english(),
                 "{key:?} is prose but not listed as prose"
             );
         }
         assert_eq!(
-            PROSE_AT_STEP_36.len() + PROSE_AT_STEP_46.len(),
+            PROSE_AT_STEP_36.len() + PROSE_AT_STEP_46.len() + PROSE_AT_STEP_50.len(),
             Key::PROSE.len()
         );
         assert_eq!(
@@ -1020,16 +1056,59 @@ mod tests {
                 + 1
                 + PROSE_AT_STEP_36.len()
                 + PROSE_AT_STEP_46.len()
+                + PROSE_AT_STEP_50.len()
         );
         for added in ADDED_SINCE
             .into_iter()
             .chain(ADDED_AT_STEP_38)
             .chain(ADDED_AT_STEP_42)
             .chain(PROSE_AT_STEP_46)
+            .chain(PROSE_AT_STEP_50)
         {
             assert!(
                 !FRENCH_AT_STEP_21.iter().any(|(key, _)| *key == added),
                 "{added:?} is not new chrome"
+            );
+        }
+    }
+
+    /// The song's description is the one catalog line with a value *inside* it,
+    /// and the placeholder is what keeps the sentence whole (step 50): the two
+    /// files that are written out must carry it — a line that lost it would
+    /// serve `{artists}` to a reader — and filling a line that has no
+    /// placeholder must leave it exactly as it is, which is what the no-artist
+    /// twin takes.
+    #[test]
+    fn the_song_description_carries_its_placeholder_and_fill_swaps_it() {
+        for lang in [Lang::Fr, Lang::En] {
+            let line = text(lang, Key::SongDescription);
+
+            assert!(
+                line.contains("{artists}"),
+                "{} lost the placeholder: {line:?}",
+                lang.code()
+            );
+            assert_eq!(
+                fill(lang, Key::SongDescription, "artists", "Hina'aro"),
+                line.replace("{artists}", "Hina'aro"),
+                "{}",
+                lang.code()
+            );
+        }
+
+        for lang in Lang::ALL {
+            let solo = text(lang, Key::SongDescriptionSolo);
+
+            assert!(
+                !solo.contains('{') && !solo.contains('}'),
+                "{}: the no-artist sentence has a placeholder in it: {solo:?}",
+                lang.code()
+            );
+            assert_eq!(
+                fill(lang, Key::SongDescriptionSolo, "artists", "Nobody"),
+                solo,
+                "{}, a line with no placeholder came back changed",
+                lang.code()
             );
         }
     }

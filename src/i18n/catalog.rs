@@ -154,6 +154,23 @@ pub fn text(lang: Lang, key: Key) -> &'static str {
     loaded().words(lang, key)
 }
 
+/// A catalog line with one `{name}` placeholder filled in.
+///
+/// The catalog is a flat table of finished strings, and a caller that needs a
+/// value *inside* a sentence composes with `format!`. That is right when the
+/// variable part is the whole tail — a title in front of a sentence, a page
+/// number after it. It is not right for the one line where the value sits in the
+/// middle of the words: a song page's description carries its credits between
+/// the phrase and the site's name, and cutting the sentence into fragments on
+/// either side of them would leave a translator fitting the pieces back
+/// together. So that line carries `{artists}` and this fills it.
+///
+/// A line without the placeholder comes back unchanged, which is what the
+/// no-artist twin of the sentence takes.
+pub fn fill(lang: Lang, key: Key, name: &str, value: &str) -> String {
+    text(lang, key).replace(&format!("{{{name}}}"), value)
+}
+
 /// Reads the catalog at boot and says what it found.
 ///
 /// Panics if it cannot: a server that does not know what its own chrome says

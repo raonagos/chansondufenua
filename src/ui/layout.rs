@@ -345,6 +345,11 @@ fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
 
 /// The `<head>` of a song page, from the song's own metadata.
 ///
+/// The **description** is the one field here that follows the language the page
+/// is served in: the title names the song and the structured data quotes the
+/// lyric, so neither is translated, but the sentence around the title is the
+/// site's own (step 50) — see [`Song::get_meta_data`].
+///
 /// The canonical URL is the one this response is served at: the slug's own
 /// address. A song's page is the same document in every language — the lyric is
 /// never translated, only the chrome around it changes — and since v4.1 it is
@@ -353,7 +358,7 @@ fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
 /// `routes::negotiation` has already sent them here.
 fn song_head(song: &Song, lang: Lang) -> DocumentHead {
     let canonical = i18n::absolute(&song.get_path());
-    let meta = song.get_meta_data(&canonical);
+    let meta = song.get_meta_data(&canonical, lang);
 
     DocumentHead {
         title: meta.page_title.clone(),
