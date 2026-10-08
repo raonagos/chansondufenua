@@ -13,6 +13,7 @@ pub mod fonts;
 pub mod icons;
 pub mod layout;
 pub mod palette;
+pub mod share;
 pub mod theme;
 
 pub use layout::root_layout;

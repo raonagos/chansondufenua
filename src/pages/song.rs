@@ -46,6 +46,7 @@ use crate::i18n::{self, Key};
 use crate::pages::artist;
 use crate::state;
 use crate::ui::autoscroll::{self, speed_bar};
+use crate::ui::share::row as share_row;
 use crate::ui::theme;
 
 use std::collections::VecDeque;
@@ -171,6 +172,12 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                 // it is drawn only by that script, so a sheet read with
                 // JavaScript off shows no button that could not work.
                 speed_bar()
+                // Handing the sheet to somebody else. `ui::share` owns the row
+                // and the two addresses; what this page hands it is its own
+                // **canonical** URL — the address this sheet consolidates to,
+                // built by the same call the page's `<head>` builds it with, so
+                // a sharing link and a crawler are told the same URL.
+                share_row(url: i18n::absolute(&sheet.get_path()))
                 <a
                     href=(crate::pages::editor::PATH)
                     class=(class!(theme::BUTTON_SMALL, theme::FOCUS))

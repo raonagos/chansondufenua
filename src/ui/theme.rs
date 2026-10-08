@@ -810,6 +810,38 @@ pub const AUTOSCROLL_BUTTON: StaticClass = class!(
 );
 
 // ---------------------------------------------------------------------------
+// Sharing a sheet
+// ---------------------------------------------------------------------------
+
+/// The share row in a sheet's header: the third pill, holding two links.
+///
+/// Beside [`TRANSPOSE`] and [`AUTOSCROLL`] because it is the same kind of thing
+/// — a control over the paper the reader is looking at — and *its own* token
+/// rather than one of theirs because it holds links and not a control. The pill
+/// shape is theirs, written out for [`CARD_ROOMY`]'s reason (a [`StaticClass`]
+/// cannot be composed from constants); `the_share_pill_is_the_headers_own_pill`
+/// asserts the three agree, so a change to the shape is a change to all three.
+///
+/// Its class list is [`AUTOSCROLL`]'s exactly, which is deliberate and is what
+/// keeps the stylesheet's hash: the row brings no utility a sheet did not
+/// already carry. Hidden on paper for [`TRANSPOSE`]'s reason — a printed sheet
+/// has nobody to share it with.
+pub const SHARE: StaticClass = class!(
+    "flex flex-none items-center gap-2 rounded-full border border-ink-700 bg-ink-800 \
+     px-3 py-1 text-sm text-mist-300 print:hidden"
+);
+
+/// One link in the share row: a drawing and the word beside it.
+///
+/// Composed with [`LINK`], which carries the word's colour, underline and focus
+/// ring, for the reason [`SUPPORT_LINK`] is: the pair is pinned in
+/// `tokens_meant_to_be_composed_never_contradict_each_other`, and this token is
+/// only the row's shape — an inline flex box, because that is what keeps a
+/// drawing and a word on one baseline. The gap is the footer's own step; the
+/// footer's margin is not, because this row's spacing belongs to the pill.
+pub const SHARE_LINK: StaticClass = class!("inline-flex items-center gap-2");
+
+// ---------------------------------------------------------------------------
 // Several songs on one page
 // ---------------------------------------------------------------------------
 
@@ -1170,6 +1202,8 @@ mod tests {
         AUTOSCROLL_SPEED,
         AUTOSCROLL_RANGE,
         AUTOSCROLL_BUTTON,
+        SHARE,
+        SHARE_LINK,
         BOOK_HEAD,
         BOOK_ITEM,
         BOOK_ENTRY,
@@ -1399,6 +1433,9 @@ mod tests {
             // The footer's link to the support page: the shared link styling,
             // and the row's own shape around the drawing beside the word.
             ("footer support link", &LINK, &SUPPORT_LINK),
+            // The share row's two links: the same shared link styling, and the
+            // same drawing-beside-a-word shape (without the footer's margin).
+            ("share link", &LINK, &SHARE_LINK),
         ];
 
         for (label, one, other) in pairs {
@@ -1463,6 +1500,48 @@ mod tests {
 
         assert!(row.contains(&"print:hidden"));
         assert!(classes(&AUTOSCROLL).contains(&"print:hidden"));
+    }
+
+    /// The share row is the header's **third pill**, not a third shape.
+    ///
+    /// Three controls sit in one row on a sheet — the transposition, the speed
+    /// bar and the share row — and a reader reads them as one kind of thing
+    /// because they are drawn as one kind of thing. Two of the three are
+    /// therefore written the same way on purpose, and the third differs by its
+    /// own gap and nothing else: the transposition puts its label's own `mr-1`
+    /// against a `gap-1`, so its four parts sit tighter than a row of two links.
+    ///
+    /// A change to the pill therefore has to be a change to all three, which is
+    /// what this test says — and it is also why the share row moves no
+    /// stylesheet: every class it names is one the sheet already carried.
+    #[test]
+    fn the_share_row_is_the_headers_own_pill() {
+        assert_eq!(
+            classes(&SHARE),
+            classes(&AUTOSCROLL),
+            "the share pill and the speed bar are two shapes"
+        );
+        for name in classes(&TRANSPOSE) {
+            assert!(
+                classes(&SHARE).contains(&name) || name == "gap-1",
+                "the transposition's {name:?} is not the header's pill"
+            );
+        }
+        assert!(classes(&TRANSPOSE).contains(&"gap-1"));
+        assert!(!classes(&TRANSPOSE).contains(&"gap-2"));
+        assert!(classes(&SHARE).contains(&"print:hidden"));
+
+        // And the link inside the row is the footer's link shape — a drawing
+        // beside a word on one baseline — without the footer's own margin,
+        // which belongs to the footer and not to the shape.
+        for name in classes(&SHARE_LINK) {
+            assert!(
+                classes(&SUPPORT_LINK).contains(&name),
+                "the share link's {name:?} is not the footer link's shape"
+            );
+        }
+        assert!(classes(&SHARE_LINK).contains(&"gap-2"));
+        assert!(!classes(&SHARE_LINK).contains(&"mt-6"));
     }
 
     /// ...and the sheet repaints itself, which cancelling the page background

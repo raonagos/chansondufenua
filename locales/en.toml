@@ -46,6 +46,10 @@ support_copied = "Copied"
 # heart, which is the link's whole meaning — the drawing says nothing.
 footer_donate = "Donate"
 
+# The song page's share row (step 42): the word beside the arrow. The link
+# beside it is the network's name, which is a brand and not translated.
+share = "Share"
+
 # --- the site's own prose (step 36) ---
 #
 # Not chrome: the maintainer's sentences. This file is where an English reader

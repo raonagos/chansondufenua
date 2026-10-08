@@ -43,6 +43,7 @@ use crate::i18n::{self, Key};
 use crate::pages::song as sheet;
 use crate::pages::songs;
 use crate::state;
+use crate::ui::share;
 use crate::ui::theme;
 
 /// The page's prose, in the language the response is written in.
@@ -62,18 +63,24 @@ use crate::ui::theme;
 /// [`crate::i18n`]).
 ///
 /// Two strings are *not* here, because neither is a translation unit: the site's
-/// name ([`copy::HERO_TITLE`]) and a brand ([`copy::FOOT_FACEBOOK`]). The two
-/// button labels are chrome like every other control's and live in
-/// [`crate::i18n`] too.
+/// name ([`copy::HERO_TITLE`]) and the network's ([`share::NETWORK`], which the
+/// closing button prints). The two button labels are chrome like every other
+/// control's and live in [`crate::i18n`] too.
 pub mod copy {
     use crate::i18n::{self, Key, Lang};
+    use crate::ui::share;
 
     /// The hero's headline — the site's own name, which is not translated.
     pub const HERO_TITLE: &str = "Chanson du fenua";
 
-    /// The first closing button. A brand name, so it is the same in both
-    /// languages and stays a constant rather than becoming a key.
-    pub const FOOT_FACEBOOK: &str = "Facebook";
+    /// The first closing button. A brand name, so it is the same in every
+    /// language and stays a constant rather than becoming a key.
+    ///
+    /// The constant is [`crate::ui::share::NETWORK`]'s, and the address under it
+    /// is [`crate::ui::share::PAGE`]'s: the song page's share row prints the same
+    /// network and links to the same page (step 42), and one URL with two
+    /// spellings is a URL that will disagree with itself.
+    pub const FOOT_FACEBOOK: &str = share::NETWORK;
 
     /// The hero's standfirst.
     pub fn hero_subtitle(lang: Lang) -> &'static str {
@@ -279,7 +286,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
                 <p class=(theme::FOOT_TEXT)>(copy::foot_text(lang))</p>
                 <div class=(theme::FOOT_LINKS)>
                     <a
-                        href="https://facebook.com/chansondufenua"
+                        href=(share::PAGE)
                         class=(class!(theme::BUTTON_LIGHT, theme::FOCUS))
                     >
                         (copy::FOOT_FACEBOOK)

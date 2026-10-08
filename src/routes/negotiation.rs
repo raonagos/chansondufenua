@@ -727,10 +727,13 @@ async fn home_document(cx: &Cx, lang: Lang) -> Result<String> {
     out.push_str(&format!("\n\n## {}\n\n", home::copy::foot_title(lang)));
     out.push_str(&format!("{}\n\n", home::copy::foot_text(lang)));
     // The two closing buttons. The first is a brand name and is not translated;
-    // the second is the create-song page's label.
+    // the second is the create-song page's label. The address under the brand is
+    // the row's own constant (`ui::share::PAGE`), so the Markdown twin and the
+    // button cannot come to point at two different pages.
     out.push_str(&format!(
-        "[{}](https://facebook.com/chansondufenua) · [{}]({})\n",
+        "[{}]({}) · [{}]({})\n",
         home::copy::FOOT_FACEBOOK,
+        crate::ui::share::PAGE,
         i18n::text(lang, Key::HomeStart),
         i18n::absolute(crate::pages::editor::PATH)
     ));

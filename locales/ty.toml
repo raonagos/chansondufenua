@@ -52,6 +52,11 @@ support_copied = "'Ua rave"
 # heart, which is the link's whole meaning — the drawing says nothing.
 footer_donate = "Tautururaa"
 
+# The song page's share row (step 42): the word beside the arrow — `fa'a'ite`,
+# *to show*: the same first pass as the rest of this file, and a line to correct
+# here rather than in the binary.
+share = "Fa'a'ite"
+
 # The site's own prose — the front page's sentences, the footer's two clauses and
 # the descriptions a search engine reads — has no line here, on purpose: where
 # there are no Tahitian words the site serves the English (`i18n::Key::PROSE`).
