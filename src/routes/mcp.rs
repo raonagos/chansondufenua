@@ -13,7 +13,8 @@
 //! funnel until it has an auth model, a moderation queue and a rate limit, and
 //! none of those is here. There is therefore no session, no `Mcp-Session-Id`, no
 //! login, and nothing that can change the catalogue. The create-song page stays
-//! the one way a song is contributed, which is also what `robots.txt` says.
+//! the one way a song is contributed, and it keeps itself out of an index with
+//! its own `noindex`.
 //!
 //! **Why the protocol is hand-rolled.** Four methods and two tools do not need
 //! an SDK, and an SDK would want to own the HTTP transport that the router

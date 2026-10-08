@@ -44,14 +44,26 @@ pub const PATH: &str = "/robots.txt";
 /// material (`ai-train=no`). Flipping one is a one-word edit to this constant,
 /// and this constant is the only place the choice is written down.
 ///
-/// **`Disallow: /himene/api` was here, and its removal is the point.** The
-/// create-song page is kept out of an index by its own
-/// `<meta name="robots" content="noindex">`, and a crawler never reads that
-/// directive on a URL its `robots.txt` told it not to fetch. What a `Disallow`
-/// buys here is therefore nothing — the form is reached by `POST`, which no
-/// crawler makes and which this file never governed — while it would cost the
-/// one protection the page actually needs. `Allow: /` is written out because a
-/// future rule above it should not be able to swallow the read side by accident.
+/// **No path is disallowed for a general crawler.** Two were tried, and both are
+/// gone; the `User-agent: *` block below carries `Allow: /` and no `Disallow` at
+/// all. Neither ever bought what it looked like it bought:
+///
+/// * **`/himene/api`, the create-song form.** It is kept out of an index by its
+///   own `<meta name="robots" content="noindex, follow">`, and a crawler never
+///   reads that directive on a URL its `robots.txt` told it not to fetch. The
+///   form is reached by `POST`, which no crawler makes and which this file never
+///   governed, so the `Disallow` cost the one protection the page needs and paid
+///   for nothing.
+/// * **`/reo/{code}`, the language switcher.** It answers `302` to the page the
+///   reader was on, so a `Disallow` never kept anything out of an index — the
+///   target is fetched and indexed under its own address — while Search Console
+///   reported every switcher URL as *Blocked by robots.txt*, which is a console
+///   line the maintainer asked not to have. Allowed, a crawler follows the
+///   `302` and still never indexes the redirect itself.
+///
+/// `Allow: /` is written out because a future rule above it should not be able
+/// to swallow the read side by accident. The two `Disallow: /` lines that
+/// remain are not path rules: each sits under its own named crawler, below.
 ///
 /// The two named crawlers repeat `ai-train=no` for the engines that offer no
 /// other way to say it. `CCBot` feeds Common Crawl, which is a training corpus
@@ -62,7 +74,6 @@ const POLICY: &str = "\
 User-agent: *
 
 Allow: /
-Disallow: /reo
 
 Content-Signal: search=yes, ai-input=yes, ai-train=no
 
@@ -120,6 +131,45 @@ mod tests {
             "a Disallow on the create-song page would hide its own noindex"
         );
         assert!(!text.contains("Disallow: /himene/api"));
+    }
+
+    /// The shape this step gave the file: the general crawler's block carries
+    /// `Allow: /` and nothing it may not read. The only two `Disallow` lines
+    /// left are agent-wide, and each sits under its own named `User-agent` —
+    /// which is why they are counted here rather than grepped for.
+    ///
+    /// `/reo` is the one that went: the switcher is a `302`, so a `Disallow` on
+    /// it kept nothing out of an index and only made Search Console call every
+    /// switcher URL blocked.
+    #[test]
+    fn a_general_crawler_is_disallowed_nothing() {
+        let text = body();
+        let general = text
+            .split_once("User-agent: *\n")
+            .expect("a block for the general crawler")
+            .1
+            .split_once("User-agent: ")
+            .expect("a block after it — the two named crawlers")
+            .0;
+
+        assert!(
+            general.contains("Allow: /\n"),
+            "the general block lost its Allow:\n{general}"
+        );
+        assert!(
+            !general.contains("Disallow:"),
+            "the general block disallows a path:\n{general}"
+        );
+        assert!(
+            !text.contains("Disallow: /reo"),
+            "the language switcher must not be disallowed"
+        );
+
+        assert_eq!(
+            text.matches("Disallow:").count(),
+            2,
+            "the two named crawlers, and no path rule:\n{text}"
+        );
     }
 
     /// The dead entries are the reason this is a route and not the file it

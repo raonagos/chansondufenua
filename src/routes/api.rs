@@ -36,7 +36,7 @@
 //!   query string is a selection.
 //!
 //! Nothing here writes. The only writable route on the site is the create-song
-//! form, and `robots.txt` keeps crawlers out of it.
+//! form, which keeps itself out of an index with its own `noindex`.
 
 use serde::Serialize;
 use serde_json::{Map, Value, json};
