@@ -643,7 +643,25 @@ pub const LYRICS: StaticClass = class!("text-lg leading-loose text-mist-100 prin
 /// letter: if an engine drops the collapsed box at the end of a line, the line
 /// is what keeps the chord inside its own row instead of leaving it measured
 /// against the page.
-pub const LYRIC_LINE: StaticClass = class!("relative");
+///
+/// **The bottom margin is the room the *next* line's chord is drawn in.** A
+/// chord is absolutely positioned and out of the flow, so it adds nothing to
+/// its own line: it hangs from the syllable box, its [`CHORD`] 14px ending above
+/// the top of the line box, in the lead above the text. [`LYRICS`] allows that
+/// text only half of the difference to its doubled line-height — some 9px —
+/// which is less than a chord is tall, so from the second line on the chord of
+/// a line reached up into the descenders of the line above and the words
+/// touched. That is the reviewer's Chromium finding, and it is why the lead
+/// above each line has to be *widened from below*: `mb-2` (8px) between one line
+/// box and the next makes the lead 17px — a chord's 14px and its overhang — and
+/// the chord is drawn inside its own row.
+///
+/// It is a bottom margin and neither a top padding nor a taller leading because
+/// only the space between the rows may change: the lyric keeps its place in its
+/// own box and the chord keeps its place over the syllable, which is what a
+/// sheet a singer reads cannot lose. `a_line_keeps_room_for_the_chord_of_the_line_above`
+/// is the arithmetic, and it fails if any class here stops being a margin.
+pub const LYRIC_LINE: StaticClass = class!("relative mb-2");
 
 /// The blank line between two verses.
 ///
@@ -665,9 +683,11 @@ pub const LYRIC_GAP: StaticClass = class!("h-6");
 ///
 /// One em tall, not the lyric's doubled leading: the chord is then drawn from
 /// the top of the glyph box rather than the top of the line box, so it lands in
-/// the leading space — clear of the words below it and of the descenders of the
-/// line above. The line box does not grow: the inline box is shorter than the
-/// line's strut, and [`CHORD`] is out of the flow entirely.
+/// the lead above the text — clear of the words below it. What keeps it clear of
+/// the descenders of the *line above* is not this box but the margin
+/// [`LYRIC_LINE`] keeps below every line: the lead `LYRICS` allows on its own is
+/// shorter than a chord. The line box does not grow: the inline box is shorter
+/// than the line's strut, and [`CHORD`] is out of the flow entirely.
 pub const CHORDED: StaticClass = class!("relative leading-none");
 
 /// A chord, drawn above the syllable it was written against.
@@ -1791,5 +1811,70 @@ mod tests {
             "a fixed negative margin puts the chord where the margin lands, not \
              over the syllable it was written against"
         );
+    }
+
+    /// The chord of a line hangs *above* its own line box, in the lead the lyric's
+    /// leading leaves over the text — and that lead is shorter than a chord, so
+    /// the room has to be added between the rows, on [`LYRIC_LINE`]. This is the
+    /// arithmetic the reviewer's finding turned on, and the reason the line token
+    /// carries a margin at all.
+    ///
+    /// The four numbers come off the classes, so a change to any of them has to
+    /// come past this test.
+    #[test]
+    fn a_line_keeps_room_for_the_chord_of_the_line_above() {
+        let lyrics = classes(&LYRICS);
+        let line = classes(&LYRIC_LINE);
+        let chord = classes(&CHORD);
+
+        // The lyric's font size and line-height: `text-lg` (18px) doubled
+        // (`leading-loose`), and the chord's `text-sm` (14px) box. Only these
+        // three classes are named, so a fourth cannot quietly enter the sum.
+        let lyric_size = if lyrics.contains(&"text-lg") {
+            18.0
+        } else {
+            panic!("the lyric is no longer `text-lg`, and this arithmetic is its");
+        };
+        let line_height = if lyrics.contains(&"leading-loose") {
+            2.0 * lyric_size
+        } else {
+            panic!("the lyric is no longer `leading-loose`, and this arithmetic is its");
+        };
+        let chord_height = if chord.contains(&"text-sm") {
+            14.0
+        } else {
+            panic!("the chord is no longer `text-sm`, and this arithmetic is its");
+        };
+
+        // Tailwind's spacing step: `mb-N` is `N × 0.25rem` at a 16px root.
+        let margin = line
+            .iter()
+            .find_map(|name| name.strip_prefix("mb-"))
+            .expect("the line keeps no room between it and the chord of the line below")
+            .parse::<f32>()
+            .expect("a margin is `mb-N`")
+            * 4.0;
+
+        // The lead above the text is half of what the leading adds to the font
+        // box — the same half-leading the chord is drawn in.
+        let lead = (line_height - lyric_size) / 2.0;
+        assert!(
+            lead + margin >= chord_height,
+            "a {}px chord hangs into {}px of lead, so it reaches the line above it",
+            chord_height,
+            lead + margin
+        );
+
+        // ...and the room is a margin, which sits *between* the rows. A padding
+        // or a leading would move the lyric inside its own box, and this step may
+        // not move a lyric line.
+        for name in &line {
+            assert!(
+                *name == "relative" || name.starts_with("mb-"),
+                "`{name}` moves the lyric inside its own line box: a chord reaching \
+                 the line above is fixed by the space between rows, never by \
+                 displacing the words"
+            );
+        }
     }
 }
