@@ -1,0 +1,108 @@
+# The French chrome — the site's default language.
+#
+# One key per line, `name = "words"`; a line starting with `#` is a comment.
+# The name is `i18n::Key`'s, in snake_case: listing a name here does not put it
+# on a page, the enum has to name it too. A name this file does not know, or a
+# key missing from it, stops the server at boot — loud on purpose, so that a
+# half-copied file cannot serve a key name to a reader.
+#
+# Read at startup and never compiled: correcting a sentence is an edit and a
+# restart, not a `cargo build`.
+
+nav_home = "Accueil"
+nav_songs = "Chanson"
+language = "Langue"
+not_found_title = "La page n'existe pas."
+not_found_body = "Rien à lire ici — l'adresse s'est peut-être perdue en chemin, ou la chanson a pris le large."
+not_found_cta = "Retour à l'accueil"
+add_lyrics = "Ajouter des paroles"
+index_title = "Toutes les chansons"
+index_column_title = "Titre"
+index_column_artist = "Artiste"
+index_empty = "Pas de chanson"
+home_discover = "Découvrir les chansons"
+home_start = "C'est parti !"
+field_lyrics = "Paroles"
+save = "Enregistrer"
+save_error = "La chanson n'a pas été enregistrée. Vérifiez le titre et les paroles."
+remove_artist = "Retirer cet artiste"
+add_chord = "Ajouter cet accord"
+transpose = "Transposer"
+transpose_down = "Transposer un demi-ton plus bas"
+transpose_up = "Transposer un demi-ton plus haut"
+scroll = "Défilement"
+scroll_speed = "Vitesse"
+scroll_start = "Démarrer"
+scroll_stop = "Arrêter"
+book_title = "Plusieurs chansons"
+book_hint = "Choisissez des chansons pour lire leurs paroles à la suite."
+book_read = "Lire la sélection"
+book_open = "Lire plusieurs chansons"
+search_title = "Recherche"
+search_label = "Chanson ou artiste"
+search_submit = "Chercher"
+search_songs = "Chansons"
+search_artists = "Artistes"
+search_empty = "Aucun résultat"
+support_title = "Soutenir le site"
+support_intro = "Ce site est gratuit, sans publicité. Pour aider à payer son hébergement, voici comment."
+support_copy = "Copier"
+support_copied = "Copié"
+
+# The footer's link to the support page (step 38): the word beside the
+# heart, which is the link's whole meaning — the drawing says nothing.
+footer_donate = "Don"
+
+# The song page's share row (step 42): the word beside the arrow. The link
+# beside it is the network's name, which is a brand and not translated.
+share = "Partager"
+
+# --- the site's own prose (step 36) ---
+#
+# Not chrome: the maintainer's sentences, translated once into English. There is
+# no `ty.toml` line for any of these, deliberately — `i18n::Key::PROSE` is the
+# list, and the catalog serves the English where the Tahitian is silent.
+home_hero_subtitle = "L'élégance de la musique polynésienne"
+home_card_songs_title = "Chansons exquises"
+home_card_songs_body = "Plongez dans une collection raffinée de chansons tahitiennes, alliant tradition et modernité."
+home_card_lyrics_title = "Paroles envoûtantes"
+home_card_lyrics_body = "Laissez-vous séduire par la poésie des paroles, une fenêtre sur l'âme tahitienne."
+home_card_chords_title = "Harmonies divines"
+home_card_chords_body = "Maîtrisez l'art des accords et élevez votre musique vers de nouveaux sommets."
+home_synopsis = "Découvrez un monde musical unique où l'art des accords et la maîtrise des mélodies élèvent votre musique vers de nouveaux sommets. Laissez-vous séduire par la poésie des paroles, véritable fenêtre sur l'âme tahitienne, qui vous transporte dans un voyage lyrique et émouvant. Plongez dans une collection raffinée de chansons tahitiennes, savamment sélectionnées pour allier tradition et modernité, offrant une expérience musicale enrichissante et inoubliable. Découvrez des mélodies envoûtantes et des rythmes captivants, célébrant la richesse culturelle de Tahiti et invitant les auditeurs à explorer et apprécier la beauté et la profondeur de cette culture unique."
+home_table_latest = "Les dernières ajouts"
+home_table_most_viewed = "Les plus vues"
+home_foot_title = "Votre odyssée musicale commence ici"
+home_foot_text = "Rejoignez la communauté des passionnés de la musique polynésienne"
+home_tagline = "Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes."
+footer_rights = "2024 Chanson du fenua. Tous droits réservés"
+footer_contributing = "Contribuer à ce projet"
+index_description = "Toutes les chansons du fenua : paroles et accords des chansons tahitiennes et polynésiennes."
+artist_description = " : paroles et accords de ses chansons, à retrouver sur Chanson du fenua."
+# The song page's own sentence (step 50). The title goes in front of it, and
+# `{artists}` is filled with the credits; a song with no credited artist takes
+# the solo line, which is the same sentence without the clause. The French is
+# v3's, byte for byte — moving the sentence here is what lets an English or
+# Tahitian page hand a search engine its own language.
+song_description = " — paroles et accords de {artists}, à retrouver sur Chanson du fenua."
+song_description_solo = " — paroles et accords, à retrouver sur Chanson du fenua."
+support_description = "Soutenir Chanson du fenua : ce site est gratuit, sans publicité — voici comment aider à payer son hébergement."
+
+# --- the terms page (step 46) ---
+#
+# The owner's own statements about the site — who publishes it, whose the lyrics
+# are, what happens to a lyric that is wrong. Prose like the block above, and in
+# `i18n::Key::PROSE` for the same reason: none of it has a `ty.toml` line, so a
+# Tahitian reader is served the English rather than an invented translation.
+#
+# `terms_title` is also the footer link's word: the page has one name, and a
+# second word for the same page would be a second thing to keep true.
+terms_title = "Mentions légales"
+terms_intro = "Chanson du fenua est un recueil de chansons de Polynésie française : les paroles, avec les accords écrits là où ils se jouent. Le catalogue est petit, public et sans but commercial."
+terms_publisher = "Le site est hébergé et édité par Rao Nagos."
+terms_lyrics = "Les paroles ne sont pas les nôtres : elles appartiennent à leurs auteurs."
+terms_code = "Le code du site est sous licence GPL-3.0."
+terms_data = "Aucune information sensible vous concernant n'est sauvegardée sur ce site."
+terms_removal = "Si vous détenez des droits sur une chanson et que vous souhaitez qu'elle soit retirée, écrivez à contact@chansondufenua.pf — ou à contact@rao-nagos.pf si la première adresse ne vous répond pas."
+terms_corrections = "Nous ne sommes pas responsables si une parole est erronée : demandez la correction, et elle est corrigée. Voilà."
+terms_updated = "Dernière mise à jour :"

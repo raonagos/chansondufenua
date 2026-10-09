@@ -1,4 +1,4 @@
-//! SQLite persistence layer (step 3a of `PLAN.md`).
+//! SQLite persistence layer.
 //!
 //! One embedded database, no server, no credentials. The engine is compiled into
 //! the binary by `sqlx`'s bundled `libsqlite3-sys`, so deploying the site is
@@ -7,7 +7,7 @@
 //! This module is the *outside* of the former hexagon: it is allowed to know
 //! about SQLite, and it is the only place that is. `src/domain` stays ignorant
 //! of it, which is the one rule worth keeping from v3's ports-and-adapters
-//! layout (see `PLAN.md` §2.1).
+//! layout.
 
 pub mod fixtures;
 pub mod import;
@@ -15,8 +15,9 @@ pub mod queries;
 
 pub use import::{Dump, ImportReport, ImportedArtist, ImportedSong, import_dump};
 pub use queries::{
-    Counts, SongOrder, artists, counts, create_song, increment_view_count, search_artists, song,
-    songs,
+    Addressed, Counts, SongOrder, artist, artists, backfill_slugs, counts, create_song,
+    increment_view_count, search_artists, search_songs, song, song_at, songs, songs_at,
+    songs_by_artist, songs_page,
 };
 
 /// Where the database lives when `DATABASE_URL` is not set.
@@ -73,6 +74,17 @@ pub type DbResult<T> = Result<T, DbError>;
 /// binary self-contained: a deployment is one executable plus the SQLite file.
 static MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
+/// How many migrations this binary embeds — and, once [`Db::open`] has returned,
+/// how many are applied: `open` runs all of them or fails before it hands back a
+/// handle, so the two are the same number by the time anyone asks.
+///
+/// Reported at boot (`src/main.rs`), because "the schema is three migrations
+/// behind what the binary expects" is the kind of thing that should be visible in
+/// the journal rather than inferred from a failed query.
+pub fn migration_count() -> usize {
+    MIGRATIONS.iter().count()
+}
+
 /// A handle to the database.
 ///
 /// `Clone` because it is just a pool handle — cloning is how it gets into
@@ -110,6 +122,12 @@ impl Db {
             .await?;
 
         MIGRATIONS.run(&pool).await?;
+
+        // The second half of migration `0002_slugs.sql`: what a title slugifies
+        // to is a Rust rule with a transliteration table, so the backfill is a
+        // Rust step and not a SQL one. Idempotent, and a no-op on a database the
+        // importer has already written.
+        backfill_slugs(&pool).await?;
 
         Ok(Self { pool })
     }

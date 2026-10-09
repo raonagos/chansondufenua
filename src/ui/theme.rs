@@ -4,7 +4,7 @@
 //! markup in `src/ui/` and `src/pages/` reads as composition rather than as
 //! markup full of class soup. v3 expressed a similar vocabulary as `@apply`
 //! blocks in `style/tailwind.scss`; this module keeps the *mechanism* and
-//! repaints the design on purpose — see `PLAN.md` §15 for what changed and why.
+//! repaints the design on purpose.
 //!
 //! Three rules this module exists to enforce:
 //!
@@ -147,6 +147,131 @@ pub const NAV_LINK: StaticClass =
 pub const NAV_LINK_CURRENT: StaticClass =
     class!("text-mist-100 underline decoration-tahiti-400 decoration-2 underline-offset-8");
 
+/// The language switcher: a globe that opens the flag list, in the header of
+/// every page.
+///
+/// **In the header row, not inside [`NAV`].** The nav below `md` is a disclosure
+/// with a fixed open height, and a third line inside it would either overflow
+/// that box or change it on every screen; here the switcher sits beside the logo
+/// on every width, always drawn, and needs no script to reach. It is chrome, so
+/// [`HEADER`]'s `print:hidden` already keeps it out of a printed songbook.
+///
+/// The colour lives on the container, for the reason [`NAV`]'s does: the summary
+/// is composed with a colour state of its own, and two colour utilities in one
+/// class list are resolved by stylesheet order rather than by intent. The globe
+/// is drawn in `currentColor`, so it takes this value too.
+///
+/// `relative` because the flag list hangs from this box: the nav is what does not
+/// move when the disclosure opens, so the list is positioned against it rather
+/// than against the header.
+///
+/// `flex-none` rather than the more familiar no-shrink utility: that one's name
+/// contains the text of a colour this palette does not define, and
+/// `every_colour_used_by_a_token_exists` reads class *names* as text — it would
+/// read that utility as `ink-0` and fail.
+pub const LANGUAGE_SWITCH: StaticClass =
+    class!("relative mr-3 md:mr-6 flex flex-none items-center text-sm text-mist-300");
+
+/// The control that opens the flag list: the globe, and the word that names it.
+///
+/// A `<summary>`, so the disclosure is the browser's own and needs no script:
+/// closed it shows the globe, and open it heads the list below. Its name is
+/// [`VISUALLY_HIDDEN`] — a drawing cannot be read aloud, so the control is named
+/// by the catalog's word for *language*, in the page's own language.
+///
+/// `cursor-pointer` because a `<summary>` is a control and does not say so with a
+/// pointer on its own. `list-none` and the WebKit rule remove the browser's
+/// marker: the globe is this design's affordance, and a second, browser-styled
+/// one beside it would be a triangle nothing here chose. The rule is an arbitrary
+/// variant because the marker was never a class of ours to name.
+pub const LANGUAGE_SUMMARY: StaticClass = class!(
+    "flex cursor-pointer list-none items-center transition-colors hover:text-mist-100 \
+     [&::-webkit-details-marker]:hidden"
+);
+
+/// The flag list: one flag per language, hanging under the summary.
+///
+/// Composed with [`CARD`], the site's one raised panel, so the list is the same
+/// surface as everything else that floats over a page; this token adds where it
+/// sits and how the flags are stacked. `right-0` because the switcher is at the
+/// right of the header — a list aligned to its left edge would hang off the page
+/// on a phone — and the z-index clears the header's, where the mobile nav's own
+/// box reaches up beside it.
+///
+/// The padding is this token's rather than [`CARD`]'s for [`CARD_ROOMY`]'s
+/// reason: the panel is the surface and the padding is chosen where it is placed.
+pub const LANGUAGE_MENU: StaticClass =
+    class!("absolute right-0 top-full z-50 mt-2 flex flex-col items-end gap-2 p-2");
+
+/// One flag in the list.
+///
+/// A bare box: the drawing is the whole of it. `rounded-xs` is there for the
+/// current language's ring, so the ring follows the flag's own corner instead of
+/// drawing a rectangle around it.
+pub const LANGUAGE_FLAG: StaticClass =
+    class!("block rounded-xs transition-opacity hover:opacity-80");
+
+/// The language the page is already in.
+///
+/// **A ring, not the underline [`NAV_LINK_CURRENT`] uses.** A link's content is a
+/// drawing now, and `text-decoration` has no text to underline — marked the old
+/// way, the current language would be marked invisibly, which is the failure
+/// [`NAV_LINK_CURRENT`]'s own comment warns about. The accent is the one the
+/// nav's underline and every focus ring here use, so the three agree.
+pub const LANGUAGE_FLAG_CURRENT: StaticClass = class!("ring-2 ring-tahiti-400");
+
+/// Text for assistive technology only: the words that name a drawing.
+///
+/// Tailwind's own visually-hidden utility, named once here so that no view spells
+/// a class — [`NAV_TOGGLE`] uses the same one to hide a checkbox that is still
+/// focusable, and the switcher uses it for the two names its pictures cannot
+/// carry: the control's, and each flag's.
+pub const VISUALLY_HIDDEN: StaticClass = class!("sr-only");
+
+/// The header's search box: one field, from every page, to `/paimi`.
+///
+/// A row of two — the field and the button. Below `md` it takes a line of its
+/// own (`basis-full`), because a phone's header has no room left beside the
+/// logo, the switcher and the hamburger and a field squeezed between them would
+/// be narrower than the word it takes; from `md` up it sits in the header row,
+/// between the language switcher and the nav's links, where the row has space to
+/// spare. That order is the markup's own: the box is written after the hamburger
+/// and before the nav, so the phone's header breaks into the chrome's row and
+/// then this one.
+///
+/// **In the header row, not inside the nav.** The nav below `md` is a
+/// disclosure, so a box in it would be behind the hamburger — and a search a
+/// reader has to open a menu to find is the complaint this step answers.
+pub const SEARCH_FORM: StaticClass =
+    class!("flex items-center gap-2 max-md:basis-full max-md:mt-3 md:mr-6");
+
+/// The header's search field.
+///
+/// The form's field grows to the row it is in and stops at a fixed width from
+/// `md` up, so the header is the same width on every page it appears on
+/// regardless of how long a word the catalog holds: `flex-1` below `md` fills
+/// the phone's line, and `md:w-56` is the desktop box. `min-w-0` because a flex
+/// item refuses to shrink below its content without it.
+///
+/// The rest is [`FORM_INPUT`]'s surface at the header's own scale — same border,
+/// same recessed field, same muted placeholder — written out rather than
+/// composed, for the reason that token's doc gives: a [`StaticClass`] is one
+/// string literal and cannot inherit another's classes.
+pub const SEARCH_INPUT: StaticClass = class!(
+    "flex-1 min-w-0 appearance-none rounded-md border border-ink-600 bg-ink-950 px-3 \
+     py-1.5 text-sm text-mist-100 shadow-sm placeholder:text-mist-500 md:w-56 md:flex-none"
+);
+
+/// The header's search button.
+///
+/// [`FORM_SUBMITTER`]'s accent fill at the size of a control that sits in the
+/// chrome: the same two colours, so one button in the header is recognisably the
+/// same action as the one on the search page.
+pub const SEARCH_SUBMIT: StaticClass = class!(
+    "cursor-pointer rounded-md bg-tahiti-500 px-3 py-1.5 text-sm font-semibold \
+     text-ink-950 transition-colors hover:bg-tahiti-300"
+);
+
 // ---------------------------------------------------------------------------
 // Page and footer
 // ---------------------------------------------------------------------------
@@ -166,6 +291,22 @@ pub const PAGE: StaticClass = class!("max-md:px-0 max-md:py-0 px-8 py-12");
 /// saves an element-sized paint for nothing.
 pub const FOOTER: StaticClass =
     class!("border-t border-ink-700 p-8 text-center text-sm text-mist-500 print:hidden");
+
+/// The footer's link to the support page: a heart, and the word beside it.
+///
+/// Composed with [`LINK`], which carries the word's colour, underline and focus
+/// ring — this token is only the row's shape, and it adds nothing LINK would
+/// have to fight over. Two things it says: the drawing and the word sit on one
+/// line with a gap between them rather than on two, and the link is set apart
+/// from the sentence above it by the one margin that is this link's own. An
+/// inline flex box, because that is what holds an icon and a word on one
+/// baseline; the footer's own centring applies to it like any other inline
+/// content.
+///
+/// The gap is written as a flex gap rather than a space in the markup: the
+/// two halves are an element and a text node, and whitespace between them is the
+/// browser's to collapse.
+pub const SUPPORT_LINK: StaticClass = class!("mt-6 inline-flex items-center gap-2");
 
 // ---------------------------------------------------------------------------
 // Typography
@@ -295,7 +436,7 @@ pub const BUTTON_PRIMARY: StaticClass = class!(
 /// The long synopsis between the hero and the tables.
 ///
 /// A wider measure than body copy's, because this is a display paragraph and not
-/// prose to be read line by line — v3's own width, kept, see `PLAN.md` §16.
+/// prose to be read line by line — v3's own width, kept.
 /// Muted, with generous leading, so a hundred words do not read as a wall.
 pub const SYNOPSIS: StaticClass = class!("mx-auto max-w-[800px] text-lg leading-8 text-mist-300");
 
@@ -432,8 +573,14 @@ pub const INDEX_EMPTY: StaticClass = class!("py-4 text-center text-mist-500");
 /// Roomier than [`CARD_ROOMY`] from `md` up, because this is the one page a
 /// visitor came to read rather than scan, and a wall of lyric against a panel
 /// edge is tiring.
-pub const SONG_SHEET: StaticClass =
-    class!("rounded-card border border-ink-700 bg-ink-900 shadow-card p-6 md:p-10");
+///
+/// The panel prints white. A browser does not print the page's background, so
+/// the sheet's dark panel and its light text would print as a blank page — see
+/// [`LYRICS`], [`SONG_TITLE`] and [`CHORD`] for the other half of that.
+pub const SONG_SHEET: StaticClass = class!(
+    "rounded-card border border-ink-700 bg-ink-900 shadow-card p-6 md:p-10 \
+     print:bg-white"
+);
 
 /// The sheet's header: the song's name on the left, the actions on the right.
 ///
@@ -453,8 +600,10 @@ pub const SONG_HEADING: StaticClass = class!("grow basis-full md:basis-0");
 /// A song title is a heading, so it takes the display face like every other
 /// heading on the site — v3 set it in the body face, at a fixed size, in a
 /// slant that no shipped face can draw.
-pub const SONG_TITLE: StaticClass =
-    class!("font-display text-3xl md:text-4xl font-bold tracking-tight text-balance text-mist-100");
+pub const SONG_TITLE: StaticClass = class!(
+    "font-display text-3xl md:text-4xl font-bold tracking-tight text-balance text-mist-100 \
+     print:text-black"
+);
 
 /// Who wrote or sings the song, under its title.
 ///
@@ -462,7 +611,7 @@ pub const SONG_TITLE: StaticClass =
 /// The index shows them in a column, so a reader arriving from the index already
 /// knows them, and a reader arriving from a search result never saw them at all.
 /// They are the song's own data, rendered where they belong.
-pub const SONG_ARTISTS: StaticClass = class!("text-lg text-mist-300");
+pub const SONG_ARTISTS: StaticClass = class!("text-lg text-mist-300 print:text-black");
 
 /// The small filled button in a sheet header — "Ajouter des paroles".
 ///
@@ -477,14 +626,42 @@ pub const BUTTON_SMALL: StaticClass = class!(
 /// The lyric block.
 ///
 /// Leading is roughly double, which is not decoration: every chord is drawn
-/// *above* the line it belongs to, so the half of each line box above the text
-/// is where they live. [`CHORD`] takes that space out of the flow, so the lyric
-/// itself reads continuously — "Hina'a" and "ro" stay adjacent even though a
-/// chord sits between them in the source.
-pub const LYRICS: StaticClass = class!("text-lg leading-loose text-mist-100");
+/// *above* its syllable, so the half of each line box above the text is where it
+/// lives. [`CHORD`] takes that space out of the flow, so the lyric itself reads
+/// continuously — "Hina'a" and "ro" stay adjacent even though a chord sits
+/// between them in the source.
+///
+/// Black on paper for the reason [`SONG_SHEET`] gives: left in the dark page's
+/// own text colour, the printed sheet is a white page with nothing on it.
+pub const LYRICS: StaticClass = class!("text-lg leading-loose text-mist-100 print:text-black");
 
-/// One line of lyric. Positioned, because the chords are placed against it.
-pub const LYRIC_LINE: StaticClass = class!("relative");
+/// One line of lyric.
+///
+/// The chords are drawn from their own syllable ([`CHORDED`]), so the line is no
+/// longer the box they are measured against. It stays positioned anyway, as it
+/// was in v3, because of the one chord that hangs from a gap rather than from a
+/// letter: if an engine drops the collapsed box at the end of a line, the line
+/// is what keeps the chord inside its own row instead of leaving it measured
+/// against the page.
+///
+/// **The bottom margin is the room the *next* line's chord is drawn in.** A
+/// chord is absolutely positioned and out of the flow, so it adds nothing to
+/// its own line: it hangs from the syllable box, its [`CHORD`] 14px ending above
+/// the top of the line box, in the lead above the text. [`LYRICS`] allows that
+/// text only half of the difference to its doubled line-height — some 9px —
+/// which is less than a chord is tall, so from the second line on the chord of
+/// a line reached up into the descenders of the line above and the words
+/// touched. That is the reviewer's Chromium finding, and it is why the lead
+/// above each line has to be *widened from below*: `mb-2` (8px) between one line
+/// box and the next makes the lead 17px — a chord's 14px and its overhang — and
+/// the chord is drawn inside its own row.
+///
+/// It is a bottom margin and neither a top padding nor a taller leading because
+/// only the space between the rows may change: the lyric keeps its place in its
+/// own box and the chord keeps its place over the syllable, which is what a
+/// sheet a singer reads cannot lose. `a_line_keeps_room_for_the_chord_of_the_line_above`
+/// is the arithmetic, and it fails if any class here stops being a margin.
+pub const LYRIC_LINE: StaticClass = class!("relative mb-2");
 
 /// The blank line between two verses.
 ///
@@ -492,20 +669,270 @@ pub const LYRIC_LINE: StaticClass = class!("relative");
 /// break is a visual pause, and a full line box would read as a missing line.
 pub const LYRIC_GAP: StaticClass = class!("h-6");
 
-/// A chord, drawn over the syllable it is written against.
+/// The syllable a chord is drawn over: a box around the character — or the gap —
+/// the chord was written against.
 ///
-/// Absolutely positioned so it adds no width — the lyric underneath reads as one
-/// unbroken line, which is what makes a chord sheet usable for singing. A
-/// negative margin pulls it back over the preceding character, because the chord
-/// marks where the harmony changes *on* a syllable rather than after it. The
-/// leading is reset to one, or the chord would inherit the lyric's doubled
-/// leading and drift down into the words.
+/// **An inline box, not an atomic one**, although sizing the syllable as a box
+/// of its own is the obvious way to write this. An atomic inline is a
+/// line-breaking opportunity on both sides in every browser (UAX #14 treats it
+/// as an object replacement), and this corpus writes most of its chords *inside*
+/// a word — `rei<sup>F</sup>nes` — so an atomic syllable would let a narrow
+/// screen break the word at the chord. A positioned inline forms the same
+/// containing block for absolutely positioned children, and adds no break where
+/// there was none.
+///
+/// One em tall, not the lyric's doubled leading: the chord is then drawn from
+/// the top of the glyph box rather than the top of the line box, so it lands in
+/// the lead above the text — clear of the words below it. What keeps it clear of
+/// the descenders of the *line above* is not this box but the margin
+/// [`LYRIC_LINE`] keeps below every line: the lead `LYRICS` allows on its own is
+/// shorter than a chord. The line box does not grow: the inline box is shorter
+/// than the line's strut, and [`CHORD`] is out of the flow entirely.
+pub const CHORDED: StaticClass = class!("relative leading-none");
+
+/// A chord, drawn above the syllable it was written against.
+///
+/// Absolutely positioned, so it adds no width: the lyric underneath reads as one
+/// unbroken line, which is what makes a chord sheet usable for singing. It is
+/// anchored to the *syllable's* box and centred over it, rather than pulled back
+/// over the lyric by a fixed negative margin — which is what put v3's chords
+/// over the middle of a word instead of over its vowel.
+///
+/// The top offset is reset to `auto` and that is load-bearing, not tidiness:
+/// Tailwind's preflight already positions `sup` and gives it a top offset, so a
+/// chord with a bottom offset *and* preflight's top offset would be stretched
+/// between the two. The leading is reset to one, or the chord would inherit the
+/// lyric's doubled leading and drift down into the words.
 ///
 /// Monospace, because chord labels are short, stacked and must not collide with
-/// the words they sit over; the accent colour is what separates them from the
-/// lyric without a box around each one.
-pub const CHORD: StaticClass =
-    class!("absolute top-1 -ml-2 font-mono text-[0.8rem] leading-none text-tahiti-300");
+/// the words they sit over. At 14px against the lyric's 18px it is larger than
+/// v3's 12.8px, and as large as it goes without neighbours colliding in the
+/// corpus's densest lines. No weight is added because there is none to add: the
+/// mono face ships one (see `crate::ui::fonts`), and asking for a bold one would
+/// be answered by the browser's synthesiser rather than the type designer.
+///
+/// `tahiti-200` measures 13.4:1 against the sheet's `ink-900`, against
+/// `tahiti-300`'s 11.5:1 — the lightest stop the accent ramp has, so a chord
+/// still reads as the accent without v3's washed-out look. On paper it becomes
+/// `tahiti-900`, 9.1:1 on white; left as `tahiti-200` a printed chord would be
+/// invisible.
+///
+/// **The accidental and the quality inside this box are slanted** — the chord
+/// module writes them in an `<i>`, which is the reviewer's "… in ital" + "ic
+/// tag", and the one place the site asks for a slanted text run. (The word is
+/// split for the reason `SLANTED` is: Tailwind scans this file's text, and the
+/// whole word is also a utility name.) No family here ships a slanted cut (see
+/// [`crate::ui::fonts`]), so the browser synthesises the oblique rather than a
+/// type designer drawing it: the same synthesis
+/// `every_weight_a_token_asks_for_is_a_face_that_ships` exists to keep out of
+/// *tokens*, taken here because the distinction it draws is the point of the
+/// chord — the root is what a language says, `#m7` is what every musician reads.
+/// It is markup, not a token, which is why no rule reaches the stylesheet for
+/// it.
+pub const CHORD: StaticClass = class!(
+    "absolute top-auto bottom-full left-1/2 -translate-x-1/2 font-mono text-sm \
+     leading-none whitespace-nowrap text-tahiti-200 print:text-tahiti-900"
+);
+
+/// The transposition control in a sheet header: the label, the two step links
+/// and the step they are on.
+///
+/// A pill on the sheet's own surface, one size down from the header's button,
+/// because it is a reader's control over the lyric rather than an action on the
+/// song. It is hidden on paper: a printed sheet is a sheet at one offset, and a
+/// row of buttons on it is ink spent on a control no reader of paper can press.
+pub const TRANSPOSE: StaticClass = class!(
+    "flex flex-none items-center gap-1 rounded-full border border-ink-700 bg-ink-800 \
+     px-3 py-1 text-sm text-mist-300 print:hidden"
+);
+
+/// The word naming the transposition control.
+///
+/// Inside [`TRANSPOSE`]'s colour and size; the row's own label, so it is never
+/// the loudest thing in it.
+pub const TRANSPOSE_LABEL: StaticClass = class!("mr-1");
+
+/// One step link of the transposition control — down, or up.
+///
+/// Full-contrast against the label, because it is the part that is pressable,
+/// and `flex-none` so a long label does not squeeze it at a narrow width.
+pub const TRANSPOSE_LINK: StaticClass =
+    class!("flex-none rounded-full px-2 text-mist-100 transition-colors hover:text-tahiti-300");
+
+/// The step the sheet is on, between the two links.
+///
+/// Monospace and tabular, so the number does not shift the links either side of
+/// it as it changes width.
+pub const TRANSPOSE_VALUE: StaticClass =
+    class!("w-8 text-center font-mono tabular-nums text-mist-100");
+
+/// The reader's speed bar: the pill a lyric page carries.
+///
+/// [`TRANSPOSE`]'s pill again, beside it on the same row of a sheet, because both
+/// are the reader's controls over the lyric rather than actions on the song; on
+/// the book it is the whole of [`BOOK_HEAD`]. The pill is drawn only once a
+/// script has un-hidden it — the attribute that hides it is the one the script
+/// removes — so a page read with JavaScript off carries no control that cannot
+/// work, and the page is what it was before this step. On paper it is hidden for
+/// [`TRANSPOSE`]'s reason: a speed bar is for a screen.
+///
+/// `flex-none` rather than its `shrink` synonym for the reason
+/// [`LANGUAGE_SWITCH`] gives.
+pub const AUTOSCROLL: StaticClass = class!(
+    "flex flex-none items-center gap-2 rounded-full border border-ink-700 bg-ink-800 \
+     px-3 py-1 text-sm text-mist-300 print:hidden"
+);
+
+/// The word naming what the speed bar sets.
+///
+/// A real `<label>` for the range rather than a caption beside it, so it names
+/// the control for a pointer and for a screen reader with no second string: the
+/// pill's own name is read aloud only. Inside [`TRANSPOSE`]'s colour and size.
+pub const AUTOSCROLL_SPEED: StaticClass = class!("mr-1");
+
+/// The speed bar itself: a native range input, restyled and not rewritten.
+///
+/// The browser's own range is the one speed selector a phone, a keyboard and a
+/// screen reader all already know how to work, and it is operable without a
+/// script — the script only reads its value. Only the accent colour and the
+/// track's width are set, so the control keeps the platform's hit area and
+/// keyboard behaviour.
+pub const AUTOSCROLL_RANGE: StaticClass = class!("h-4 w-20 cursor-pointer accent-tahiti-300");
+
+/// The auto-scroll button: start, and stop.
+///
+/// [`TRANSPOSE_LINK`]'s shape, one word wider, with the word kept on one line:
+/// the label changes from the start word to the stop word while the sheet is
+/// moving, and a button that re-wrapped would shift the row each time.
+pub const AUTOSCROLL_BUTTON: StaticClass = class!(
+    "flex-none rounded-full px-2 whitespace-nowrap text-mist-100 \
+     transition-colors hover:text-tahiti-300"
+);
+
+// ---------------------------------------------------------------------------
+// Sharing a sheet
+// ---------------------------------------------------------------------------
+
+/// The share row in a sheet's header: the third pill, holding two links.
+///
+/// Beside [`TRANSPOSE`] and [`AUTOSCROLL`] because it is the same kind of thing
+/// — a control over the paper the reader is looking at — and *its own* token
+/// rather than one of theirs because it holds links and not a control. The pill
+/// shape is theirs, written out for [`CARD_ROOMY`]'s reason (a [`StaticClass`]
+/// cannot be composed from constants); `the_share_pill_is_the_headers_own_pill`
+/// asserts the three agree, so a change to the shape is a change to all three.
+///
+/// Its class list is [`AUTOSCROLL`]'s exactly, which is deliberate and is what
+/// keeps the stylesheet's hash: the row brings no utility a sheet did not
+/// already carry. Hidden on paper for [`TRANSPOSE`]'s reason — a printed sheet
+/// has nobody to share it with.
+pub const SHARE: StaticClass = class!(
+    "flex flex-none items-center gap-2 rounded-full border border-ink-700 bg-ink-800 \
+     px-3 py-1 text-sm text-mist-300 print:hidden"
+);
+
+/// One link in the share row: a drawing and the word beside it.
+///
+/// Composed with [`LINK`], which carries the word's colour, underline and focus
+/// ring, for the reason [`SUPPORT_LINK`] is: the pair is pinned in
+/// `tokens_meant_to_be_composed_never_contradict_each_other`, and this token is
+/// only the row's shape — an inline flex box, because that is what keeps a
+/// drawing and a word on one baseline. The gap is the footer's own step; the
+/// footer's margin is not, because this row's spacing belongs to the pill.
+pub const SHARE_LINK: StaticClass = class!("inline-flex items-center gap-2");
+
+// ---------------------------------------------------------------------------
+// Several songs on one page
+// ---------------------------------------------------------------------------
+
+/// The book's reading row: the auto-scroll bar, above the first chosen song.
+///
+/// A row of its own rather than a line inside the page's heading, because the
+/// bar is the whole of it. It is `flex` for the bar's sake: [`AUTOSCROLL`] is
+/// `flex-none`, which is a fact about a flex item and means nothing in ordinary
+/// flow — without a flex row around it, the pill would stretch across the page.
+///
+/// Its margin is [`BOOK_ITEM`]'s own step, so the space between the bar and the
+/// first song is the space between two songs; and it is hidden on paper, as the
+/// bar itself is, because a row that would print empty is a gap with no reason
+/// in a songbook.
+pub const BOOK_HEAD: StaticClass = class!("mb-8 flex print:hidden");
+
+/// One chosen song on `/puta-himene`: the step between two sheets, and the
+/// rule that keeps a lyric off a page break.
+///
+/// Composed with [`SONG_SHEET`], which brings the panel and the print colours —
+/// the pair is pinned in `tokens_meant_to_be_composed_never_contradict_each_other`.
+/// The two do not compete: this adds spacing and a break rule, and the sheet owns
+/// the surface. On paper the break rule is the whole point of the token — a
+/// songbook whose songs are cut in half by the printer is the defect this page
+/// was asked for in the first place.
+pub const BOOK_ITEM: StaticClass = class!("mb-8 print:break-inside-avoid");
+
+/// The index's link to the picker.
+///
+/// Under the table rather than in the nav: choosing several songs to read
+/// together is the index's own next step, not a fourth section of the site.
+pub const BOOK_ENTRY: StaticClass = class!("mt-6 text-center");
+
+/// One song in the picker: a checkbox, its title, and its credits.
+///
+/// The rule between rows is the reason this is a token rather than a bare list
+/// item — the last row drops it, the way [`INDEX_ROW`] does, so the panel's own
+/// edge is the only line at the foot.
+pub const BOOK_PICK_ROW: StaticClass =
+    class!("flex items-center gap-3 border-b border-ink-700 py-3 last:border-b-0");
+
+/// The picker's checkbox.
+///
+/// `flex-none` rather than its `shrink` synonym for the reason
+/// [`LANGUAGE_SWITCH`] gives — and the box is a square, so it is sized in one
+/// utility rather than two. The accent colour is the same one the song sheet's
+/// speed bar uses, so the site's controls agree about what is picked.
+pub const BOOK_PICK_BOX: StaticClass = class!("size-4 flex-none accent-tahiti-300");
+
+/// The credits beside a title in the picker.
+///
+/// Muted, and smaller than the title they follow: on this page the title is what
+/// the reader is choosing between, and two songs by one artist are common enough
+/// that the credits have to be readable without being the point.
+pub const BOOK_PICK_ARTISTS: StaticClass = class!("text-sm text-mist-500");
+
+// ---------------------------------------------------------------------------
+// Pagination
+// ---------------------------------------------------------------------------
+
+/// The pagination nav under the index table.
+///
+/// A row of page numbers, centred under the table it pages through. Hidden on
+/// paper for the reason the header and the footer are: a printed catalogue does
+/// not have a page 2 to turn to, and a row of links in the margin of a songbook
+/// is chrome that has stopped meaning anything.
+pub const PAGINATION: StaticClass =
+    class!("mt-6 flex flex-wrap items-center justify-center gap-2 print:hidden");
+
+/// One page number in the nav — a link to a page that is not the one served.
+///
+/// A rounded outline rather than a bare number, so the numbers read as a row of
+/// controls instead of a stray column of digits; the colour is the muted one the
+/// nav links use, and the accent appears on hover only.
+pub const PAGINATION_LINK: StaticClass = class!(
+    "inline-flex items-center justify-center rounded-full border border-ink-600 px-3 py-1 \
+     text-sm font-semibold text-mist-300 transition-colors hover:border-tahiti-400 \
+     hover:text-tahiti-300"
+);
+
+/// The page the reader is on.
+///
+/// Not a link, and deliberately not composed with [`PAGINATION_LINK`]: a page
+/// that linked to itself would be a link that goes nowhere new, and the two
+/// tokens would then compete over the same properties — the trap the nav's own
+/// state pair is written around. `aria-current` is what tells a screen reader
+/// which number this is, the same way it does in the language switcher.
+pub const PAGINATION_CURRENT: StaticClass = class!(
+    "inline-flex items-center justify-center rounded-full border border-tahiti-400 bg-ink-800 \
+     px-3 py-1 text-sm font-semibold text-tahiti-200"
+);
 
 // ---------------------------------------------------------------------------
 // Create-song form
@@ -632,6 +1059,89 @@ pub const FORM_ERROR: StaticClass =
     class!("mb-4 rounded-md border border-red-400 bg-ink-950 p-4 text-red-300");
 
 // ---------------------------------------------------------------------------
+// Support
+// ---------------------------------------------------------------------------
+
+/// A donation address on the support page: the address itself.
+///
+/// A block, so the copy control can sit under it, and it wraps wherever the
+/// characters run out rather than pushing a 44-character string past the edge of
+/// its panel — a phone is exactly where an address is hardest to read and
+/// easiest to mistype, and an address that has to be scrolled sideways is one
+/// that gets copied by hand off the end of a line.
+///
+/// The monospace face the chords and the controls already use, because an
+/// address is a string of characters to be compared one at a time, not a word.
+/// Full-strength text: this is the page's content.
+pub const SUPPORT_ADDRESS: StaticClass = class!("block font-mono text-sm break-all text-mist-100");
+
+/// The line above the addresses on the support page: what the money pays for.
+///
+/// A step louder than the standfirst above it — full-strength text against the
+/// muted one — because it is the page's one warm line and everything below it is
+/// a table of strings. The measure and the centring follow the standfirst's, so
+/// the two read as a pair rather than as two blocks.
+pub const SUPPORT_MONEY: StaticClass =
+    class!("mx-auto mb-10 max-w-prose text-balance text-mist-100");
+
+/// The row of chain marks inside a support card.
+///
+/// Decoration only: every mark is a [`crate::ui::icons`] drawing in
+/// `currentColor`, and the chain's name is the card's own heading, so this token
+/// is the whole of the marks' styling. The row is what keeps the four EVM chains
+/// reading as four — laid out in a line, in the order the heading names them,
+/// rather than run together into one wide shape.
+pub const SUPPORT_MARKS: StaticClass = class!("mb-3 flex items-center gap-2 text-tahiti-400");
+
+/// The copy control under an address.
+///
+/// [`BUTTON_OUTLINE`]'s shape one size down: it is a control on a three-line
+/// panel, not a page's call to action, so it does not take the accent fill the
+/// primary buttons have. It is drawn only by the page's own script — the
+/// attribute that hides it is the one the script removes — so with JavaScript
+/// off the page carries no control that cannot work.
+pub const SUPPORT_COPY: StaticClass = class!(
+    "mt-4 inline-block cursor-pointer rounded-full border-2 border-ink-600 px-4 py-1 \
+     text-sm font-semibold text-mist-100 transition-colors \
+     hover:border-tahiti-400 hover:text-tahiti-300"
+);
+
+// ---------------------------------------------------------------------------
+// Terms page
+// ---------------------------------------------------------------------------
+
+/// The column the terms page's statements are read in.
+///
+/// The standfirst's measure and colour, and one step apart per paragraph: each
+/// statement is a separate promise about rights, and a reader who cannot see
+/// where one ends is a reader who cannot tell which sentence to quote. The
+/// spacing is the container's rather than each paragraph's, so a statement added
+/// to the list is spaced by the page and not by whoever writes the next one.
+///
+/// Centred like every other block of prose on this site — the measure is what
+/// keeps a line readable, and the margins are what keep that measure off the
+/// page's own edge.
+pub const TERMS_PROSE: StaticClass =
+    class!("mx-auto max-w-prose space-y-4 text-lg leading-8 text-mist-300 text-pretty");
+
+/// The "last updated" line at the foot of the terms page.
+///
+/// Quieter than the statements above it — a smaller, muted step — because it is
+/// a fact about the page rather than one of the claims on it, and set apart by
+/// one step of its own so it does not read as a seventh statement.
+pub const TERMS_UPDATED: StaticClass = class!("mt-10 text-center text-sm text-mist-500");
+
+/// The footer's link to the terms page.
+///
+/// Composed with [`LINK`], which carries the word's colour, underline and focus
+/// ring — this token is only where the link sits, and it adds nothing LINK would
+/// have to fight over. A block of its own under the support link rather than
+/// beside it on the same line: the two are different kinds of thing — a way to
+/// give, and a statement of rights — and a row that put them side by side would
+/// read as one control with two halves.
+pub const TERMS_LINK: StaticClass = class!("mt-3 block");
+
+// ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
 
@@ -663,9 +1173,19 @@ mod tests {
         NAV_SPACER,
         NAV_LINK,
         NAV_LINK_CURRENT,
+        LANGUAGE_SWITCH,
+        LANGUAGE_SUMMARY,
+        LANGUAGE_MENU,
+        LANGUAGE_FLAG,
+        LANGUAGE_FLAG_CURRENT,
+        VISUALLY_HIDDEN,
+        SEARCH_FORM,
+        SEARCH_INPUT,
+        SEARCH_SUBMIT,
         MAIN,
         PAGE,
         FOOTER,
+        SUPPORT_LINK,
         H1,
         LEAD,
         LINK,
@@ -707,7 +1227,27 @@ mod tests {
         LYRICS,
         LYRIC_LINE,
         LYRIC_GAP,
+        CHORDED,
         CHORD,
+        TRANSPOSE,
+        TRANSPOSE_LABEL,
+        TRANSPOSE_LINK,
+        TRANSPOSE_VALUE,
+        AUTOSCROLL,
+        AUTOSCROLL_SPEED,
+        AUTOSCROLL_RANGE,
+        AUTOSCROLL_BUTTON,
+        SHARE,
+        SHARE_LINK,
+        BOOK_HEAD,
+        BOOK_ITEM,
+        BOOK_ENTRY,
+        PAGINATION,
+        PAGINATION_LINK,
+        PAGINATION_CURRENT,
+        BOOK_PICK_ROW,
+        BOOK_PICK_BOX,
+        BOOK_PICK_ARTISTS,
         FORM_PANEL,
         FORM_FIELD,
         FORM_LABEL,
@@ -725,6 +1265,10 @@ mod tests {
         FORM_SUBMIT,
         FORM_SUBMITTER,
         FORM_ERROR,
+        SUPPORT_ADDRESS,
+        SUPPORT_COPY,
+        SUPPORT_MONEY,
+        SUPPORT_MARKS,
     ];
 
     /// Renders a token to the class string the layout would put in the markup.
@@ -905,6 +1449,31 @@ mod tests {
             ("index row", &INDEX_ROW, &INDEX_CELL),
             ("song heading", &SONG_HEADING, &SONG_TITLE),
             ("song sheet", &SONG_SHEET, &SONG_HEADING),
+            // The multi-lyric page's sheets: the panel and the per-sheet
+            // spacing-and-break rule, which must add to the panel rather than
+            // fight it.
+            ("chosen sheet", &SONG_SHEET, &BOOK_ITEM),
+            // The pagination nav and its links: the container owns the layout
+            // and the print hide, each link owns its own box.
+            ("pagination nav", &PAGINATION, &PAGINATION_LINK),
+            // The switcher's list: the raised panel, and the position and
+            // stacking rule that hangs it under the summary.
+            ("language menu", &CARD, &LANGUAGE_MENU),
+            // A flag and the ring that marks the current one.
+            ("language flag", &LANGUAGE_FLAG, &LANGUAGE_FLAG_CURRENT),
+            // The header's search field and its button, each composed with the
+            // one focus rule, which is a state and never a rest state.
+            ("header search field", &SEARCH_INPUT, &FOCUS),
+            ("header search button", &SEARCH_SUBMIT, &FOCUS),
+            // The footer's link to the support page: the shared link styling,
+            // and the row's own shape around the drawing beside the word.
+            ("footer support link", &LINK, &SUPPORT_LINK),
+            // The footer's link to the terms page: the same shared link styling,
+            // and the one step that puts it under the link above.
+            ("footer terms link", &LINK, &TERMS_LINK),
+            // The share row's two links: the same shared link styling, and the
+            // same drawing-beside-a-word shape (without the footer's margin).
+            ("share link", &LINK, &SHARE_LINK),
         ];
 
         for (label, one, other) in pairs {
@@ -932,15 +1501,116 @@ mod tests {
     }
 
     /// Print is the reason this rewrite has print tokens at all: a songbook gets
-    /// printed. Both pieces of chrome must be gone and the background must be
+    /// printed. Every piece of chrome must be gone and the background must be
     /// cancelled, or a printed lyric sheet is a dark rectangle.
     #[test]
     fn print_drops_chrome_and_background() {
         assert!(rendered(&HEADER).contains("print:hidden"));
         assert!(rendered(&FOOTER).contains("print:hidden"));
+        assert!(rendered(&TRANSPOSE).contains("print:hidden"));
+        assert!(rendered(&AUTOSCROLL).contains("print:hidden"));
+        assert!(rendered(&PAGINATION).contains("print:hidden"));
         let shell = rendered(&SHELL);
         assert!(shell.contains("print:bg-white"));
         assert!(shell.contains("print:text-black"));
+    }
+
+    /// The book's reading row is the bar's row: it is `flex` for [`AUTOSCROLL`]'s
+    /// `flex-none` — which means nothing outside a flex container, and without
+    /// the row would leave the pill stretched across the page — it is spaced by
+    /// the step [`BOOK_ITEM`] puts between two songs, and it is printed away
+    /// with the bar it holds, because a row that prints empty is a gap in a
+    /// songbook.
+    #[test]
+    fn the_books_reading_row_is_sized_by_the_bar_it_holds() {
+        let row = classes(&BOOK_HEAD);
+        assert!(row.contains(&"flex"));
+        assert!(classes(&AUTOSCROLL).contains(&"flex-none"));
+
+        let step = classes(&BOOK_ITEM)
+            .into_iter()
+            .find(|name| name.starts_with("mb-"))
+            .expect("the step the book puts between two songs");
+        assert!(
+            row.contains(&step),
+            "the bar and the first song are spaced unlike two songs"
+        );
+
+        assert!(row.contains(&"print:hidden"));
+        assert!(classes(&AUTOSCROLL).contains(&"print:hidden"));
+    }
+
+    /// The share row is the header's **third pill**, not a third shape.
+    ///
+    /// Three controls sit in one row on a sheet — the transposition, the speed
+    /// bar and the share row — and a reader reads them as one kind of thing
+    /// because they are drawn as one kind of thing. Two of the three are
+    /// therefore written the same way on purpose, and the third differs by its
+    /// own gap and nothing else: the transposition puts its label's own `mr-1`
+    /// against a `gap-1`, so its four parts sit tighter than a row of two links.
+    ///
+    /// A change to the pill therefore has to be a change to all three, which is
+    /// what this test says — and it is also why the share row moves no
+    /// stylesheet: every class it names is one the sheet already carried.
+    #[test]
+    fn the_share_row_is_the_headers_own_pill() {
+        assert_eq!(
+            classes(&SHARE),
+            classes(&AUTOSCROLL),
+            "the share pill and the speed bar are two shapes"
+        );
+        for name in classes(&TRANSPOSE) {
+            assert!(
+                classes(&SHARE).contains(&name) || name == "gap-1",
+                "the transposition's {name:?} is not the header's pill"
+            );
+        }
+        assert!(classes(&TRANSPOSE).contains(&"gap-1"));
+        assert!(!classes(&TRANSPOSE).contains(&"gap-2"));
+        assert!(classes(&SHARE).contains(&"print:hidden"));
+
+        // And the link inside the row is the footer's link shape — a drawing
+        // beside a word on one baseline — without the footer's own margin,
+        // which belongs to the footer and not to the shape.
+        for name in classes(&SHARE_LINK) {
+            assert!(
+                classes(&SUPPORT_LINK).contains(&name),
+                "the share link's {name:?} is not the footer link's shape"
+            );
+        }
+        assert!(classes(&SHARE_LINK).contains(&"gap-2"));
+        assert!(!classes(&SHARE_LINK).contains(&"mt-6"));
+    }
+
+    /// ...and the sheet repaints itself, which cancelling the page background
+    /// alone does not do.
+    ///
+    /// Every colour the sheet uses is set on the element that carries the text,
+    /// so it wins over anything the body says. A browser prints no background,
+    /// so a printed sheet keeps those colours on white paper: `mist-100` at
+    /// 1.03:1 and `tahiti-200` at 1.05:1, which is a blank page. Each of the
+    /// three has to say what it becomes on paper, and the chord has to stay
+    /// legible rather than merely dark.
+    #[test]
+    fn print_repaints_the_sheet_in_ink() {
+        for (name, token) in [
+            ("the lyric", &LYRICS),
+            ("the title", &SONG_TITLE),
+            ("the credits", &SONG_ARTISTS),
+        ] {
+            assert!(
+                classes(token).contains(&"print:text-black"),
+                "{name} would print as it looks on the dark page"
+            );
+        }
+        assert!(
+            classes(&SONG_SHEET).contains(&"print:bg-white"),
+            "the sheet's panel would print as a dark rectangle"
+        );
+        assert!(
+            classes(&CHORD).contains(&"print:text-tahiti-900"),
+            "a chord would print in the colour that is invisible on white"
+        );
     }
 
     /// Every colour name a token uses must exist in the palette `build.rs`
@@ -1239,25 +1909,51 @@ mod tests {
         }
     }
 
-    /// The lyric sheet only works if the three tokens agree about what draws a
-    /// chord: it is positioned against a positioned line, it takes the accent,
-    /// and it resets the leading it would otherwise inherit from [`LYRICS`].
+    /// The lyric sheet only works if the three tokens agree about how a chord is
+    /// drawn: the line has room above its text, the syllable is a box the chord
+    /// can be measured against, and the chord is drawn above that box — centred
+    /// over it, out of the flow, in the accent colour.
+    ///
+    /// The negative margin v3 used to drag a chord back over the lyric is gone
+    /// on purpose: it was a fixed distance, so it dropped the chord wherever
+    /// half a rem to the left of the flow happened to be — over the middle of
+    /// the word, which is the defect this replaces. This test fails if it comes
+    /// back.
     #[test]
-    fn the_lyric_sheet_places_chords_against_positioned_lines() {
+    fn a_chord_is_drawn_from_the_syllable_it_was_written_against() {
         let line = classes(&LYRIC_LINE);
+        let syllable = classes(&CHORDED);
         let chord = classes(&CHORD);
 
         assert!(
             line.contains(&"relative"),
-            "a chord has nothing to anchor to"
+            "a chord hanging from a gap has no box to fall back to inside its own line"
+        );
+        assert!(
+            syllable.contains(&"relative"),
+            "the syllable is not the box the chord is measured against"
+        );
+        assert!(
+            syllable.contains(&"leading-none"),
+            "the syllable would inherit the lyric's doubled leading, and its chord \
+             would be drawn from the top of the line box instead of the glyph box"
         );
         assert!(
             chord.contains(&"absolute"),
             "a chord would add width to the line"
         );
         assert!(
-            chord.iter().any(|c| c.starts_with("-ml-")),
-            "a chord would sit after its syllable instead of over it"
+            chord.contains(&"bottom-full"),
+            "a chord would not be drawn from the top of its syllable"
+        );
+        assert!(
+            chord.contains(&"left-1/2") && chord.contains(&"-translate-x-1/2"),
+            "a chord is not centred over the syllable it belongs to"
+        );
+        assert!(
+            chord.contains(&"top-auto"),
+            "preflight already offsets a sup from the top, so the chord would be \
+             stretched between the two offsets"
         );
         assert!(
             chord.contains(&"leading-none"),
@@ -1267,5 +1963,75 @@ mod tests {
             chord.iter().any(|c| c.starts_with("text-tahiti-")),
             "a chord is not told apart from the lyric"
         );
+        assert!(
+            !chord.iter().any(|c| c.starts_with(concat!("-ml", "-"))),
+            "a fixed negative margin puts the chord where the margin lands, not \
+             over the syllable it was written against"
+        );
+    }
+
+    /// The chord of a line hangs *above* its own line box, in the lead the lyric's
+    /// leading leaves over the text — and that lead is shorter than a chord, so
+    /// the room has to be added between the rows, on [`LYRIC_LINE`]. This is the
+    /// arithmetic the reviewer's finding turned on, and the reason the line token
+    /// carries a margin at all.
+    ///
+    /// The four numbers come off the classes, so a change to any of them has to
+    /// come past this test.
+    #[test]
+    fn a_line_keeps_room_for_the_chord_of_the_line_above() {
+        let lyrics = classes(&LYRICS);
+        let line = classes(&LYRIC_LINE);
+        let chord = classes(&CHORD);
+
+        // The lyric's font size and line-height: `text-lg` (18px) doubled
+        // (`leading-loose`), and the chord's `text-sm` (14px) box. Only these
+        // three classes are named, so a fourth cannot quietly enter the sum.
+        let lyric_size = if lyrics.contains(&"text-lg") {
+            18.0
+        } else {
+            panic!("the lyric is no longer `text-lg`, and this arithmetic is its");
+        };
+        let line_height = if lyrics.contains(&"leading-loose") {
+            2.0 * lyric_size
+        } else {
+            panic!("the lyric is no longer `leading-loose`, and this arithmetic is its");
+        };
+        let chord_height = if chord.contains(&"text-sm") {
+            14.0
+        } else {
+            panic!("the chord is no longer `text-sm`, and this arithmetic is its");
+        };
+
+        // Tailwind's spacing step: `mb-N` is `N × 0.25rem` at a 16px root.
+        let margin = line
+            .iter()
+            .find_map(|name| name.strip_prefix("mb-"))
+            .expect("the line keeps no room between it and the chord of the line below")
+            .parse::<f32>()
+            .expect("a margin is `mb-N`")
+            * 4.0;
+
+        // The lead above the text is half of what the leading adds to the font
+        // box — the same half-leading the chord is drawn in.
+        let lead = (line_height - lyric_size) / 2.0;
+        assert!(
+            lead + margin >= chord_height,
+            "a {}px chord hangs into {}px of lead, so it reaches the line above it",
+            chord_height,
+            lead + margin
+        );
+
+        // ...and the room is a margin, which sits *between* the rows. A padding
+        // or a leading would move the lyric inside its own box, and this step may
+        // not move a lyric line.
+        for name in &line {
+            assert!(
+                *name == "relative" || name.starts_with("mb-"),
+                "`{name}` moves the lyric inside its own line box: a chord reaching \
+                 the line above is fixed by the space between rows, never by \
+                 displacing the words"
+            );
+        }
     }
 }

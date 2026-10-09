@@ -1,0 +1,5 @@
+# `sqlx::migrate!` embeds this migration into the binary at build time, so the
+# file is load-bearing — but it is not a second implementation of anything the
+# Rust does not already do. Keep it out of the language statistics so the
+# repository's language bar stays Rust.
+migrations/*.sql linguist-detectable=false

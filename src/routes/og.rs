@@ -1,21 +1,20 @@
 //! The social cards — `/drive/genog/…` and `/drive/gentw/…`.
 //!
 //! v3 had these two routes and rendered them with `headless_chrome`: it wrote
-//! the lyric into a 1200×630 (Twitter: 1200×628) page, launched Chromium dark,
+//! the lyric into a 1200×630 page (X's was two pixels shorter), launched dark,
 //! screenshotted it and answered with the PNG (`main:server/src/image.rs`).
 //! That means a browser on the server — several hundred megabytes of one, plus a
 //! process per card and a known way to hang — to draw black text on white.
 //!
-//! `PLAN.md` §7 named the three ways out (pure-Rust rendering, pre-generated
-//! static cards, keep Chromium) and recommended the first. This is it: the card
+//! There were three ways out — pure-Rust rendering, pre-generated static
+//! cards, or keeping Chromium — and this is the first: the card
 //! is painted into an in-memory canvas by `fontdue` and encoded by `png`, both
 //! pure Rust, and `/drive/…` needs nothing installed beside the binary.
 //!
 //! **What the card says is v3's, exactly: the lyric and nothing else.** No title,
 //! no artist line, no site mark — v3 drew the lyric into a centred box and that
 //! is what the cards in the wild look like. Whether a card *should* name the song
-//! is a product question and not this step's; it is flagged in `PLAN.md` §23
-//! rather than answered here.
+//! is a product question, left open rather than answered here.
 //!
 //! Three things differ from v3, all deliberate:
 //!
@@ -72,6 +71,30 @@ pub const OG_PREFIX: &str = "/drive/genog";
 /// The Twitter card's prefix — the same card, two pixels shorter, as in v3.
 pub const TW_PREFIX: &str = "/drive/gentw";
 
+/// The site's own card — the image every page that is not a song advertises.
+///
+/// One URL for the whole site, with no version in it: what the card says is a
+/// constant of the build, so a redeploy cannot strand a cache with the wrong
+/// picture, and the card's own cache lifetime is a day rather than the year the
+/// two versioned prefixes can afford.
+pub const SITE_CARD: &str = "/drive/site";
+
+/// What the site card says. The site's name, as the front page's own heading
+/// spells it — the card is the site's, not a page's, so nothing here is chrome
+/// and nothing here changes with a language.
+const CARD_TEXT: &str = "Chanson du fenua";
+
+/// The largest type the site card is drawn in.
+///
+/// Higher than a song card's ceiling on purpose: one short line has room for
+/// type a lyric never does, and a 1200 px card should not carry a 40 px word.
+/// The floor is the shared [`MIN_FONT_SIZE`] — unreachable for this string, and
+/// kept because [`fit`] is one function and not two.
+const SITE_MAX_FONT_SIZE: f32 = 96.0;
+
+/// How long a cache may keep the site card. See [`SITE_CARD`].
+const SITE_CACHE_CONTROL: &str = "public, max-age=86400";
+
 /// What both routes answer with. `og:image:type` on the page says the same.
 const PNG: &str = "image/png";
 
@@ -118,6 +141,36 @@ async fn twitter_card(cx: &Cx) -> Result<Response> {
     serve(cx, Card::Twitter).await
 }
 
+/// `GET /drive/site` — the card for every page that is not a song.
+///
+/// Distinct from the two song routes in what it cannot be: no `{timestamp}` in
+/// the path, because nothing under it can move — see [`SITE_CARD`]. The path in
+/// the attribute is the constant above, restated the way `pages::songs::PATH`
+/// restates its own: `#[route]` is a macro over a literal.
+#[route(GET "/drive/site")]
+async fn site_card(cx: &Cx) -> Result<Response> {
+    let (width, height) = Card::OpenGraph.size();
+    let lines = vec![CARD_TEXT.to_owned()];
+    let font = font();
+    let size = fit(&lines, font, width, height, SITE_MAX_FONT_SIZE);
+
+    (
+        [
+            (header::CONTENT_TYPE, header::HeaderValue::from_static(PNG)),
+            (
+                header::CACHE_CONTROL,
+                header::HeaderValue::from_static(SITE_CACHE_CONTROL),
+            ),
+        ],
+        Body::from(Bytes::from(encode(
+            &draw(&lines, font, width, height, size),
+            width,
+            height,
+        ))),
+    )
+        .into_response(cx)
+}
+
 /// Both routes, once the path has been read.
 ///
 /// Four things have to hold before a card is drawn, and each of them is a 404:
@@ -148,10 +201,12 @@ async fn serve(cx: &Cx, card: Card) -> Result<Response> {
         .into_response(cx)
 }
 
-/// Which of the two cards is being drawn.
+/// Which of the two song card URLs was asked for.
 ///
-/// The only difference is the height, and it is v3's: 630 px is the Open Graph
-/// ratio, 628 px is X's, and v3 declared both to the width of a pixel.
+/// v3 screenshotted 1200×630 for Open Graph and 1200×628 for X, and both of its
+/// values were truthful. Step 18's head declared 630 for both, which left this
+/// route serving an image a pixel shorter than the page said it was; the two are
+/// now one drawing. The URLs stay — they are published, and cached for a year.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Card {
     OpenGraph,
@@ -163,7 +218,7 @@ impl Card {
     fn size(self) -> (u32, u32) {
         match self {
             Self::OpenGraph => (1200, 630),
-            Self::Twitter => (1200, 628),
+            Self::Twitter => (1200, 630),
         }
     }
 
@@ -172,7 +227,7 @@ impl Card {
         let (width, height) = self.size();
         let lines = lyric_lines(sheet);
         let font = font();
-        let size = fit(&lines, font, width, height);
+        let size = fit(&lines, font, width, height, MAX_FONT_SIZE);
 
         encode(&draw(&lines, font, width, height, size), width, height)
     }
@@ -223,19 +278,22 @@ fn lyric_lines(sheet: &Song) -> Vec<String> {
         .collect()
 }
 
-/// The type size the lyric is drawn at: the largest that fits.
+/// The type size the card is drawn at: the largest that fits, up to `max`.
 ///
 /// Both constraints matter. Height is the obvious one — a long song needs small
 /// type. Width is the one v3 could not have: a browser wraps, and this does not,
 /// so a single over-long line would otherwise run off the card. A song that fits
-/// at neither the maximum nor anywhere above [`MIN_FONT_SIZE`] is drawn at the
-/// floor and cropped, which is v3's behaviour and the honest one: no card can
-/// show an arbitrary amount of text legibly.
-fn fit(lines: &[String], font: &Font, width: u32, height: u32) -> f32 {
+/// at neither `max` nor anywhere above [`MIN_FONT_SIZE`] is drawn at the floor
+/// and cropped, which is v3's behaviour and the honest one: no card can show an
+/// arbitrary amount of text legibly.
+///
+/// `max` is a parameter rather than the constant because the site card has one
+/// short line and may use type a lyric cannot — see [`SITE_MAX_FONT_SIZE`].
+fn fit(lines: &[String], font: &Font, width: u32, height: u32, max: f32) -> f32 {
     let area_width = width as f32 - 2.0 * MARGIN;
     let area_height = height as f32 - 2.0 * MARGIN;
 
-    let mut size = MAX_FONT_SIZE;
+    let mut size = max;
     while size > MIN_FONT_SIZE {
         let tallest = lines.len() as f32 * size * LINE_HEIGHT;
         let widest = lines
@@ -272,9 +330,9 @@ fn text_width(line: &str, font: &Font, size: f32) -> f32 {
 /// characters a Latin-only face does not have. Dropping one out of a word would
 /// corrupt it, so each gets a covered relative instead: a macron vowel loses its
 /// macron, and the two turned commas — `ʻ` U+02BB, the ʻokina, and `ʼ` U+02BC —
-/// become an apostrophe. `PLAN.md` §23 records which of them the bundled face
-/// has as glyphs of its own, because that decides whether the substitution is
-/// ever reached and the answer is a fact about the font, not about the site.
+/// become an apostrophe. Which of them the bundled face has as glyphs of its
+/// own decides whether the substitution is ever reached, and that is a fact
+/// about the font, not about the site.
 ///
 /// `None` is the last resort: a character with no glyph and no relative is left
 /// out of the drawing, and [`text_width`] skips it in the same way, so the layout
@@ -391,11 +449,13 @@ mod tests {
     use super::*;
     use crate::db::fixtures;
     use crate::domain::song::SITE_URL;
+    use crate::i18n::Lang;
 
     fn sheet(index: usize) -> Song {
         let fixture = &fixtures::SONGS[index];
         Song::new(
             fixture.id.to_owned(),
+            Some(fixture.slug.to_owned()),
             fixture.title.to_owned(),
             fixture.lyrics.to_owned(),
             7,
@@ -413,7 +473,7 @@ mod tests {
     /// `og:image` rather than spelling it out, for the same reason.
     #[test]
     fn the_meta_urls_name_the_routes_this_module_serves() {
-        let meta = sheet(0).get_meta_data();
+        let meta = sheet(0).get_meta_data(&sheet(0).get_url(), Lang::Fr);
 
         let og = meta
             .meta_img_url_og
@@ -453,6 +513,7 @@ mod tests {
     fn the_card_carries_the_words_and_not_the_chords() {
         let sheet = Song::new(
             "8nntgjk4rl5dbp67c6en".to_owned(),
+            Some("te-here".to_owned()),
             "Te here".to_owned(),
             "<div>Hina'a<sup data-nosnippet=\"true\">Eb</sup>ro</div>".to_owned(),
             1,
@@ -475,12 +536,15 @@ mod tests {
         let huge: Vec<String> = (0..400).map(|i| format!("line {i}")).collect();
 
         let (width, height) = Card::OpenGraph.size();
-        let short_size = fit(&short, font, width, height);
-        let long_size = fit(&long, font, width, height);
+        let short_size = fit(&short, font, width, height, MAX_FONT_SIZE);
+        let long_size = fit(&long, font, width, height, MAX_FONT_SIZE);
 
         assert_eq!(short_size, MAX_FONT_SIZE);
         assert!(long_size < short_size, "{long_size} < {short_size}");
-        assert_eq!(fit(&huge, font, width, height), MIN_FONT_SIZE);
+        assert_eq!(
+            fit(&huge, font, width, height, MAX_FONT_SIZE),
+            MIN_FONT_SIZE
+        );
     }
 
     /// The card is not blank, and it is not black. An empty canvas would pass
@@ -495,7 +559,7 @@ mod tests {
             font,
             width,
             height,
-            fit(&lines, font, width, height),
+            fit(&lines, font, width, height, MAX_FONT_SIZE),
         );
 
         assert_eq!(canvas.len(), width as usize * height as usize);
@@ -507,12 +571,41 @@ mod tests {
         assert!(paper > ink, "the card is more ink than paper");
     }
 
+    /// The site card is a real card too, not an empty canvas a 200 status hides:
+    /// one line of the site's name, drawn at the larger ceiling, encoded as a
+    /// greyscale PNG of the size the page declares for `og:image`.
+    #[test]
+    fn the_site_card_is_a_drawn_png() {
+        let font = font();
+        let lines = vec![CARD_TEXT.to_owned()];
+        let (width, height) = Card::OpenGraph.size();
+        let size = fit(&lines, font, width, height, SITE_MAX_FONT_SIZE);
+
+        assert_eq!(
+            size, SITE_MAX_FONT_SIZE,
+            "the site's name should not need shrinking"
+        );
+
+        let canvas = draw(&lines, font, width, height, size);
+        let ink = canvas.iter().filter(|pixel| **pixel != WHITE).count();
+        assert!(ink > 0, "the site card is blank");
+
+        let bytes = encode(&canvas, width, height);
+        let decoded = png::Decoder::new(std::io::Cursor::new(&bytes))
+            .read_info()
+            .expect("the site card decodes as a PNG");
+
+        assert_eq!(decoded.info().width, width);
+        assert_eq!(decoded.info().height, height);
+        assert_eq!(decoded.info().color_type, png::ColorType::Grayscale);
+    }
+
     /// What `serve` hands the response: a PNG whose header says what the page's
     /// `og:image:width` / `og:image:height` claim, and that it is greyscale.
     #[test]
     fn the_card_is_a_png_of_the_size_it_claims() {
         for (card, (width, height)) in
-            [(Card::OpenGraph, (1200, 630)), (Card::Twitter, (1200, 628))]
+            [(Card::OpenGraph, (1200, 630)), (Card::Twitter, (1200, 630))]
         {
             assert_eq!(card.size(), (width, height));
 

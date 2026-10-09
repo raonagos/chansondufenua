@@ -14,12 +14,21 @@
 //!
 //! Like `robots.txt`, this is a `#[route]`: it is a document, but not a page,
 //! and it must not be wrapped in the site's HTML chrome.
+//!
+//! **It names no page the site serves `noindex`.** Whoever follows this file will
+//! fetch what it says to fetch, and a page the site has told the crawlers not to
+//! index is a contradiction to hand one: Search Console reports it, which is the
+//! console line the maintainer asked not to have. The search page and the
+//! create-song form are the two this document named and does not any more — the
+//! search's two reads are here as `/api/search`, and the form is nobody's
+//! content. The site's other two `noindex` pages, the multi-lyric page and the
+//! terms page, were never named here.
 
 use topcoat::{Result, router::route};
 
 use crate::domain::song::SITE_URL;
-use crate::pages::{editor, songs};
-use crate::routes::{api, sitemap};
+use crate::pages::{artist, songs, support};
+use crate::routes::{api, card, catalog, mcp, sitemap};
 
 /// `/llms.txt` — the path, in one place.
 pub const PATH: &str = "/llms.txt";
@@ -47,25 +56,42 @@ fn body() -> String {
 
 ## Where the content is
 
-- [Song index]({SITE_URL}{songs}): every published song, newest first.
-- [One song]({SITE_URL}/himene/{{id}}): the lyric with its chords. Add
-  `?lang=ty` for the Tahitian chrome; the lyrics themselves are as written.
+- [Song index]({SITE_URL}{songs}): every published song, newest first,
+  twenty to a page. Later pages are `/himene/page/{{n}}`.
+- [One song]({SITE_URL}/himene/{{slug}}): the lyric with its chords. The slug is
+  the song's address, as the catalogue's `url` field spells it — one address for
+  every reader. The chrome around the lyric follows the language the client asks
+  for (a `lang` cookie, then `Accept-Language`, French when it says neither); the
+  lyrics themselves are as written.
+- [An artist]({SITE_URL}{artist}{{id}}): the songs credited to one artist, each a
+  link to its own sheet.
+- [Support the site]({SITE_URL}{support}): how to help pay for the hosting — three
+  crypto addresses, written out in full. [As JSON]({SITE_URL}{api_support}): the
+  same three, for a program.
 
 ## For a program
 
 - [Songs]({SITE_URL}{api}): the catalogue as JSON — id, title, artists, URL,
   view count, timestamps. [Health]({SITE_URL}{health}) reports the counts and the
   version.
+- [Search as JSON]({SITE_URL}{api_search}?q={{needle}}): one needle over the song
+  titles and the artists' names — the songs whose title matched and the artists
+  whose name did, each with the page URL it is about. Matching ignores accents
+  and the ʻokina, so `ahani` finds `'Āhani e` and `mama` finds `Māmā Tahiti`.
 - [One song as JSON]({SITE_URL}{api}/{{id}}): the same, plus the lyrics as
   Markdown with the chords inline.
+- [OpenAPI description]({SITE_URL}{openapi}): the JSON API's paths and shapes,
+  for a client that generates code from it.
+- [API catalog]({SITE_URL}{catalog}): the API as a linkset (RFC 9727) — the
+  OpenAPI description, this file, and the health probe.
 - Send `Accept: text/markdown` to a song page for the same document as Markdown.
+- [MCP server]({SITE_URL}{mcp}): a read-only Model Context Protocol server with
+  two tools — `list_songs` pages the catalogue, `get_song` reads one sheet. It
+  answers `POST` (JSON-RPC 2.0) and nothing else: there is no SSE stream to open,
+  so a `GET` is a `405`. Its [server card]({SITE_URL}{card}) names the endpoint
+  and the protocol versions.
 - [Sitemaps]({SITE_URL}{sitemap}): the site's fixed pages; the songs are at
   {SITE_URL}{song_sitemap}.
-
-## Writing
-
-- [Add a song]({SITE_URL}{editor}): a form. It is the only writable route, and
-  `robots.txt` keeps crawlers out of it.
 
 ## Policy
 
@@ -76,10 +102,17 @@ lyrics are the credited artists' work and are not training data:
 ",
         songs = songs::PATH,
         api = api::PATH,
+        api_search = api::SEARCH_PATH,
+        api_support = api::SUPPORT_PATH,
+        artist = artist::PREFIX,
+        support = support::PATH,
+        openapi = api::OPENAPI_PATH,
+        catalog = catalog::PATH,
         health = api::HEALTH_PATH,
         sitemap = sitemap::PATH,
         song_sitemap = sitemap::SONGS_PATH,
-        editor = editor::PATH,
+        mcp = mcp::PATH,
+        card = card::PATH,
     )
 }
 
@@ -112,10 +145,17 @@ mod tests {
         let served = [
             (songs::PATH, "/himene"),
             (api::PATH, "/api/songs"),
+            (api::SEARCH_PATH, "/api/search"),
+            (api::SUPPORT_PATH, "/api/support"),
+            (artist::PREFIX, "/taata-himene/"),
+            (support::PATH, "/tauturu"),
             (api::HEALTH_PATH, "/api/health"),
+            (api::OPENAPI_PATH, "/api/openapi.json"),
+            (catalog::PATH, "/.well-known/api-catalog"),
             (sitemap::PATH, "/sitemap.xml"),
             (sitemap::SONGS_PATH, "/himene/sitemap.xml"),
-            (editor::PATH, "/himene/api"),
+            (mcp::PATH, "/mcp"),
+            (card::PATH, "/.well-known/mcp/server-card.json"),
         ];
 
         for (constant, expected) in served {
@@ -127,5 +167,26 @@ mod tests {
         }
 
         assert_eq!(PATH, "/llms.txt");
+    }
+
+    /// The rule the module docs state: no page the site serves `noindex` is
+    /// named here. The search page and the create-song form are the two that
+    /// were, and the two this step took out; the other two are listed to keep
+    /// the set checked against the pages that own it.
+    #[test]
+    fn no_noindex_page_is_named() {
+        let text = body();
+
+        for (path, what) in [
+            (crate::pages::search::PATH, "the search page"),
+            (crate::pages::editor::PATH, "the create-song form"),
+            (crate::pages::book::PATH, "the multi-lyric page"),
+            (crate::pages::terms::PATH, "the terms page"),
+        ] {
+            assert!(
+                !text.contains(&format!("{SITE_URL}{path}")),
+                "llms.txt names {what}, which is served `noindex`"
+            );
+        }
     }
 }

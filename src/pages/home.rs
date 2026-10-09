@@ -1,4 +1,4 @@
-//! The home page — `/`, and the same page again at `/aepa`.
+//! The home page — `/faariiraa`, and the same page again at the root `/`.
 //!
 //! Transcribed from v3's `HomePage` (`app/src/pages/index.rs`): the hero, the
 //! three "why" cards, the synopsis, the two song tables, and the closing call to
@@ -18,11 +18,17 @@
 //! * **The surfaces are the v4 panel.** v3's cards and table panels were a
 //!   translucent wash under a frosted backdrop; v4 uses the one raised-panel
 //!   token the header and footer already speak. This is the one
-//!   *visible* change in the step — see `PLAN.md` §16.
+//!   *visible* change in the step.
 //!
 //! The copy is v3's, byte for byte. It lives in [`copy`] as constants rather than
 //! as literals in the markup so that the `<meta name="description">` the layout
-//! emits for this page is provably the same string the page shows.
+//! emits for this page is built from the page's own sentences, and a test can
+//! prove that it still is.
+//!
+//! The page has a second representation: `routes/negotiation.rs` answers
+//! `Accept: text/markdown` with the same prose and the same two tables as one
+//! Markdown document, and builds it from [`copy`] and `ROWS` rather than from a
+//! second copy of either.
 
 use topcoat::{
     Result,
@@ -37,83 +43,159 @@ use crate::i18n::{self, Key};
 use crate::pages::song as sheet;
 use crate::pages::songs;
 use crate::state;
+use crate::ui::share;
 use crate::ui::theme;
 
-/// The page's prose, exactly as v3 wrote it.
+/// The page's prose, in the language the response is written in.
 ///
 /// A module rather than a flat list of constants so that a call site reads
 /// `copy::HERO_TITLE` and never has to wonder whether `HERO_TITLE` was the words
 /// or the styling — `theme::HERO_TITLE` is the styling.
 ///
-/// **The action labels are not here.** The two buttons and the closing call to
-/// action are chrome, so they live in [`crate::i18n`] with the rest of the
-/// chrome: this module is the French prose a reader reads, and that one is the
-/// words that change with the site's language.
+/// **The prose is no longer one language.** Until v4.1 every sentence here was a
+/// `const` in French — v3's words, kept byte for byte — and the site served them
+/// to an English reader as they were. The reviewer read them that way ("I read
+/// the descriptions are in french … so it needs to translate all things it can
+/// be translate") and they now live in `locales/*.toml` with the chrome, under
+/// their own keys: see [`Key::PROSE`](crate::i18n::Key::PROSE). The French is
+/// still v3's, character for character; the English beside it in `en.toml` is
+/// new, and a Tahitian page reads the English (his rule for prose — see
+/// [`crate::i18n`]).
+///
+/// Two strings are *not* here, because neither is a translation unit: the site's
+/// name ([`copy::HERO_TITLE`]) and the network's ([`share::NETWORK`], which the
+/// closing button prints). The two button labels are chrome like every other
+/// control's and live in [`crate::i18n`] too.
 pub mod copy {
-    /// The hero's headline.
+    use crate::i18n::{self, Key, Lang};
+    use crate::ui::share;
+
+    /// The hero's headline — the site's own name, which is not translated.
     pub const HERO_TITLE: &str = "Chanson du fenua";
+
+    /// The first closing button. A brand name, so it is the same in every
+    /// language and stays a constant rather than becoming a key.
+    ///
+    /// The constant is [`crate::ui::share::NETWORK`]'s, and the address under it
+    /// is [`crate::ui::share::PAGE`]'s: the song page's share row prints the same
+    /// network and links to the same page (step 42), and one URL with two
+    /// spellings is a URL that will disagree with itself.
+    pub const FOOT_FACEBOOK: &str = share::NETWORK;
+
     /// The hero's standfirst.
-    pub const HERO_SUBTITLE: &str = "L'élégance de la musique polynésienne";
+    pub fn hero_subtitle(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeHeroSubtitle)
+    }
 
     /// The three "why" cards, in v3's order: title, then body.
-    pub const CARDS: &[(&str, &str)] = &[
-        (
-            "Chansons exquises",
-            "Plongez dans une collection raffinée de chansons tahitiennes, alliant tradition et modernité.",
-        ),
-        (
-            "Paroles envoûtantes",
-            "Laissez-vous séduire par la poésie des paroles, une fenêtre sur l'âme tahitienne.",
-        ),
-        (
-            "Harmonies divines",
-            "Maîtrisez l'art des accords et élevez votre musique vers de nouveaux sommets.",
-        ),
-    ];
+    pub fn cards(lang: Lang) -> [(&'static str, &'static str); 3] {
+        [
+            (
+                i18n::text(lang, Key::HomeCardSongsTitle),
+                i18n::text(lang, Key::HomeCardSongsBody),
+            ),
+            (
+                i18n::text(lang, Key::HomeCardLyricsTitle),
+                i18n::text(lang, Key::HomeCardLyricsBody),
+            ),
+            (
+                i18n::text(lang, Key::HomeCardChordsTitle),
+                i18n::text(lang, Key::HomeCardChordsBody),
+            ),
+        ]
+    }
 
     /// The synopsis between the hero and the tables.
-    pub const SYNOPSIS: &str = "Découvrez un monde musical unique où l'art des accords et la maîtrise des mélodies élèvent votre musique vers de nouveaux sommets. Laissez-vous séduire par la poésie des paroles, véritable fenêtre sur l'âme tahitienne, qui vous transporte dans un voyage lyrique et émouvant. Plongez dans une collection raffinée de chansons tahitiennes, savamment sélectionnées pour allier tradition et modernité, offrant une expérience musicale enrichissante et inoubliable. Découvrez des mélodies envoûtantes et des rythmes captivants, célébrant la richesse culturelle de Tahiti et invitant les auditeurs à explorer et apprécier la beauté et la profondeur de cette culture unique.";
+    pub fn synopsis(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeSynopsis)
+    }
 
     /// The first table's title — five newest songs.
-    pub const TABLE_LATEST: &str = "Les dernières ajouts";
+    pub fn table_latest(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeTableLatest)
+    }
+
     /// The second table's title — five most-viewed songs.
-    pub const TABLE_MOST_VIEWED: &str = "Les plus vues";
+    pub fn table_most_viewed(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeTableMostViewed)
+    }
 
     /// The closing block.
-    pub const FOOT_TITLE: &str = "Votre odyssée musicale commence ici";
-    /// The line under it.
-    pub const FOOT_TEXT: &str = "Rejoignez la communauté des passionnés de la musique polynésienne";
-    /// The first closing button. A brand name, so it is the same in both
-    /// languages and stays a constant rather than becoming a key.
-    pub const FOOT_FACEBOOK: &str = "Facebook";
+    pub fn foot_title(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeFootTitle)
+    }
 
-    /// The tail of the meta description — the phrase that is not on the page.
-    pub const TAGLINE: &str =
-        "Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes.";
+    /// The line under it.
+    pub fn foot_text(lang: Lang) -> &'static str {
+        i18n::text(lang, Key::HomeFootText)
+    }
 
     /// The home page's `<meta name="description">`.
     ///
-    /// v3's, byte for byte: the synopsis, then the first card's body, then
-    /// [`TAGLINE`]. It is written out in full rather than assembled with
-    /// `format!` because it has to be a `const` — and
-    /// `the_description_is_the_copy_it_claims_to_be` is what keeps the three
-    /// pieces from drifting apart.
-    pub const DESCRIPTION: &str = "Découvrez un monde musical unique où l'art des accords et la maîtrise des mélodies élèvent votre musique vers de nouveaux sommets. Laissez-vous séduire par la poésie des paroles, véritable fenêtre sur l'âme tahitienne, qui vous transporte dans un voyage lyrique et émouvant. Plongez dans une collection raffinée de chansons tahitiennes, savamment sélectionnées pour allier tradition et modernité, offrant une expérience musicale enrichissante et inoubliable. Découvrez des mélodies envoûtantes et des rythmes captivants, célébrant la richesse culturelle de Tahiti et invitant les auditeurs à explorer et apprécier la beauté et la profondeur de cette culture unique. Plongez dans une collection raffinée de chansons tahitiennes, alliant tradition et modernité. Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes.";
+    /// The hero's standfirst, then the tagline — the sentence the front page does
+    /// not show, which says what the site is. 125 characters in French, 103 in
+    /// English, inside the
+    /// [`DESCRIPTION_MAX`](crate::domain::song::DESCRIPTION_MAX) a snippet is
+    /// read at.
+    ///
+    /// **Not v3's**, and that is the fix: v3 pasted the synopsis, then the first
+    /// card's body, then the tagline into this field — 842 characters, of which
+    /// a search engine shows the first ~155, so every result for the front door
+    /// led with two paragraphs that never said "chansons tahitiennes". The prose
+    /// itself is untouched: it is still the page, [`synopsis`] and all.
+    ///
+    /// Assembled from the two keys rather than written out, because the pieces
+    /// and the description cannot drift if there is only one of each;
+    /// `the_description_is_the_copy_it_claims_to_be` is what says so.
+    pub fn description(lang: Lang) -> String {
+        format!(
+            "{} — {}",
+            hero_subtitle(lang),
+            i18n::text(lang, Key::HomeTagline)
+        )
+    }
 }
 
 /// How many songs each table lists. v3 asked both for five.
-const ROWS: i64 = 5;
+///
+/// `pub(crate)` because the same page has a second representation: the Markdown
+/// document in `routes/negotiation.rs` shows the same two tables, and a second
+/// table size would make the two forms of one page disagree about it.
+pub(crate) const ROWS: i64 = 5;
 
-/// `/` — the front page.
-#[page("/")]
+/// `/faariiraa` — the front page's own address, and the path `#[page]` below
+/// declares.
+///
+/// A constant as well as an attribute, because the layout matches the request
+/// path against it to decide this page's `<head>`: `#[page]` is a macro over a
+/// literal and cannot take one, so the constant restates it — the same
+/// arrangement `pages::songs::PATH` and `pages::editor::PATH` have.
+///
+/// The Tahitian spelling, and the one the site is published at: the reviewer's
+/// list of addresses (`/faariiraa`, `/himene`, `/taata-himene`, `/puta-himene`,
+/// `/paimi`, `/tauturu`) and the URL standard he named for this one. `/aepa`,
+/// v3's transliteration of the same word, moved here for good — see
+/// [`crate::pages::retired`].
+pub const PATH: &str = "/faariiraa";
+
+/// `/` — the root, which serves the front page and names [`PATH`] canonical.
+///
+/// Kept as a route rather than redirected: the root is where a reader who knows
+/// the domain and nothing else lands, and a domain that answers 200 with its own
+/// front page is a domain that works. What it does *not* do is compete with
+/// [`PATH`]: its `<head>` names the canonical address, so the two URLs are one
+/// page to a crawler rather than two.
+pub const ROOT: &str = "/";
+
+/// `/faariiraa` — the front page.
+#[page("/faariiraa")]
 pub async fn home() -> Result<impl View> {
     Ok(view! { home_body() })
 }
 
-/// `/aepa` — the same page under a Tahitian path, kept because it is published
-/// and linked from the header.
-#[page("/aepa")]
-pub async fn aepa() -> Result<impl View> {
+/// `/` — the same page under the root, which canonicalises to [`PATH`].
+#[page("/")]
+pub async fn root() -> Result<impl View> {
     Ok(view! { home_body() })
 }
 
@@ -138,14 +220,18 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
     let latest = db::songs(pool, SongOrder::Newest, Some(ROWS)).await?;
     let most_viewed = db::songs(pool, SongOrder::MostViewed, Some(ROWS)).await?;
     let songs_link = href!(songs::songs);
+    // The chrome's links are the pages' own addresses — one URL per page, so
+    // there is no language to put in front of them.
+    let songs_href = songs_link.resolve(cx);
+    let editor_href = crate::pages::editor::PATH.to_owned();
 
     Ok(view! {
         <div class=(theme::PAGE)>
             <section class=(theme::HERO)>
                 <h1 class=(theme::HERO_TITLE)>(copy::HERO_TITLE)</h1>
-                <p class=(theme::HERO_SUBTITLE)>(copy::HERO_SUBTITLE)</p>
+                <p class=(theme::HERO_SUBTITLE)>(copy::hero_subtitle(lang))</p>
                 <a
-                    href=(songs_link)
+                    href=(songs_href)
                     class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))
                 >
                     (i18n::text(lang, Key::HomeDiscover))
@@ -153,7 +239,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             </section>
 
             <section class=(theme::CARD_GRID)>
-                for &(title, text) in copy::CARDS {
+                for &(title, text) in copy::cards(lang).iter() {
                     <div class=(theme::CARD_ROOMY)>
                         <h2 class=(theme::PANEL_TITLE)>(title)</h2>
                         <p>(text)</p>
@@ -162,7 +248,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             </section>
 
             <section class="mb-20">
-                <p class=(theme::SYNOPSIS)>(copy::SYNOPSIS)</p>
+                <p class=(theme::SYNOPSIS)>(copy::synopsis(lang))</p>
             </section>
 
             // "Les dernières ajouts" and "Les plus vues". The same panel, the
@@ -171,7 +257,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             // most-viewed table with the title; kept.
             <section class=(theme::TABLE_SECTION)>
                 <div class=(class!(theme::TABLE_PANEL, "md:text-right", "md:ml-auto"))>
-                    <h2 class=(theme::PANEL_TITLE)>(copy::TABLE_LATEST)</h2>
+                    <h2 class=(theme::PANEL_TITLE)>(copy::table_latest(lang))</h2>
                     <table class="max-md:mr-auto ml-auto">
                         <tbody>
                             for song in latest {
@@ -184,7 +270,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
 
             <section class=(theme::TABLE_SECTION)>
                 <div class=(theme::TABLE_PANEL)>
-                    <h2 class=(theme::PANEL_TITLE)>(copy::TABLE_MOST_VIEWED)</h2>
+                    <h2 class=(theme::PANEL_TITLE)>(copy::table_most_viewed(lang))</h2>
                     <table class="max-md:mx-auto">
                         <tbody>
                             for song in most_viewed {
@@ -196,11 +282,11 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
             </section>
 
             <section class=(theme::FOOT_SECTION)>
-                <h2 class=(theme::FOOT_TITLE)>(copy::FOOT_TITLE)</h2>
-                <p class=(theme::FOOT_TEXT)>(copy::FOOT_TEXT)</p>
+                <h2 class=(theme::FOOT_TITLE)>(copy::foot_title(lang))</h2>
+                <p class=(theme::FOOT_TEXT)>(copy::foot_text(lang))</p>
                 <div class=(theme::FOOT_LINKS)>
                     <a
-                        href="https://facebook.com/chansondufenua"
+                        href=(share::PAGE)
                         class=(class!(theme::BUTTON_LIGHT, theme::FOCUS))
                     >
                         (copy::FOOT_FACEBOOK)
@@ -209,7 +295,7 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
                     // create-song page. That page arrives in step 9; until then
                     // the layout's branded 404 catches the gap.
                     <a
-                        href="/himene/api"
+                        href=(editor_href)
                         class=(class!(theme::BUTTON_OUTLINE, theme::FOCUS))
                     >
                         (i18n::text(lang, Key::HomeStart))
@@ -235,7 +321,9 @@ pub async fn home_body(cx: &Cx) -> Result<impl View> {
 /// optional for that: resolving a parameterised `href` needs the request.
 #[component]
 pub async fn song_row(cx: &Cx, song: Song, #[default] inverse: bool) -> Result<impl View> {
-    let url = href!(sheet::song, sheet::Id(song.get_id())).resolve(cx);
+    // The address of the sheet, from the route's own parameter — the slug, or the
+    // id for a song whose title earned no slug.
+    let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
     let title = song.get_title();
     let lyrics = song.clean_lyrics();
 
@@ -274,27 +362,66 @@ pub async fn song_row(cx: &Cx, song: Song, #[default] inverse: bool) -> Result<i
 mod tests {
     use super::*;
     use crate::db::{Db, fixtures};
+    use crate::i18n::Lang;
 
-    /// The description is three pieces of page copy, and the page copy is what
-    /// the description says. Editing the synopsis or the first card without
-    /// editing the description is exactly the drift this catches.
+    /// The description is the page's own two sentences, and it fits in a
+    /// snippet — in every language the page is served in. Editing the standfirst
+    /// or the tagline without editing the description is exactly the drift this
+    /// catches, and the length is what v3's 842-character paragraph got wrong.
+    ///
+    /// The French is pinned to v3's own sentence: it is the one description a
+    /// search engine has been reading for years, and a translation pass is not a
+    /// rewrite of it.
     #[test]
     fn the_description_is_the_copy_it_claims_to_be() {
+        for lang in Lang::ALL {
+            let description = copy::description(lang);
+
+            assert_eq!(
+                description,
+                format!(
+                    "{} — {}",
+                    copy::hero_subtitle(lang),
+                    i18n::text(lang, Key::HomeTagline)
+                ),
+                "{lang:?}"
+            );
+            assert!(
+                description.chars().count() <= crate::domain::song::DESCRIPTION_MAX,
+                "{lang:?}: the description is longer than a snippet"
+            );
+            // A prose key's Tahitian is the English, so the two agree by rule.
+            if lang == Lang::Ty {
+                assert_eq!(description, copy::description(Lang::En));
+            }
+        }
+
         assert_eq!(
-            copy::DESCRIPTION,
-            format!("{} {} {}", copy::SYNOPSIS, copy::CARDS[0].1, copy::TAGLINE)
+            copy::description(Lang::Fr),
+            "L'élégance de la musique polynésienne — Chanson du fenua, retrouvez vos paroles de chanson tahitiennes et polynésiennes."
         );
     }
 
-    /// Three cards, each with something to say. A card with an empty body would
-    /// render as a heading over blank space and nothing else would notice.
+    /// Three cards, each with something to say — in every language, and with
+    /// three different titles, because three cards saying the same thing are one
+    /// card drawn three times. A card with an empty body would render as a
+    /// heading over blank space and nothing else would notice.
     #[test]
     fn every_card_has_a_title_and_a_body() {
-        assert_eq!(copy::CARDS.len(), 3, "v3 has three cards");
-        for (title, text) in copy::CARDS {
-            assert!(!title.trim().is_empty(), "a card has no title");
-            assert!(!text.trim().is_empty(), "card {title:?} has no body");
+        for lang in Lang::ALL {
+            let cards = copy::cards(lang);
+
+            assert_eq!(cards.len(), 3, "v3 has three cards");
+
+            let mut titles = std::collections::BTreeSet::new();
+            for (title, text) in cards {
+                assert!(!title.trim().is_empty(), "{lang:?}: a card has no title");
+                assert!(!text.trim().is_empty(), "card {title:?} has no body");
+                assert!(titles.insert(title), "{lang:?}: {title:?} is drawn twice");
+            }
         }
+
+        assert_eq!(copy::cards(Lang::Fr)[0].0, "Chansons exquises");
     }
 
     /// The page's two tables are two *orderings*, not two copies of one.

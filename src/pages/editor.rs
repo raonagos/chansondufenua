@@ -15,8 +15,8 @@
 //!   domain rejects is answered `400` *with the form filled back in*, where v3
 //!   answered a bare error and lost everything the author had typed.
 //! * **The chord tools are ordinary JavaScript, in the page.** v3's were Rust
-//!   compiled to WebAssembly and hydrated over the server's markup; the rewrite
-//!   has no client build step (`PLAN.md` §2.1), so the same behaviour is ~50
+//!   compiled to WebAssembly and hydrated over the server's markup; v4 is
+//!   server-rendered with no client build step, so the same behaviour is ~50
 //!   lines of vanilla script. Nothing about the site depends on it running: it
 //!   is the editor, and an editor needs a browser.
 //! * **The artist field is one `<input>`, with the chips drawn from it.** v3
@@ -53,7 +53,7 @@ use topcoat::{
         Body, Method, StatusCode,
         content::Form,
         error::see_other,
-        page,
+        href, page,
         request::{FromRequest, method},
     },
     view::{Unescaped, View, class, component, view},
@@ -64,6 +64,8 @@ use serde::Deserialize;
 use crate::db::{self, DbError};
 use crate::domain::{AppError, Artist, sanitise_lyrics};
 use crate::i18n::{self, Key};
+use crate::log;
+use crate::pages::song as sheet;
 use crate::state;
 use crate::ui::theme;
 
@@ -110,7 +112,7 @@ pub struct NewSong {
 /// page, the fields, and the artist list the credit field autocompletes against.
 ///
 /// The body is read **only** for a `POST`. `Form` on a `GET` reads the *query
-/// string*, and `/himene/api?lang=ty` is a query string that is not a song.
+/// string*, and `/himene/api?q=1` is a query string that is not a song.
 /// A page whose attribute names more than one method takes **no comma** between
 /// the method list and the path — `#[page([GET, POST] "/himene/api")]`. The
 /// documented `#[page([GET, POST], "/…")]` form does not compile in 0.10:
@@ -138,7 +140,18 @@ pub async fn editor(cx: &Cx, body: Body) -> Result<impl View> {
             // 303, not v3's 302. Both are followed with a `GET` by every browser
             // that matters, and 303 is the code that *says* so — the whole point
             // of the redirect is that the browser must not re-post the form.
-            Ok(song) => return Err(see_other(format!("/himene/{}", song.get_id())).into()),
+            //
+            // The address is the song's own, which is now the slug the write
+            // minted for it (`db::create_song` → `queries::assign_slug`): the
+            // author lands on the URL the song is published at rather than being
+            // sent through a second redirect from the id.
+            Ok(song) => {
+                // One URL per page: the author lands on the song's own address,
+                // and the chrome around it is written in their language like
+                // every other page's.
+                let url = href!(sheet::song, sheet::Slug(song.get_segment())).resolve(cx);
+                return Err(see_other(url).into());
+            }
             Err(DbError::Domain(cause @ AppError::Invalid { .. })) => {
                 // The domain said no, which is the author's problem and not a
                 // server fault — so a 400, and the form goes back with the
@@ -147,7 +160,11 @@ pub async fn editor(cx: &Cx, body: Body) -> Result<impl View> {
                 // The reason is deliberately not shown. `Song::validate` writes
                 // it for a log line (`expected 100..=6000 characters, got 42`),
                 // and the page names the two fields a person can fix instead.
-                eprintln!("create-song rejected: {cause}");
+                //
+                // To the journal, not to the response: the access layer logs the
+                // `400`, and this line is the *why* behind it — which no status
+                // code carries.
+                log::warn(format_args!("create-song rejected: {cause}"));
                 input = posted;
                 rejected = true;
             }

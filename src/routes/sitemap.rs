@@ -6,13 +6,13 @@
 //! rather than at the next deploy, and no build step can forget to regenerate
 //! one.
 //!
-//! **Two sitemaps, not a sitemap index.** `PLAN.md` §6 calls this "the sitemap
-//! index" and names the two documents it means: `/sitemap.xml` for the site's
-//! fixed pages and `/himene/sitemap.xml` for the songs. A `<sitemapindex>`
-//! document would have to live at one of those two URLs and would push the other
-//! somewhere new, which is not worth it for two files — and both URLs are
-//! advertised in `robots.txt` today, in v3's copy and in the live site's. What
-//! *is* dropped from v3 is its hand-written `lastmod`: see below.
+//! **Two sitemaps, not a sitemap index.** The two documents are `/sitemap.xml`
+//! for the site's fixed pages and `/himene/sitemap.xml` for the songs. A
+//! `<sitemapindex>` document would have to live at one of those two URLs and
+//! would push the other somewhere new, which is not worth it for two files —
+//! and both URLs are advertised in `robots.txt` today, in v3's copy and in the
+//! live site's. What *is* dropped from v3 is its hand-written `lastmod`: see
+//! below.
 //!
 //! One deliberate difference from v3. Its home entry carried
 //! `<lastmod>2024-08-21</lastmod>`, a date written into the generator and never
@@ -21,8 +21,15 @@
 //! songs. A site with no songs carries no `lastmod` at all rather than a
 //! fabricated one.
 //!
-//! `/aepa` is not listed. It is the home page under a second URL and its own
+//! The root is not listed. It is the home page under a second URL and its own
 //! canonical link says so; a sitemap lists canonical URLs.
+//!
+//! **"Canonical" means the page's own address.** Since v4.1 a page has exactly
+//! one URL — the language is resolved per request from a cookie or from
+//! `Accept-Language` and is not part of the address — so a sitemap entry is the
+//! page's own path, and there is no cluster of alternates to pick from. (Until
+//! v4.1 the sitemaps listed the French `/fr/…` addresses and the other two
+//! languages were discovered from each page's `hreflang` cluster; both are gone.)
 
 use topcoat::{
     Result,
@@ -34,8 +41,8 @@ use topcoat::{
 };
 
 use crate::db::{SongOrder, songs};
-use crate::domain::song::SITE_URL;
-use crate::pages::songs as index;
+use crate::i18n;
+use crate::pages::{home, songs as index, support};
 use crate::state;
 
 /// The fixed-pages sitemap.
@@ -51,15 +58,23 @@ pub const SONGS_PATH: &str = "/himene/sitemap.xml";
 
 /// `GET /sitemap.xml` — the pages that are not songs.
 ///
-/// The two entries come from the site's own constants rather than being written
-/// out, so a route that moves takes its sitemap entry with it.
+/// The entries come from the site's own constants rather than being written out,
+/// so a route that moves takes its sitemap entry with it.
+///
+/// **The support page carries no `lastmod`.** The other two are lists of songs,
+/// so the newest song's `updated_at` is genuinely when they last changed; the
+/// support page changes when its addresses do, and that is a date no row in the
+/// database knows. The format's own way of saying "unknown" is to leave the
+/// element out, which is what an absent date does here — a fabricated date would
+/// be a claim to a crawler.
 #[route(GET "/sitemap.xml")]
 async fn fixed_pages(cx: &Cx) -> Result<Sitemap> {
     let updated = newest_update(cx).await?;
 
     Ok(Sitemap::new()
-        .url(entry(SITE_URL.to_owned(), updated).priority(1.0))
-        .url(entry(format!("{SITE_URL}{}", index::PATH), updated)))
+        .url(entry(i18n::absolute(home::PATH), updated).priority(1.0))
+        .url(entry(i18n::absolute(index::PATH), updated))
+        .url(entry(i18n::absolute(support::PATH), None)))
 }
 
 /// `GET /himene/sitemap.xml` — every published song.
@@ -76,9 +91,12 @@ async fn song_pages(cx: &Cx) -> Result<Sitemap> {
     let listed = songs(state::db(cx).pool(), SongOrder::Newest, None).await?;
 
     Ok(Sitemap::new().urls(listed.iter().map(|song| {
-        entry(song.get_url(), Some(song.get_updated_at()))
-            .change_frequency(ChangeFrequency::Weekly)
-            .priority(0.9)
+        entry(
+            i18n::absolute(&song.get_path()),
+            Some(song.get_updated_at()),
+        )
+        .change_frequency(ChangeFrequency::Weekly)
+        .priority(0.9)
     })))
 }
 
@@ -114,30 +132,35 @@ mod tests {
 
     /// The parameterised song route must not swallow the sitemap. This is the
     /// half of that claim a unit test can hold: the path is under `/himene/`,
-    /// and what follows it is not one of the song ids in the corpus.
+    /// and what follows it is not one of the slugs or ids in the corpus.
     #[test]
-    fn the_songs_sitemap_is_not_a_song_id() {
-        let id = SONGS_PATH
+    fn the_songs_sitemap_is_not_a_song_address() {
+        let segment = SONGS_PATH
             .strip_prefix("/himene/")
             .expect("the sitemap is under the song prefix");
 
-        assert!(fixtures::by_id(id).is_none(), "{id} is a fixture's id");
+        for song in fixtures::SONGS {
+            assert_ne!(segment, song.slug, "{segment} is a fixture's slug");
+            assert_ne!(segment, song.id, "{segment} is a fixture's id");
+        }
     }
 
-    /// Every id the sitemap will put in a `<loc>` is a legal path segment: 20
-    /// characters of `[0-9a-z]` (`PLAN.md` §5). A character outside that set
-    /// would need escaping in the URL and is not what the corpus holds.
+    /// Every address the sitemap will put in a `<loc>` is a legal path segment:
+    /// lowercase ASCII, digits and hyphens. Asserted against the rule as well as
+    /// the fixtures' own literals, because the sitemap lists slugs now and an
+    /// illegal one would need escaping in the URL.
     #[test]
-    fn every_fixture_id_is_a_legal_path_segment() {
+    fn every_fixture_slug_is_a_legal_path_segment() {
         for song in fixtures::SONGS {
-            assert_eq!(song.id.len(), 20, "{}", song.id);
+            assert_eq!(crate::domain::slug::slugify(song.title), song.slug);
             assert!(
-                song.id
+                song.slug
                     .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
                 "{}",
-                song.id
+                song.slug
             );
+            assert!(!song.slug.is_empty(), "{}", song.title);
         }
     }
 

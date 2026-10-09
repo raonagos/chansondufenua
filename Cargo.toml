@@ -1,6 +1,6 @@
 [package]
 name = "chansondufenua"
-version = "4.0.0"
+version = "4.1.0"
 edition = "2024"
 rust-version = "1.98"
 description = "Sing tahitian songs with lyrics and chords."
@@ -18,7 +18,7 @@ topcoat = { version = "0.10.0", features = [
     # binary rather than fetched from a CDN. See `src/ui/fonts.rs`.
     "font-fontsource",
 ] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 # Embedded SQLite. `sqlite` bundles libsqlite3 (via libsqlite3-sys) so nothing
 # needs installing on the host; `macros` is only for `sqlx::migrate!` and the
 # `FromRow` derive — the compile-time-checked `query!` family is deliberately
@@ -34,9 +34,14 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 ammonia = "4.2.1"
 regex-lite = "0.1.9"
+# The chrome catalog is read from `locales/*.toml` at startup (see `src/i18n.rs`
+# and `src/i18n/catalog.rs`), so a sentence can be corrected without a rebuild.
+# Already in the tree — `toml` is what reads the Tailwind config at build time —
+# so naming it here declares a dependency without adding one to the build.
+toml = "1"
 thiserror = "2.0.21"
-# The social cards (`src/routes/og.rs`). `PLAN.md` §7 chose pure-Rust rendering
-# over headless Chromium, so `fontdue` rasterises the glyphs and `png` encodes
+# The social cards (`src/routes/og.rs`). Pure-Rust rendering was chosen over
+# headless Chromium, so `fontdue` rasterises the glyphs and `png` encodes
 # the canvas — neither pulls a browser into the deployment.
 #
 # `epaint_default_fonts` is a data-only crate: the four faces an egui app falls
@@ -49,6 +54,11 @@ epaint_default_fonts = "0.36.2"
 # `topcoat::router::Body` is built from `Bytes`, not from `Vec<u8>`, and an
 # image is not a `String`. Already in the tree under the HTTP stack.
 bytes = "1"
+# `size_hint` — the access log's byte count (`src/log.rs`) — is a method of this
+# trait, not of Topcoat's `Body` wrapper, so the trait needs a name in scope.
+# `http-body-util` already compiles it for the router; naming it here declares a
+# dependency without adding one to the build.
+http-body = "1"
 
 # `tailwind` on the build dependency only: `BuildConfig::render()` runs in
 # build.rs to scan the sources and emit the stylesheet as an asset.

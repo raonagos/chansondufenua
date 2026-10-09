@@ -1,0 +1,98 @@
+# The English chrome, and the safety net: a key missing from `ty.toml` is served
+# from here (see `fr.toml` for the format, and the i18n module docs for the
+# lookup order).
+
+nav_home = "Home"
+nav_songs = "Songs"
+language = "Language"
+not_found_title = "This page does not exist."
+not_found_body = "Nothing to read here — the address may have lost its way, or the song has gone to sea."
+not_found_cta = "Back to the front page"
+add_lyrics = "Add the lyrics"
+index_title = "All the songs"
+index_column_title = "Title"
+index_column_artist = "Artist"
+index_empty = "No songs"
+home_discover = "Discover the songs"
+home_start = "Let's go!"
+field_lyrics = "Lyrics"
+save = "Save"
+save_error = "The song was not saved. Check the title and the lyrics."
+remove_artist = "Remove this artist"
+add_chord = "Add this chord"
+transpose = "Transpose"
+transpose_down = "Transpose a semitone down"
+transpose_up = "Transpose a semitone up"
+scroll = "Auto-scroll"
+scroll_speed = "Speed"
+scroll_start = "Start"
+scroll_stop = "Stop"
+book_title = "Several songs"
+book_hint = "Pick songs to read their lyrics one after another."
+book_read = "Read the selection"
+book_open = "Read several songs"
+search_title = "Search"
+search_label = "Song or artist"
+search_submit = "Search"
+search_songs = "Songs"
+search_artists = "Artists"
+search_empty = "No results"
+support_title = "Support the site"
+support_intro = "This site is free, with no advertising. To help pay for its hosting, here is how."
+support_copy = "Copy"
+support_copied = "Copied"
+
+# The footer's link to the support page (step 38): the word beside the
+# heart, which is the link's whole meaning — the drawing says nothing.
+footer_donate = "Donate"
+
+# The song page's share row (step 42): the word beside the arrow. The link
+# beside it is the network's name, which is a brand and not translated.
+share = "Share"
+
+# --- the site's own prose (step 36) ---
+#
+# Not chrome: the maintainer's sentences. This file is where an English reader
+# reads them, and also where the Tahitian comes from — none of these keys has a
+# `ty.toml` line, so `ty → en → fr` serves the English on a Tahitian page (see
+# `i18n::Key::PROSE`). The French on the other side is v3's, byte for byte.
+home_hero_subtitle = "The elegance of Polynesian music"
+home_card_songs_title = "Exquisite songs"
+home_card_songs_body = "Dive into a refined collection of Tahitian songs, bringing tradition and modernity together."
+home_card_lyrics_title = "Captivating lyrics"
+home_card_lyrics_body = "Let the poetry of the lyrics carry you away — a window on the Tahitian soul."
+home_card_chords_title = "Divine harmonies"
+home_card_chords_body = "Master the art of chords and lift your music to new heights."
+home_synopsis = "Discover a musical world of its own, where the art of chords and a command of melody lift your music to new heights. Let the poetry of the lyrics carry you away — a true window on the Tahitian soul, and a lyrical, moving journey. Dive into a refined collection of Tahitian songs, carefully chosen to bring tradition and modernity together, for a rewarding and unforgettable musical experience. Discover captivating melodies and rhythms that celebrate the cultural wealth of Tahiti, and invite every listener to explore and enjoy the beauty and depth of this unique culture."
+home_table_latest = "Latest additions"
+home_table_most_viewed = "Most viewed"
+home_foot_title = "Your musical odyssey starts here"
+home_foot_text = "Join the community of Polynesian music lovers"
+home_tagline = "Chanson du fenua, find your Tahitian and Polynesian song lyrics."
+footer_rights = "2024 Chanson du fenua. All rights reserved"
+footer_contributing = "Contributing to this project"
+index_description = "Every song of the fenua: lyrics and chords for Tahitian and Polynesian songs."
+artist_description = ": lyrics and chords for their songs, at Chanson du fenua."
+# The song page's own sentence (step 50), the English of the French line: the
+# title goes in front of it, `{artists}` is filled with the credits, and a song
+# with no credited artist takes the solo line. A Tahitian page is served this
+# English, like every other line in this block.
+song_description = " — lyrics and chords by {artists}, at Chanson du fenua."
+song_description_solo = " — lyrics and chords, at Chanson du fenua."
+support_description = "Support Chanson du fenua: the site is free, with no advertising — here is how to help pay for its hosting."
+
+# --- the terms page (step 46) ---
+#
+# The owner's own statements about the site. Prose, so the Tahitian side of
+# these is this English (`i18n::Key::PROSE`): the words are his, and an invented
+# Tahitian sentence about who holds the rights to a lyric would be a claim
+# nobody made.
+terms_title = "Legal notice"
+terms_intro = "Chanson du fenua is a collection of French Polynesian songs: the lyrics, with the chords written where they are played. The catalogue is small, public and non-commercial."
+terms_publisher = "The site is hosted and edited by Rao Nagos."
+terms_lyrics = "The lyrics are not ours: they belong to their authors."
+terms_code = "The site's code is under the GPL-3.0 licence."
+terms_data = "No sensitive user information is backed up on this site."
+terms_removal = "If you hold the rights to a song and want it removed, write to contact@chansondufenua.pf — or to contact@rao-nagos.pf if the first address does not answer you."
+terms_corrections = "We are not responsible if a lyric is wrong: ask for the correction, and it is fixed."
+terms_updated = "Last updated:"

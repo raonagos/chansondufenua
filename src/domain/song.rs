@@ -7,15 +7,19 @@
 //!   column straight into the template, which is an XSS hole on a free-form
 //!   "add the lyrics" form.
 //! * [`Song::clean_lyrics`] — chord-free plain text, byte-for-byte what v3 put
-//!   in `og:description` and JSON-LD (`Lyrics of <title> - <clean>`).
+//!   in `og:description`, and still what the JSON-LD `lyrics.text` carries.
 //! * [`Song::lyrics_markdown`] — Markdown with chords kept inline, for the
-//!   `Accept: text/markdown` negotiation in step 10.
+//!   `Accept: text/markdown` negotiation in step 10. Its transposed sibling,
+//!   [`Song::lyrics_markdown_at`], keeps the canonical spelling and comes from
+//!   [`crate::domain::chord`], which is where the wheel lives.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::artist::Artist;
+use super::chord;
 use super::error::{AppError, AppResult};
+use crate::i18n::{self, Key, Lang};
 
 type Datetime = DateTime<Utc>;
 
@@ -25,23 +29,36 @@ pub const SITE_URL: &str = "https://www.chansondufenua.pf";
 /// Schema bounds, mirrored by the `CHECK` constraints in
 /// `migrations/0001_init.sql`.
 ///
-/// `TITLE_MIN`, `LYRICS_MIN` and `LYRICS_MAX` are transcribed verbatim from v3
-/// (`legacy/surrealdb.surql`). `TITLE_MAX` and `ARTISTS_MAX` were changed on
-/// review (2026-10-04) and are deliberately *not* v3's values.
+/// `TITLE_MIN`, `LYRICS_MIN` and `LYRICS_MAX` are transcribed verbatim from v3.
+/// `TITLE_MAX` and `ARTISTS_MAX` were changed on review (2026-10-04) and are
+/// deliberately *not* v3's values.
 pub const TITLE_MIN: usize = 4;
 pub const TITLE_MAX: usize = 255;
 pub const LYRICS_MIN: usize = 100;
 pub const LYRICS_MAX: usize = 6000;
-/// v3 allowed 75 (`ASSERT array::len($value) <= 75` in `legacy/surrealdb.surql`).
+/// v3 allowed 75 (`ASSERT array::len($value) <= 75`).
 /// The highest count across every song in the 2025-03-22 export is 2, so 10
 /// leaves room to spare while keeping a runaway create-song request cheap to
 /// reject.
 pub const ARTISTS_MAX: usize = 10;
 
+/// The budget for a song page's `<meta name="description">` and
+/// `og:description`.
+///
+/// A search engine shows roughly 155 characters of a description. v3 put the
+/// whole chord-free lyric there instead — 888 characters on a real song, opening
+/// with the scaffold `Lyrics of | Paroles de | Parau hīmene nō`, which is neither
+/// a sentence nor a language. See [`Song::get_meta_data`].
+pub const DESCRIPTION_MAX: usize = 155;
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 /// Structure representing a song.
 pub struct Song {
     id: String,
+    /// The address this song is published under, built from its title by
+    /// [`super::slug::slugify`]. `None` when the title has no Latin letters in
+    /// it, and then the id is the address — see [`Song::get_path`].
+    slug: Option<String>,
     title: String,
     lyrics: String,
     view_count: u32,
@@ -52,12 +69,13 @@ pub struct Song {
 }
 
 impl Song {
-    /// Eight arguments is a lot, but this is v3's constructor signature kept
-    /// intact so the port is auditable. It disappears once the repository builds
-    /// songs from rows (step 3a).
+    /// Nine arguments is a lot, but this is v3's constructor signature plus the
+    /// slug, kept intact so the port is auditable. It disappears once the
+    /// repository builds songs from rows (step 3a).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
+        slug: Option<String>,
         title: String,
         lyrics: String,
         view_count: u32,
@@ -68,6 +86,7 @@ impl Song {
     ) -> Self {
         Self {
             id,
+            slug,
             title,
             lyrics,
             view_count,
@@ -79,8 +98,25 @@ impl Song {
     }
 
     /// Retrieves the `id` of the song.
+    ///
+    /// The v3 record key, and the stable identifier of the JSON API and the MCP
+    /// tools. It is no longer the song's address — [`Song::get_path`] is.
     pub fn get_id(&self) -> String {
         self.id.to_owned()
+    }
+
+    /// Retrieves the `slug` of the song, if it has one.
+    pub fn get_slug(&self) -> Option<String> {
+        self.slug.to_owned()
+    }
+
+    /// The path segment this song is addressed by: its slug, or its id when the
+    /// title earned it no slug.
+    ///
+    /// This is what a link to the song is built from, and what the redirect from
+    /// the id URL points at.
+    pub fn get_segment(&self) -> String {
+        self.slug.to_owned().unwrap_or_else(|| self.id.to_owned())
     }
 
     /// Retrieves the `title` of the song.
@@ -128,17 +164,31 @@ impl Song {
         self.updated_at.timestamp_micros()
     }
 
-    /// The song's canonical URL.
+    /// The root-relative path the song is served at, canonical form.
+    ///
+    /// One spelling of a song URL, used by every link the site emits and by the
+    /// `Location` of the 301 from the id form. The absolute form is
+    /// [`Song::get_url`]; this is what a `Location` header and an internal link
+    /// want, because it does not name a host the request may not have arrived
+    /// on.
+    pub fn get_path(&self) -> String {
+        format!("/himene/{}", self.get_segment())
+    }
+
+    /// The song's address — one URL per page, and the page, the API and the
+    /// sitemap all spell it the same way. There is no second form to name: the
+    /// response's language is resolved from the request's own headers, not from
+    /// the URL.
     pub fn get_url(&self) -> String {
-        format!("{SITE_URL}/himene/{}", self.id)
+        format!("{SITE_URL}{}", self.get_path())
     }
 
     /// Rejects a song the database would reject, before it gets there.
     ///
-    /// The bounds v3 expressed as SurrealDB `ASSERT` clauses
-    /// (`legacy/surrealdb.surql`), with `title` and the artist count adjusted on
-    /// review — `title` 4..=255, `lyrics` 100..=6000, `view_count > 0`, at most
-    /// 10 artists, each with a valid `fullname`.
+    /// The bounds v3 expressed as SurrealDB `ASSERT` clauses, with `title` and
+    /// the artist count adjusted on review — `title` 4..=255, `lyrics`
+    /// 100..=6000, `view_count > 0`, at most 10 artists, each with a valid
+    /// `fullname`.
     pub fn validate(&self) -> AppResult<()> {
         let title_len = self.title.trim().chars().count();
         if !(TITLE_MIN..=TITLE_MAX).contains(&title_len) {
@@ -224,7 +274,18 @@ impl Song {
     /// rendered `[Eb]` at the same offset, lines become lines, and a
     /// `<div><br></div>` becomes a blank line.
     pub fn lyrics_markdown(&self) -> String {
-        html_to_markdown(&self.lyrics_html())
+        self.lyrics_markdown_at(0)
+    }
+
+    /// The same document with every chord moved by `offset` semitones.
+    ///
+    /// This is the transposed form of the page's Markdown representation, and
+    /// its chords keep the canonical spelling: the wheel names the chord, the
+    /// language never does (see [`crate::domain::chord`]). At offset zero it is
+    /// byte-for-byte [`Song::lyrics_markdown`], which is what every machine
+    /// surface reads.
+    pub fn lyrics_markdown_at(&self, offset: i32) -> String {
+        html_to_markdown(&self.lyrics_html(), offset)
     }
 
     /// The lyrics as lines of text and chords, for rendering.
@@ -252,7 +313,13 @@ impl Song {
     }
 
     /// Convert the song into schema.org structure data markup.
-    pub fn to_jsonld(&self) -> String {
+    ///
+    /// `url` is the canonical URL of the page this markup describes — the caller
+    /// decides it, because a caller may have a URL the domain does not build
+    /// (the API's own read, for one). Structure data that named a different
+    /// address from the page's `<link rel="canonical">` would be two competing
+    /// canonicals in one `<head>`.
+    pub fn to_jsonld(&self, url: &str) -> String {
         use serde_json::json;
 
         let lyrics = json!({
@@ -271,8 +338,6 @@ impl Song {
             })
             .collect::<Vec<_>>();
 
-        let url = self.get_url();
-
         let schema_music = json!({
             "@context": "https://schema.org/",
             "@type": "MusicComposition",
@@ -287,7 +352,19 @@ impl Song {
     }
 
     /// Everything the page needs to fill `<head>`.
-    pub fn get_meta_data(&self) -> MetaSongData {
+    ///
+    /// `url` is the canonical URL of the page, as [`Song::to_jsonld`] takes it:
+    /// `og:url` and the structure data have to name the address the page is
+    /// published at — one address, since v4.1, whatever language the response is
+    /// written in.
+    ///
+    /// `lang` is the language the response is written in, and the **description
+    /// is the one field that follows it**: the title names the song and the
+    /// structured data quotes the lyric, so neither is translated, but the
+    /// sentence around the title is the site's own and a page served in English
+    /// must say it in English (step 50). See [`description_sentence`]; the words
+    /// live in the catalog.
+    pub fn get_meta_data(&self, url: &str, lang: Lang) -> MetaSongData {
         let mut page_title = "Chanson du fenua".to_owned();
 
         let artists_name = self
@@ -302,21 +379,28 @@ impl Song {
             false => format!("{} - {} | {page_title}", self.title, artists_name),
         };
 
-        // Left exactly as v3 wrote it, mixing French and Tahitian in one string.
-        // Step 8 (i18n) is where this becomes a translated message.
-        let meta_description = format!(
-            "Lyrics of | Paroles de | Parau hīmene nō {} - {}",
-            self.title,
-            self.clean_lyrics(),
-        );
-        let meta_og_description = format!("Lyrics of {} - {}", self.title, self.clean_lyrics());
+        // v3 wrote both of these as the whole chord-free lyric — 888 characters
+        // on a real song, opening with the scaffold `Lyrics of | Paroles de |
+        // Parau hīmene nō`, which is neither a sentence nor a language. A
+        // description is a snippet: this says what the page is, leads with the
+        // title, and stops inside the ~155 characters a search engine will show.
+        // `clean_lyrics` is still what the JSON-LD carries, where the whole text
+        // is the point.
+        let description = description_sentence(&self.title, &artists_name, lang);
+        let meta_description = description.clone();
+        let meta_og_description = description;
 
-        let meta_og_url = self.get_url();
+        let meta_og_url = url.to_owned();
         let uat = self.get_uat_timestamp();
+        // The two card URLs stay keyed by `id`. They are not addresses of a
+        // document — they are the cache key of a PNG, asked for by this page and
+        // by no one else — and the id is the stable key. Moving them to the slug
+        // form would re-render two images per song for no reader's benefit, and
+        // they are served `immutable` for a year.
         let meta_img_url_og = format!("{SITE_URL}/drive/genog/{uat}/himene/{}", self.id);
         let meta_img_url_tw = format!("{SITE_URL}/drive/gentw/{uat}/himene/{}", self.id);
         let meta_og_img_alt = format!("Lyrics for {}", page_title);
-        let meta_jsonld = self.to_jsonld();
+        let meta_jsonld = self.to_jsonld(url);
 
         MetaSongData {
             page_title,
@@ -334,6 +418,57 @@ impl Song {
 }
 
 // html meta tag helper
+
+/// The one-sentence description of a song page, in the page's own language.
+///
+/// The title first — what a reader is looking for is the song — then what the
+/// page holds (its lyrics and its chords), then who wrote it and where it lives.
+/// The title and the credits are the song's own words and are never translated;
+/// the sentence around them is the site's and is, in the catalog.
+///
+/// It follows the response's language, which is the whole of step 50: the line
+/// used to be assembled in French whatever the page was served in, so a song
+/// page at `en`/`ty` handed a search engine a French sentence. The French is v3's
+/// sentence byte for byte, so the default page reads exactly as it did.
+///
+/// The result is at most [`DESCRIPTION_MAX`] characters. The tail is kept whole
+/// and the title gives way first, so a very long title is cut rather than the
+/// sentence being left half-written.
+fn description_sentence(title: &str, artists: &str, lang: Lang) -> String {
+    // A song with no credited artist takes the sentence without the credits
+    // clause rather than the same sentence with a hole where the names go: the
+    // clause and its connector are the language's, and the two forms are two
+    // lines in the catalog.
+    let tail = match artists.is_empty() {
+        true => i18n::text(lang, Key::SongDescriptionSolo).to_owned(),
+        false => i18n::fill(lang, Key::SongDescription, "artists", artists),
+    };
+
+    // Defensive: ten artists at the schema's own maximum could in principle
+    // swallow the whole budget. The corpus never comes close — the longest title
+    // in the 2025-03-22 export is 28 characters and the longest artist name 18 —
+    // so the ordinary path is "the title fits, nothing is cut".
+    let tail = truncate_chars(&tail, DESCRIPTION_MAX);
+    let room = DESCRIPTION_MAX - tail.chars().count();
+
+    format!("{}{tail}", truncate_chars(title, room))
+}
+
+/// The first `room` characters of `text`, with an ellipsis when it had to be cut.
+///
+/// Counts characters, not bytes: the corpus's titles carry macrons and `ʻokina`.
+pub(crate) fn truncate_chars(text: &str, room: usize) -> String {
+    if text.chars().count() <= room {
+        return text.to_owned();
+    }
+    if room == 0 {
+        return String::new();
+    }
+
+    let mut out: String = text.chars().take(room - 1).collect();
+    out.push('…');
+    out
+}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MetaSongData {
@@ -557,17 +692,24 @@ fn normalize_lines(lines: Vec<LyricLine>) -> Vec<LyricLine> {
 /// `<sup>` for a chord — so this is a hand-rolled scanner rather than a regex
 /// pile. Anything unrecognised is dropped rather than escaped: the input has
 /// already been through [`ammonia`].
-fn html_to_markdown(html: &str) -> String {
+///
+/// A chord is collected in a buffer of its own rather than written into the line
+/// as it streams, so that the whole label can be moved by `offset` at `</sup>`:
+/// a root is more than one character, and half a chord cannot be transposed.
+/// At offset zero the two renderings are identical.
+fn html_to_markdown(html: &str, offset: i32) -> String {
     let mut lines: Vec<String> = Vec::new();
     let mut current = String::new();
+    let mut chord = String::new();
+    let mut in_chord = false;
     let bytes = html.as_bytes();
     let mut i = 0;
 
     while i < bytes.len() {
         match bytes[i] {
             b'<' => match html[i..].find('>') {
-                Some(offset) => {
-                    let tag = &html[i + 1..i + offset];
+                Some(offset_in) => {
+                    let tag = &html[i + 1..i + offset_in];
                     let closing = tag.starts_with('/');
                     let name = tag
                         .trim_start_matches('/')
@@ -577,8 +719,16 @@ fn html_to_markdown(html: &str) -> String {
                         .to_ascii_lowercase();
 
                     match (name.as_str(), closing) {
-                        ("sup", false) => current.push('['),
-                        ("sup", true) => current.push(']'),
+                        ("sup", false) => {
+                            in_chord = true;
+                            chord.clear();
+                            current.push('[');
+                        }
+                        ("sup", true) => {
+                            in_chord = false;
+                            current.push_str(&chord::spell(&chord, offset));
+                            current.push(']');
+                        }
                         // A `<div>` opens a line only if there is one to close —
                         // otherwise `<div>a</div><div>b</div>` would leave a
                         // spurious blank between a and b.
@@ -586,7 +736,7 @@ fn html_to_markdown(html: &str) -> String {
                         ("div" | "p", true) | ("br", _) => flush_hard(&mut lines, &mut current),
                         _ => {}
                     }
-                    i += offset + 1;
+                    i += offset_in + 1;
                 }
                 // Unterminated tag: stop rather than lose the tail.
                 None => {
@@ -596,17 +746,29 @@ fn html_to_markdown(html: &str) -> String {
             },
             b'&' => match decode_entity(html, i) {
                 Some((next, ch)) => {
-                    current.push(ch);
+                    if in_chord {
+                        chord.push(ch);
+                    } else {
+                        current.push(ch);
+                    }
                     i = next;
                 }
                 None => {
-                    current.push('&');
+                    if in_chord {
+                        chord.push('&');
+                    } else {
+                        current.push('&');
+                    }
                     i += 1;
                 }
             },
             _ => {
                 let ch = html[i..].chars().next().unwrap();
-                current.push(ch);
+                if in_chord {
+                    chord.push(ch);
+                } else {
+                    current.push(ch);
+                }
                 i += ch.len_utf8();
             }
         }
@@ -709,6 +871,7 @@ mod tests {
     fn song_with(lyrics: &str) -> Song {
         Song::new(
             "8nntgjk4rl5dbp67c6en".to_string(),
+            Some("song-title".to_owned()),
             "Song Title".to_string(),
             lyrics.to_string(),
             100,
@@ -729,6 +892,7 @@ mod tests {
         );
         let song = Song::new(
             "Song ID".to_string(),
+            Some("song-title".to_owned()),
             "Song Title".to_string(),
             "Song Lyrics".to_string(),
             100,
@@ -759,16 +923,15 @@ mod tests {
 
     #[test]
     fn clean_lyrics_matches_live_output() {
-        // The oracle: the prefix of the real `og:description` served for
-        // /himene/7114wvk91gffr2bj6wza, up to the fourth line.
+        // The oracle: the prefix of the real `og:description` v3 served for
+        // /himene/7114wvk91gffr2bj6wza, up to the fourth line. `clean_lyrics` is
+        // a parity function — v4.1 stopped putting its output in the page head
+        // (see `description_sentence`), but the JSON-LD still carries it, so it
+        // must keep matching what v3 produced.
         let song = song_with(REAL_LYRICS);
         assert_eq!(
             song.clean_lyrics(),
             "'Āhani e , E rāve'a, Nō te fa'aho'i te tau i muri, Hina'aro ho'i au"
-        );
-        assert_eq!(
-            song.get_meta_data().meta_description,
-            "Lyrics of | Paroles de | Parau hīmene nō Song Title - 'Āhani e , E rāve'a, Nō te fa'aho'i te tau i muri, Hina'aro ho'i au"
         );
     }
 
@@ -815,6 +978,25 @@ mod tests {
         );
     }
 
+    /// The Markdown form can be stepped like the page, and its chords keep the
+    /// canonical spelling: a root read in the chrome's own words is chrome, and
+    /// a machine reading this wants `C#`. At zero it is the document it has
+    /// always been, byte for byte.
+    #[test]
+    fn markdown_transposes_without_renaming_a_chord() {
+        let song = song_with(REAL_LYRICS);
+
+        assert_eq!(song.lyrics_markdown_at(0), song.lyrics_markdown());
+        assert_eq!(
+            song.lyrics_markdown_at(2),
+            "'Āhani e[C#] [Ab]\nE rāve'a[Bbm]\nNō te fa[F#]'aho'i te ta[C#]u i muri[Ab]\nHina'a[F]ro ho'i au"
+        );
+        assert_eq!(
+            song.lyrics_markdown_at(-1),
+            "'Āhani e[Bb] [F]\nE rāve'a[Gm]\nNō te fa[Eb]'aho'i te ta[Bb]u i muri[F]\nHina'a[D]ro ho'i au"
+        );
+    }
+
     #[test]
     fn markdown_verse_break_is_a_blank_line() {
         let song = song_with("<div>Verse one</div><div><br></div><div>Verse two</div>");
@@ -842,13 +1024,13 @@ mod tests {
     fn song_metadata_without_artist() {
         let song = song_with("Song Lyrics");
 
-        let meta_data = song.get_meta_data();
+        let meta_data = song.get_meta_data(&song.get_url(), Lang::Fr);
         assert_eq!(meta_data.page_title, "Song Title | Chanson du fenua");
-        assert!(
-            meta_data
-                .meta_description
-                .contains("Lyrics of | Paroles de | Parau hīmene nō Song Title")
+        assert_eq!(
+            meta_data.meta_description,
+            "Song Title — paroles et accords, à retrouver sur Chanson du fenua."
         );
+        assert_eq!(meta_data.meta_og_description, meta_data.meta_description);
     }
 
     #[test]
@@ -861,6 +1043,7 @@ mod tests {
         );
         let song = Song::new(
             "Song ID".to_string(),
+            Some("song-title".to_owned()),
             "Song Title".to_string(),
             "Song Lyrics".to_string(),
             100,
@@ -870,19 +1053,19 @@ mod tests {
             Utc::now(),
         );
 
-        let meta_data = song.get_meta_data();
+        let meta_data = song.get_meta_data(&song.get_url(), Lang::Fr);
         assert_eq!(
             meta_data.page_title,
             "Song Title - Artist Name | Chanson du fenua"
         );
-        assert!(
-            meta_data
-                .meta_description
-                .contains("Lyrics of | Paroles de | Parau hīmene nō Song Title")
+        assert_eq!(
+            meta_data.meta_description,
+            "Song Title — paroles et accords de Artist Name, à retrouver sur Chanson du fenua."
         );
+        assert_eq!(meta_data.meta_og_description, meta_data.meta_description);
         assert_eq!(
             meta_data.meta_og_url,
-            "https://www.chansondufenua.pf/himene/Song ID"
+            "https://www.chansondufenua.pf/himene/song-title"
         );
         assert!(
             meta_data
@@ -896,10 +1079,188 @@ mod tests {
         );
     }
 
+    /// The snippet is a sentence, not the document: it leads with the title,
+    /// says what the page is, and stays inside the ~155 characters a search
+    /// engine shows — which the whole chord-free lyric (888 characters on a real
+    /// song) never did.
+    #[test]
+    fn the_description_leads_with_the_title_and_fits_a_snippet() {
+        let song = song_with(REAL_LYRICS);
+        let meta = song.get_meta_data(&song.get_url(), Lang::Fr);
+        for lang in Lang::ALL {
+            let meta = song.get_meta_data(&song.get_url(), lang);
+            assert!(
+                meta.meta_description.chars().count() <= DESCRIPTION_MAX,
+                "{lang:?}: {} characters: {:?}",
+                meta.meta_description.chars().count(),
+                meta.meta_description
+            );
+            assert!(
+                meta.meta_description.starts_with("Song Title"),
+                "{lang:?}: {:?}",
+                meta.meta_description
+            );
+        }
+
+        assert!(
+            meta.meta_description.starts_with("Song Title"),
+            "{:?}",
+            meta.meta_description
+        );
+        assert!(meta.meta_description.contains("paroles et accords"));
+        assert!(
+            meta.meta_description.chars().count() <= DESCRIPTION_MAX,
+            "{} characters: {:?}",
+            meta.meta_description.chars().count(),
+            meta.meta_description
+        );
+        // The trap this step exists to close: the description used to *be* the
+        // lyric.
+        assert!(
+            !meta.meta_description.contains("Hina'aro"),
+            "{:?}",
+            meta.meta_description
+        );
+        assert!(meta.meta_description.chars().count() < song.clean_lyrics().chars().count());
+    }
+
+    #[test]
+    fn the_description_names_the_artists() {
+        let mut song = song_with("Song Lyrics");
+        for name in ["2B Brothers Tahiti", "T'Angelo"] {
+            song.artists.push(Artist::new(
+                name.to_string(),
+                name.to_string(),
+                Utc::now(),
+                Utc::now(),
+            ));
+        }
+
+        let meta = song.get_meta_data(&song.get_url(), Lang::Fr);
+        assert!(
+            meta.meta_description
+                .contains("paroles et accords de 2B Brothers Tahiti, T'Angelo"),
+            "{:?}",
+            meta.meta_description
+        );
+    }
+
+    /// **The sentence follows the page's language (step 50).** The title and the
+    /// credits are the song's own words and are the same in every language; the
+    /// sentence around them is the site's and is served in the language the
+    /// response is written in. The review item this closes is the next line but
+    /// one: a song page at `en`/`ty` used to hand a search engine the French
+    /// sentence.
+    ///
+    /// The French is v3's sentence byte for byte, so the default page reads
+    /// exactly as it did before the sentence moved into the catalog.
+    #[test]
+    fn the_description_speaks_the_language_the_page_is_served_in() {
+        let artist = Artist::new(
+            "Artist ID".to_string(),
+            "Artist Name".to_string(),
+            Utc::now(),
+            Utc::now(),
+        );
+        let song = Song::new(
+            "Song ID".to_string(),
+            Some("song-title".to_owned()),
+            "Song Title".to_string(),
+            "Song Lyrics".to_string(),
+            100,
+            vec![artist],
+            true,
+            Utc::now(),
+            Utc::now(),
+        );
+
+        let sentence = |lang| song.get_meta_data(&song.get_url(), lang).meta_description;
+
+        assert_eq!(
+            sentence(Lang::Fr),
+            "Song Title — paroles et accords de Artist Name, à retrouver sur Chanson du fenua."
+        );
+        assert_eq!(
+            sentence(Lang::En),
+            "Song Title — lyrics and chords by Artist Name, at Chanson du fenua."
+        );
+        // Tahitian is prose: the catalog serves the English, by the site's rule.
+        assert_eq!(sentence(Lang::Ty), sentence(Lang::En));
+
+        // The trap, stated as a test: an English page does not say it in French.
+        assert!(!sentence(Lang::En).contains("paroles"));
+        assert!(!sentence(Lang::Ty).contains("paroles"));
+    }
+
+    /// The same claim for a song with no credited artist: the credits clause is
+    /// not a fragment cut out of one sentence, so the no-artist form is a line of
+    /// its own — in the page's language like the sentence with credits in it.
+    #[test]
+    fn a_song_with_no_credited_artist_says_so_in_its_own_language() {
+        let song = song_with("Song Lyrics");
+
+        assert_eq!(
+            song.get_meta_data(&song.get_url(), Lang::Fr)
+                .meta_description,
+            "Song Title — paroles et accords, à retrouver sur Chanson du fenua."
+        );
+        assert_eq!(
+            song.get_meta_data(&song.get_url(), Lang::En)
+                .meta_description,
+            "Song Title — lyrics and chords, at Chanson du fenua."
+        );
+        assert_eq!(
+            song.get_meta_data(&song.get_url(), Lang::Ty)
+                .meta_description,
+            song.get_meta_data(&song.get_url(), Lang::En)
+                .meta_description
+        );
+    }
+
+    /// A title longer than the budget is cut, and the sentence survives whole:
+    /// the ellipsis lands inside the title, never on the tail — in every
+    /// language, since the tail is now the language's own.
+    #[test]
+    fn a_long_title_gives_way_before_the_sentence() {
+        let long = "Ā".repeat(TITLE_MAX);
+        let song = Song::new(
+            "8nntgjk4rl5dbp67c6en".to_string(),
+            Some("song-title".to_owned()),
+            long.clone(),
+            "Song Lyrics".to_string(),
+            100,
+            vec![],
+            true,
+            Utc::now(),
+            Utc::now(),
+        );
+
+        for (lang, tail) in [
+            (Lang::Fr, ", à retrouver sur Chanson du fenua."),
+            (Lang::En, ", at Chanson du fenua."),
+            (Lang::Ty, ", at Chanson du fenua."),
+        ] {
+            let description = song.get_meta_data(&song.get_url(), lang).meta_description;
+
+            assert_eq!(
+                description.chars().count(),
+                DESCRIPTION_MAX,
+                "{lang:?}: {description:?}"
+            );
+            assert!(description.ends_with(tail), "{lang:?}: {description:?}");
+            assert!(description.contains('…'), "{lang:?}: {description:?}");
+            assert!(
+                long.starts_with(&description[..description.find('…').unwrap()]),
+                "{lang:?}: {description:?}"
+            );
+        }
+    }
+
     #[test]
     fn jsonld_is_a_musiccomposition_with_the_clean_text() {
         let song = song_with("<div>Line and more</div>");
-        let jsonld: serde_json::Value = serde_json::from_str(&song.to_jsonld()).unwrap();
+        let jsonld: serde_json::Value =
+            serde_json::from_str(&song.to_jsonld(&song.get_url())).unwrap();
 
         assert_eq!(jsonld["@type"], "MusicComposition");
         assert_eq!(jsonld["name"], "Song Title");
@@ -907,7 +1268,7 @@ mod tests {
         assert_eq!(jsonld["lyrics"]["text"], "Line and more");
         assert_eq!(
             jsonld["url"],
-            "https://www.chansondufenua.pf/himene/8nntgjk4rl5dbp67c6en"
+            "https://www.chansondufenua.pf/himene/song-title"
         );
         assert!(jsonld["composer"].as_array().unwrap().is_empty());
     }
@@ -937,8 +1298,46 @@ mod tests {
         let mut song = song_with("Song Lyrics");
         song.artists.push(artist);
 
-        let jsonld: serde_json::Value = serde_json::from_str(&song.to_jsonld()).unwrap();
+        let jsonld: serde_json::Value =
+            serde_json::from_str(&song.to_jsonld(&song.get_url())).unwrap();
         assert_eq!(jsonld["composer"][0]["name"], "2B Brothers Tahiti");
+    }
+
+    // ---- identity: the slug, and the id it falls back to -------------------
+
+    /// The address is the slug. `get_url` and `get_path` are the two spellings
+    /// of it that the site emits — one for a canonical link, one for a
+    /// `Location` header and an internal `href`.
+    #[test]
+    fn a_song_with_a_slug_is_addressed_by_its_slug() {
+        let song = song_with("Song Lyrics");
+
+        assert_eq!(song.get_slug(), Some("song-title".to_owned()));
+        assert_eq!(song.get_segment(), "song-title");
+        assert_eq!(song.get_path(), "/himene/song-title");
+        assert_eq!(
+            song.get_url(),
+            "https://www.chansondufenua.pf/himene/song-title"
+        );
+        // ...and the id is still the stable key, not the address.
+        assert_eq!(song.get_id(), "8nntgjk4rl5dbp67c6en");
+    }
+
+    /// A title with no Latin letters earns no slug (`slugify` returns nothing to
+    /// build one from), and the song keeps the address v3 gave it rather than
+    /// getting an invented one.
+    #[test]
+    fn a_song_with_no_slug_is_addressed_by_its_id() {
+        let mut song = song_with("Song Lyrics");
+        song.slug = None;
+
+        assert_eq!(song.get_slug(), None);
+        assert_eq!(song.get_segment(), "8nntgjk4rl5dbp67c6en");
+        assert_eq!(song.get_path(), "/himene/8nntgjk4rl5dbp67c6en");
+        assert_eq!(
+            song.get_url(),
+            "https://www.chansondufenua.pf/himene/8nntgjk4rl5dbp67c6en"
+        );
     }
 
     // ---- validation -------------------------------------------------------
@@ -947,6 +1346,7 @@ mod tests {
     fn validate_accepts_a_real_song() {
         let song = Song::new(
             "8nntgjk4rl5dbp67c6en".to_string(),
+            Some("ahani-e".to_owned()),
             "'Āhani e".to_string(),
             REAL_LYRICS.to_string(),
             1,

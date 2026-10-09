@@ -5,6 +5,12 @@
 //! and the `created_at DESC` ordering that `/himene` uses. The read path
 //! deliberately mirrors the live ordering — verified against the running site
 //! before it was written down, not assumed.
+//!
+//! A song's *address* is minted here too: `assign_slug` turns a title into the
+//! slug it is published under, and [`song_at`] resolves a URL segment back to
+//! its song. The rule that shapes a title is `domain::slug`; what lives here is
+//! the part that is a fact about the tables — uniqueness, and the history that
+//! stops a retired address being handed to a different song.
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{FromRow, SqlitePool};
@@ -63,6 +69,10 @@ impl ArtistRow {
 #[derive(FromRow)]
 struct SongArtistRow {
     id: String,
+    /// Empty for a song the slug rule could not name, and for one written
+    /// straight to the table before the backfill ran. [`finish`] turns it into
+    /// `None`; nothing downstream has to know which of the two it was.
+    slug: String,
     title: String,
     lyrics: String,
     view_count: i64,
@@ -94,7 +104,7 @@ impl SongArtistRow {
 /// Shared projection. `position` is ordered on but not selected — the row order
 /// is what carries it.
 const SONGS_SELECT: &str = "\
-SELECT s.id, s.title, s.lyrics, s.view_count, s.published, s.created_at, s.updated_at,
+SELECT s.id, s.slug, s.title, s.lyrics, s.view_count, s.published, s.created_at, s.updated_at,
        a.id AS artist_id, a.fullname AS artist_fullname,
        a.created_at AS artist_created_at, a.updated_at AS artist_updated_at
 FROM song s
@@ -141,6 +151,15 @@ fn page_select(keys: &str) -> String {
     format!("SELECT s.id FROM song s WHERE s.published = 1 ORDER BY {keys} LIMIT ?1")
 }
 
+/// [`page_select`] with an offset, for the reads that page through the catalogue.
+///
+/// The same sub-select, because SQLite spells an offset and a limit in one
+/// clause and there is no `OFFSET` without a `LIMIT`. Still before the join, for
+/// [`page_select`]'s reason: the page must be chosen from songs.
+fn page_select_offset(keys: &str) -> String {
+    format!("SELECT s.id FROM song s WHERE s.published = 1 ORDER BY {keys} LIMIT ?1 OFFSET ?2")
+}
+
 /// Fold credit rows into songs, preserving both the row order and each song's
 /// credit order.
 fn assemble(rows: Vec<SongArtistRow>) -> DbResult<Vec<Song>> {
@@ -182,6 +201,10 @@ fn assemble(rows: Vec<SongArtistRow>) -> DbResult<Vec<Song>> {
 fn finish(head: SongArtistRow, artists: Vec<Artist>) -> DbResult<Song> {
     Ok(Song::new(
         head.id,
+        // The column's empty string is the schema's "no slug", not a slug of
+        // nothing: a song whose title slugifies to nothing is addressed by its
+        // id, exactly as a v3 row was.
+        (!head.slug.is_empty()).then_some(head.slug),
         head.title,
         head.lyrics,
         head.view_count.max(1) as u32,
@@ -225,6 +248,60 @@ pub async fn songs(pool: &SqlitePool, order: SongOrder, limit: Option<i64>) -> D
     assemble(query.fetch_all(pool).await?)
 }
 
+/// One page of the published catalogue, with its credits, in `order`.
+///
+/// `limit` counts songs, not credit rows, for [`songs`]'s reason — the offset is
+/// applied to the same ids-only sub-select, so the join can never move a song
+/// between pages or spend two rows of the page on one song's credits.
+///
+/// Read by the MCP catalogue (`src/routes/mcp.rs`), whose `list_songs` takes a
+/// page number, and by the index's own pages (`pages::songs`, which owns
+/// [`PAGE_SIZE`](crate::pages::songs::PAGE_SIZE) and the offset both of them
+/// use). One read, two surfaces, so the page an MCP client gets and the page a
+/// reader gets are the same twenty songs.
+pub async fn songs_page(
+    pool: &SqlitePool,
+    order: SongOrder,
+    limit: i64,
+    offset: i64,
+) -> DbResult<Vec<Song>> {
+    let keys = order.song_keys();
+    let sql = format!(
+        "{SONGS_SELECT} WHERE s.id IN ({}) ORDER BY {keys}, sa.position",
+        page_select_offset(keys)
+    );
+
+    let rows = sqlx::query_as::<_, SongArtistRow>(&sql)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?;
+
+    assemble(rows)
+}
+
+/// Every published song credited to one artist, newest first.
+///
+/// The artist page's list. The window is the whole catalogue on purpose — an
+/// artist with forty songs is still one page — and the filter is a sub-select on
+/// `song_artist` rather than a second join, so the `LIMIT`-counts-songs rule that
+/// [`songs`] documents holds here too by construction.
+pub async fn songs_by_artist(pool: &SqlitePool, artist_id: &str) -> DbResult<Vec<Song>> {
+    let keys = SongOrder::Newest.song_keys();
+    let sql = format!(
+        "{SONGS_SELECT} WHERE s.published = 1 AND s.id IN \
+         (SELECT song_id FROM song_artist WHERE artist_id = ?1) \
+         ORDER BY {keys}, sa.position"
+    );
+
+    let rows = sqlx::query_as::<_, SongArtistRow>(&sql)
+        .bind(artist_id)
+        .fetch_all(pool)
+        .await?;
+
+    assemble(rows)
+}
+
 /// One song by id, published or not — the page decides whether to 404, and the
 /// editor needs to see drafts.
 pub async fn song(pool: &SqlitePool, id: &str) -> DbResult<Option<Song>> {
@@ -234,6 +311,222 @@ pub async fn song(pool: &SqlitePool, id: &str) -> DbResult<Option<Song>> {
         .fetch_all(pool)
         .await?;
     Ok(assemble(rows)?.into_iter().next())
+}
+
+/// A song reached by the URL segment that named it.
+///
+/// One song URL has two spellings — the slug, which is canonical, and the id,
+/// which is what v3 published and what a song with no slug still uses — and
+/// three callers have to agree which one they are looking at: the negotiation
+/// layer (which turns the other spelling into a 301), the layout (which decides
+/// the document head from the path alone) and the page. So the resolution is one
+/// function, and [`Addressed::is_canonical`] is the whole answer to "does this
+/// URL need to move".
+#[derive(Debug, Clone)]
+pub struct Addressed {
+    song: Song,
+    canonical: bool,
+}
+
+impl Addressed {
+    /// Build one directly.
+    ///
+    /// [`song_at`] is the real caller; this exists so the layers and the layout
+    /// can be tested on a resolved song without a database behind them.
+    #[cfg(test)]
+    pub(crate) fn new(song: Song, canonical: bool) -> Self {
+        Self { song, canonical }
+    }
+
+    /// The row.
+    pub fn song(&self) -> &Song {
+        &self.song
+    }
+
+    /// The row, consumed.
+    pub fn into_song(self) -> Song {
+        self.song
+    }
+
+    /// Whether the segment that named this song *is* the song's address.
+    ///
+    /// False for an id URL of a song that has a slug, and false for a retired
+    /// slug — a title the song used to have. Both are a 301 to
+    /// [`Song::get_path`], issued directly to the current address: nothing here
+    /// ever chains through an intermediate one.
+    pub fn is_canonical(&self) -> bool {
+        self.canonical
+    }
+}
+
+/// The song a URL segment names — its slug, its id, or a slug it used to have.
+///
+/// `None` when the segment names no song at all, which is what lets the caller
+/// fall through to the site's 404 rather than invent an error response.
+///
+/// Drafts are returned: like [`song`], this is the read, not the policy.
+pub async fn song_at(pool: &SqlitePool, segment: &str) -> DbResult<Option<Addressed>> {
+    // A slug first. It is the namespace the site publishes, `song_slug` holds
+    // every slug ever assigned, and [`assign_slug`] refuses to mint one that is
+    // a song id — so the two lookups cannot both hit.
+    let by_slug: Option<String> =
+        sqlx::query_scalar("SELECT song_id FROM song_slug WHERE slug = ?1")
+            .bind(segment)
+            .fetch_optional(pool)
+            .await?;
+
+    let found = match by_slug {
+        Some(id) => song(pool, &id).await?,
+        None => song(pool, segment).await?,
+    };
+    let Some(song) = found else {
+        return Ok(None);
+    };
+
+    let canonical = match song.get_slug() {
+        Some(slug) => slug == segment,
+        // No slug: the id is the address, and `get_segment` says so.
+        None => song.get_id() == segment,
+    };
+
+    Ok(Some(Addressed { song, canonical }))
+}
+
+/// The songs a list of URL segments names — one entry per segment, in order.
+///
+/// The bulk form of [`song_at`], for the book (`/puta-himene`):
+/// the same rule (slug, then id, then a retired slug) applied to a list. Written
+/// as a loop over [`song_at`] rather than as one `IN (…)` on purpose — "a slug,
+/// else an id, else a slug it used to have" is not a predicate SQL can be handed
+/// for a *list*, and a second implementation of it is exactly the drift
+/// [`song_at`]'s own doc comment warns about.
+///
+/// `None` where a segment names nothing. That is not an error here: the caller
+/// decides what a selection with a hole in it means, and both callers
+/// (`pages::book` and the JSON read) answer it with the 404 rather than
+/// dropping the song.
+///
+/// Drafts come back with everything else, for [`song`]'s reason: this is the
+/// read, not the policy.
+pub async fn songs_at(pool: &SqlitePool, segments: &[String]) -> DbResult<Vec<Option<Addressed>>> {
+    let mut out: Vec<Option<Addressed>> = Vec::with_capacity(segments.len());
+    for segment in segments {
+        out.push(song_at(pool, segment).await?);
+    }
+
+    Ok(out)
+}
+
+/// The slug a title earns, made unique against every slug the site has ever
+/// used.
+///
+/// The rule itself is [`crate::domain::slug::slugify`]; this adds the two things
+/// that need the database:
+///
+/// * **A collision gets a number.** `te-here-fenua`, then `te-here-fenua-2`,
+///   then `-3`. The corpus has no two titles that slugify the same (asserted in
+///   `domain::slug`), so this is for the title someone adds tomorrow.
+/// * **A retired slug is never re-issued.** The candidate is checked against
+///   `song_slug`, which holds every slug ever assigned and never loses one — so
+///   a slug freed by a rename goes to nobody, and the URL that used to point at
+///   one song can never quietly start pointing at another. The song's own rows
+///   are excluded, which is what makes re-running the importer a no-op and what
+///   lets a title changed back to an old name reclaim its old address.
+///
+/// Returns the slug written, or `None` when the title has no Latin letters and
+/// so has no slug to write.
+pub(crate) async fn assign_slug(
+    conn: &mut sqlx::SqliteConnection,
+    song_id: &str,
+    title: &str,
+) -> DbResult<Option<String>> {
+    let base = crate::domain::slug::slugify(title);
+    if base.is_empty() {
+        return Ok(None);
+    }
+
+    // 99 spellings of one title is not a corpus, it is a bug: fall back to
+    // something the id guarantees is unique rather than loop forever.
+    let mut candidate = None;
+    for n in 1..=99 {
+        let attempt = match n {
+            1 => base.clone(),
+            n => format!("{base}-{n}"),
+        };
+        if !slug_taken(conn, &attempt, song_id).await? {
+            candidate = Some(attempt);
+            break;
+        }
+    }
+    let slug = candidate.unwrap_or_else(|| format!("{base}-{song_id}"));
+
+    sqlx::query("UPDATE song SET slug = ?1 WHERE id = ?2")
+        .bind(&slug)
+        .bind(song_id)
+        .execute(&mut *conn)
+        .await?;
+    // `OR IGNORE`: the song's own earlier row is already here, and a row that is
+    // here must never be replaced — that is the whole of "retired slugs stay
+    // retired".
+    sqlx::query("INSERT OR IGNORE INTO song_slug (slug, song_id) VALUES (?1, ?2)")
+        .bind(&slug)
+        .bind(song_id)
+        .execute(&mut *conn)
+        .await?;
+
+    Ok(Some(slug))
+}
+
+/// Whether `candidate` is spoken for by another song.
+///
+/// Two ways it can be: another song holds it in `song_slug` — now or in the
+/// past, which is the same table — or it is an existing song's id, which would
+/// make one URL mean two things.
+async fn slug_taken(
+    conn: &mut sqlx::SqliteConnection,
+    candidate: &str,
+    song_id: &str,
+) -> DbResult<bool> {
+    let taken: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM song_slug WHERE slug = ?1 AND song_id <> ?2 \
+         UNION ALL SELECT 1 FROM song WHERE id = ?1 LIMIT 1",
+    )
+    .bind(candidate)
+    .bind(song_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    Ok(taken.is_some())
+}
+
+/// Give a slug to every song that has none, and report how many there were.
+///
+/// The one-time half of migration `0002_slugs.sql`, in Rust because the rule is
+/// in Rust: SQLite has no honest way to spell the transliteration table, and a
+/// nested `replace()` chain in the migration would be a second implementation of
+/// the rule, free to drift from the first.
+///
+/// Run from `Db::open`, so a database written before the slug column existed —
+/// the working copy's own `data/chansondufenua.db`, or a v4.0 file on the
+/// droplet — is addressed by slug from the first request after it is opened. It
+/// is idempotent: a database that has slugs has nothing for this to do, and the
+/// importer assigns them itself on the way in.
+pub async fn backfill_slugs(pool: &SqlitePool) -> DbResult<usize> {
+    let missing: Vec<(String, String)> =
+        sqlx::query_as("SELECT id, title FROM song WHERE slug = '' ORDER BY title, id")
+            .fetch_all(pool)
+            .await?;
+    if missing.is_empty() {
+        return Ok(0);
+    }
+
+    let mut tx = pool.begin().await?;
+    for (id, title) in &missing {
+        assign_slug(&mut tx, id, title).await?;
+    }
+    tx.commit().await?;
+
+    Ok(missing.len())
 }
 
 /// How much the public catalogue holds.
@@ -280,6 +573,45 @@ pub async fn artists(pool: &SqlitePool) -> DbResult<Vec<Artist>> {
     rows.into_iter().map(ArtistRow::into_artist).collect()
 }
 
+/// One artist by id, published or not — the read, not the policy.
+///
+/// The artist page (`pages::artist`) is what decides that an id it cannot
+/// resolve is a 404; `routes::negotiation` reads the same row so its `Link`
+/// headers do not promise a Markdown form for a page that is not served.
+pub async fn artist(pool: &SqlitePool, id: &str) -> DbResult<Option<Artist>> {
+    let row = sqlx::query_as::<_, ArtistRow>(
+        "SELECT id, fullname, created_at, updated_at FROM artist WHERE id = ?1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    row.map(ArtistRow::into_artist).transpose()
+}
+
+/// The FTS5 `MATCH` expression for a needle a person typed, or `None` when the
+/// needle carries no text worth searching for.
+///
+/// Shared by the artist autocomplete and the catalogue search so the two cannot
+/// disagree about what a typed string means: both wrap the needle in a quoted
+/// phrase — so FTS5 operators (`*`, `NEAR(`, `"`) are read as text rather than
+/// as syntax — and append `*` so the last word is a prefix.
+///
+/// `None` for a needle with no alphanumeric character at all: the quoted form of
+/// `""`, `*` or `()` tokenizes to nothing, and FTS5 answers that with a syntax
+/// error rather than with nothing found. A caller that asked for `*` is owed an
+/// empty result, not a 500.
+pub(crate) fn fts_match(query: &str) -> Option<String> {
+    let needle = query.trim();
+    if !needle.chars().any(char::is_alphanumeric) {
+        return None;
+    }
+
+    // FTS5 string literal: wrap in double quotes so operator characters are
+    // treated as text, and double any embedded quote. Then `*` for prefix.
+    Some(format!("\"{}\"*", needle.replace('"', "\"\"")))
+}
+
 /// Artist autocomplete for the editor's credit field.
 ///
 /// Uses the FTS5 index rather than `LIKE`, for the same reason v3 used a
@@ -288,14 +620,17 @@ pub async fn artists(pool: &SqlitePool) -> DbResult<Vec<Artist>> {
 /// it, so a name containing an ʻokina is indexed as separate tokens and only the
 /// trailing token is reachable by prefix. See the tests.
 pub async fn search_artists(pool: &SqlitePool, query: &str, limit: i64) -> DbResult<Vec<Artist>> {
-    let needle = query.trim();
-    if needle.is_empty() {
+    // A blank needle is not a search: the editor's autocomplete shows the whole
+    // list until something is typed. That is this function's own rule and not
+    // [`fts_match`]'s, which answers `None` for anything with no searchable
+    // text in it.
+    if query.trim().is_empty() {
         return artists(pool).await;
     }
 
-    // FTS5 string literal: wrap in double quotes so operator characters are
-    // treated as text, and double any embedded quote. Then `*` for prefix.
-    let match_expr = format!("\"{}\"*", needle.replace('"', "\"\""));
+    let Some(match_expr) = fts_match(query) else {
+        return Ok(Vec::new());
+    };
 
     let rows = sqlx::query_as::<_, ArtistRow>(
         "SELECT a.id, a.fullname, a.created_at, a.updated_at \
@@ -311,6 +646,43 @@ pub async fn search_artists(pool: &SqlitePool, query: &str, limit: i64) -> DbRes
     .await?;
 
     rows.into_iter().map(ArtistRow::into_artist).collect()
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+/// The published songs whose **title** matches a typed needle, newest first.
+///
+/// Title only — the lyrics are not indexed, for the reason
+/// `migrations/0003_search.sql` records: a common French word in a 6000-character
+/// lyric would return the whole catalogue. Diacritics and case are folded by the
+/// index, so `mama` finds `Māmā Tahiti` and `ahani` finds `'Āhani e`.
+///
+/// The ids come from the FTS index and the rows from the same projection the
+/// index page uses, so a hit carries its credits and a draft can never appear:
+/// both halves of that sentence are the point of searching through `song` rather
+/// than through the index alone.
+pub async fn search_songs(pool: &SqlitePool, query: &str, limit: i64) -> DbResult<Vec<Song>> {
+    let Some(match_expr) = fts_match(query) else {
+        return Ok(Vec::new());
+    };
+
+    let keys = SongOrder::Newest.song_keys();
+    let sql = format!(
+        "{SONGS_SELECT} WHERE s.published = 1 AND s.id IN \
+         (SELECT s2.id FROM song_fts JOIN song s2 ON s2.rowid = song_fts.rowid \
+          WHERE song_fts MATCH ?1) \
+         ORDER BY {keys}, sa.position LIMIT ?2"
+    );
+
+    let rows = sqlx::query_as::<_, SongArtistRow>(&sql)
+        .bind(match_expr)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?;
+
+    assemble(rows)
 }
 
 // ---------------------------------------------------------------------------
@@ -379,9 +751,11 @@ pub async fn create_song(
         }
     }
 
-    // Refuse before opening a transaction.
+    // Refuse before opening a transaction. The slug is not this stub's business
+    // — it is minted below, once the row exists — so it passes `None`.
     Song::new(
         String::new(),
+        None,
         title.clone(),
         lyrics.to_owned(),
         1,
@@ -455,6 +829,11 @@ pub async fn create_song(
             .execute(&mut *tx)
             .await?;
     }
+
+    // The song row exists first, because `song_slug.song_id` is a foreign key:
+    // the address is written by the same function the importer and the backfill
+    // use, so a new song cannot be minted an address by a third rule.
+    assign_slug(&mut tx, &song_id, &title).await?;
 
     tx.commit().await?;
 
@@ -589,6 +968,255 @@ mod tests {
         assert!(song(db.pool(), "does-not-exist").await.unwrap().is_none());
     }
 
+    // -- slugs --------------------------------------------------------------
+
+    /// The two spellings of one song URL, and which of them is the address.
+    #[tokio::test]
+    async fn a_song_resolves_by_slug_and_by_id_and_only_the_slug_is_canonical() {
+        let db = seeded().await;
+        let fixture = &fixtures::SONGS[0];
+
+        let by_slug = song_at(db.pool(), fixture.slug).await.unwrap().unwrap();
+        assert!(by_slug.is_canonical());
+        assert_eq!(by_slug.song().get_id(), fixture.id);
+        assert_eq!(
+            by_slug.song().get_path(),
+            format!("/himene/{}", fixture.slug)
+        );
+
+        // The id URL resolves to the same row and says it has to move.
+        let by_id = song_at(db.pool(), fixture.id).await.unwrap().unwrap();
+        assert!(!by_id.is_canonical());
+        assert_eq!(by_id.song().get_id(), fixture.id);
+        assert_eq!(by_id.song().get_path(), format!("/himene/{}", fixture.slug));
+
+        // A segment that names nobody is not an error and not a song.
+        assert!(
+            song_at(db.pool(), "does-not-exist")
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    /// A list of segments resolves the way the single one does — the same order
+    /// out as in, a hole where a segment names nothing, and the canonical flag
+    /// carried per row so the caller can tell an id URL from an address.
+    ///
+    /// This is the read behind `/puta-himene`: the page's own order is the
+    /// reader's reading order, so an implementation that sorted or deduped here
+    /// would be reordering a selection the reader made.
+    #[tokio::test]
+    async fn a_list_of_segments_keeps_its_order_and_its_holes() {
+        let db = seeded().await;
+        let first = &fixtures::SONGS[0];
+        let second = &fixtures::SONGS[1];
+
+        let segments = vec![
+            second.slug.to_owned(),
+            "does-not-exist".to_owned(),
+            first.id.to_owned(),
+            first.slug.to_owned(),
+        ];
+        let found = songs_at(db.pool(), &segments).await.unwrap();
+        assert_eq!(found.len(), segments.len());
+
+        assert_eq!(
+            found[0].as_ref().map(|row| row.song().get_id()),
+            Some(second.id.to_owned())
+        );
+        assert!(found[1].is_none(), "a segment that names nobody is a hole");
+        assert_eq!(
+            found[2].as_ref().map(|row| row.song().get_id()),
+            Some(first.id.to_owned())
+        );
+        assert!(
+            !found[2].as_ref().unwrap().is_canonical(),
+            "an id URL is not the song's address, even in a selection"
+        );
+        assert!(found[3].as_ref().unwrap().is_canonical());
+
+        assert!(songs_at(db.pool(), &[]).await.unwrap().is_empty());
+    }
+
+    /// Seeding leaves the fixtures with the slugs the rule produces for their
+    /// titles, and the history rows that make them resolve.
+    #[tokio::test]
+    async fn the_fixtures_carry_their_slugs_and_their_history() {
+        let db = seeded().await;
+
+        for fixture in fixtures::SONGS {
+            let found = song(db.pool(), fixture.id).await.unwrap().unwrap();
+            assert_eq!(found.get_slug().as_deref(), Some(fixture.slug));
+            assert!(
+                song_at(db.pool(), fixture.slug).await.unwrap().is_some(),
+                "{} is not reachable by its slug",
+                fixture.slug
+            );
+        }
+    }
+
+    /// A rename moves the song and leaves the old slug pointing at it: the
+    /// address that used to work redirects instead of 404ing, and the redirect
+    /// names the *current* slug rather than the retired one — there is nothing
+    /// to chain through.
+    #[tokio::test]
+    async fn a_renamed_song_keeps_its_retired_slug_pointing_at_it() {
+        let db = seeded().await;
+        let fixture = &fixtures::SONGS[2]; // "Te here fenua" → te-here-fenua
+
+        let mut tx = db.pool().begin().await.unwrap();
+        let title = "Te here fenua nei";
+        sqlx::query("UPDATE song SET title = ?1 WHERE id = ?2")
+            .bind(title)
+            .bind(fixture.id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let slug = assign_slug(&mut tx, fixture.id, title).await.unwrap();
+        tx.commit().await.unwrap();
+
+        assert_eq!(slug.as_deref(), Some("te-here-fenua-nei"));
+
+        let retired = song_at(db.pool(), fixture.slug).await.unwrap().unwrap();
+        assert!(!retired.is_canonical(), "a retired slug is not the address");
+        assert_eq!(retired.song().get_id(), fixture.id);
+        assert_eq!(
+            retired.song().get_path(),
+            "/himene/te-here-fenua-nei",
+            "the redirect has to land on the current address in one hop"
+        );
+
+        // ...and the current one is canonical, so it does not redirect to itself.
+        let current = song_at(db.pool(), "te-here-fenua-nei")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(current.is_canonical());
+    }
+
+    /// The rule the whole history table exists for: a slug, once published, is
+    /// spoken for. A new song with the old title gets a numbered address rather
+    /// than stealing the URL — which would silently repoint every link anyone
+    /// ever made to the first song.
+    #[tokio::test]
+    async fn a_retired_slug_is_never_issued_to_another_song() {
+        let db = seeded().await;
+        let first = fixtures::SONGS[2].id; // holds "te-here-fenua"
+        let retired = fixtures::SONGS[2].slug;
+
+        // Move the first song off its slug...
+        let mut tx = db.pool().begin().await.unwrap();
+        sqlx::query("UPDATE song SET title = 'Autre titre' WHERE id = ?1")
+            .bind(first)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        assign_slug(&mut tx, first, "Autre titre").await.unwrap();
+        tx.commit().await.unwrap();
+
+        // ...and give the freed title to a brand-new song.
+        let created = create_song(db.pool(), "Te here fenua", &lyrics_of(120), "")
+            .await
+            .unwrap();
+
+        assert_eq!(created.get_slug().as_deref(), Some("te-here-fenua-2"));
+        // The URL still belongs to the song that published it.
+        let still = song_at(db.pool(), retired).await.unwrap().unwrap();
+        assert_eq!(still.song().get_id(), first);
+        assert_ne!(still.song().get_id(), created.get_id());
+    }
+
+    /// Assigning is idempotent, which is what lets the importer run over the same
+    /// dump again without moving a single URL.
+    #[tokio::test]
+    async fn assigning_the_same_title_twice_keeps_the_same_slug() {
+        let db = seeded().await;
+        let fixture = &fixtures::SONGS[1];
+
+        let mut tx = db.pool().begin().await.unwrap();
+        let again = assign_slug(&mut tx, fixture.id, fixture.title)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        assert_eq!(
+            again.as_deref(),
+            Some(fixture.slug),
+            "the slug moved on a second assignment"
+        );
+    }
+
+    /// A title with no Latin letters earns no slug, and the song keeps the
+    /// address v3 gave it.
+    #[tokio::test]
+    async fn a_song_whose_title_has_no_latin_letters_keeps_its_id() {
+        let db = fresh().await;
+        let created = create_song(db.pool(), "日本語のうた", &lyrics_of(120), "")
+            .await
+            .unwrap();
+
+        assert_eq!(created.get_slug(), None);
+        assert_eq!(created.get_path(), format!("/himene/{}", created.get_id()));
+
+        // ...and it is canonical there: nothing to redirect.
+        let found = song_at(db.pool(), &created.get_id())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(found.is_canonical());
+    }
+
+    /// The backfill is the Rust half of migration `0002_slugs.sql`: a row written
+    /// straight to the table — which is what a v4.0 database holds — gets its
+    /// address when the database is opened, once.
+    #[tokio::test]
+    async fn the_backfill_addresses_rows_that_never_had_a_slug() {
+        let db = fresh().await;
+        sqlx::query(
+            "INSERT INTO song (id, title, lyrics, view_count, published, created_at, updated_at) \
+             VALUES ('old0000000000000000', 'Māmā Tahiti', ?1, 1, 1, ?2, ?2)",
+        )
+        .bind(lyrics_of(120))
+        .bind("2024-01-01T00:00:00.000000000Z")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        assert_eq!(backfill_slugs(db.pool()).await.unwrap(), 1);
+        let addressed = song(db.pool(), "old0000000000000000")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(addressed.get_slug().as_deref(), Some("mama-tahiti"));
+
+        // Nothing left to do the second time, and nothing moved.
+        assert_eq!(backfill_slugs(db.pool()).await.unwrap(), 0);
+    }
+
+    /// A slug can never be an id, or one URL would be two things.
+    #[tokio::test]
+    async fn a_slug_is_never_minted_that_is_a_song_id() {
+        let db = fresh().await;
+        let id = "abcdefghijklmnopqrst";
+        sqlx::query(
+            "INSERT INTO song (id, slug, title, lyrics, view_count, published, created_at, updated_at) \
+             VALUES (?1, '', ?1, ?2, 1, 1, ?3, ?3)",
+        )
+        .bind(id)
+        .bind(lyrics_of(120))
+        .bind("2024-01-01T00:00:00.000000000Z")
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let mut tx = db.pool().begin().await.unwrap();
+        let slug = assign_slug(&mut tx, id, id).await.unwrap();
+        tx.commit().await.unwrap();
+
+        assert_eq!(slug.as_deref(), Some("abcdefghijklmnopqrst-2"));
+    }
+
     #[tokio::test]
     async fn unpublished_songs_are_hidden_from_the_list_but_still_readable() {
         let db = seeded().await;
@@ -653,6 +1281,51 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(all.len(), fixtures::SONGS.len());
+    }
+
+    /// Paging is a partition: pages do not overlap, do not skip a song, and the
+    /// two-credit song still arrives whole.
+    ///
+    /// The offset lives in the ids-only sub-select, so a page is a set of songs
+    /// before the join decorates it — the same bug class as the `LIMIT` one
+    /// above, one level along.
+    #[tokio::test]
+    async fn paging_covers_the_catalogue_once_and_keeps_credits_whole() {
+        let db = seeded().await;
+        let all = songs(db.pool(), SongOrder::Newest, None).await.unwrap();
+        let per_page: i64 = 5;
+
+        let mut seen: Vec<String> = Vec::new();
+        let mut page: i64 = 0;
+        loop {
+            let got = songs_page(db.pool(), SongOrder::Newest, per_page, page * per_page)
+                .await
+                .unwrap();
+            if got.is_empty() {
+                break;
+            }
+            seen.extend(got.iter().map(Song::get_id));
+            page += 1;
+            assert!(page < 20, "paging did not terminate");
+        }
+
+        let expected: Vec<String> = all.iter().map(Song::get_id).collect();
+        assert_eq!(seen, expected, "the pages are not the catalogue, in order");
+
+        // Past the end is empty: not an error, and not a wrap back to the top.
+        assert!(
+            songs_page(db.pool(), SongOrder::Newest, per_page, 1_000)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        // A page of one still carries the busiest song's two credits.
+        let first = songs_page(db.pool(), SongOrder::MostViewed, 1, 0)
+            .await
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].get_artists().len(), 2);
     }
 
     #[tokio::test]

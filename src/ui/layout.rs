@@ -12,10 +12,15 @@
 //!   [`NotFoundError`] renders the site's own 404 instead of Topcoat's bare
 //!   default. That covers *raised* errors only — a URL matching no route never
 //!   reaches the layout at all, which is why `pages::not_found!("/")` also
-//!   exists; see `PLAN.md` §17, and
-//! * the document declares which language it is in, and names the other one,
-//!   because the shell is where the chrome's words live. `crate::i18n` decides
-//!   the language; this file only asks for the strings, and
+//!   exists, and
+//! * the document declares which language it is in, because the shell is where
+//!   the chrome's words live. `crate::i18n` decides the language; this file only
+//!   asks for the strings, and
+//! * the three languages are also a visible switcher — a globe that opens a flag
+//!   per language, in the header of the served HTML of every page. Choosing one
+//!   sets a cookie and comes back to the same page, and the list opens and closes
+//!   on its own: the control is a `<details>`, so the whole switcher is a
+//!   navigation a reader can make with no script at all, and
 //! * the three images the browser fetches are embedded in the binary and served
 //!   from content-hashed URLs, rather than handed out of a static directory the
 //!   way v3's web server did it. v3's own files, under a URL that cannot go
@@ -36,30 +41,54 @@ use topcoat::{
 };
 
 use crate::db;
+use crate::domain::Artist;
 use crate::domain::song::{SITE_URL, Song};
 use crate::i18n::{self, Key, Lang};
-use crate::pages::{home, songs};
+use crate::pages::{
+    artist, book, editor,
+    home::{self, PATH as HOME, ROOT},
+    search, songs, support, terms,
+};
+use crate::routes::{language, negotiation, og};
 use crate::state;
-use crate::ui::{assets, fonts, theme};
+use crate::ui::{assets, flags, fonts, icons, theme};
 
-/// The document title, for every page that is not a song.
+/// The site's name — v3's `<Title text="Chanson du Fenua"/>`.
 ///
-/// v3's `<Title text="Chanson du Fenua"/>`: set once on the app root. The
-/// capital F is v3's, not a typo — the song page writes the lowercase one, and
-/// both are in the wild. It is the site's name, so it is not translated.
+/// The capital F is v3's, not a typo: a song page's title ends with the lowercase
+/// one, and both are in the wild. It is the site's name, so it is not translated.
+/// It is the whole title of the front door and of the pages that name nothing
+/// else; every other page says what it is first — see [`site_head`].
 const TITLE: &str = "Chanson du Fenua";
+
+/// The id of the header search box's own field.
+///
+/// The box is in the header of **every** page, and one of those pages is the
+/// search page, whose own field is `id="q"`. Two elements with one id is a
+/// document whose label points at whichever the browser found first, so the
+/// header's field is named here and the page's keeps its own. The `name` the two
+/// submit is the same — that is the parameter the search reads, and it is
+/// [`search::PARAM`].
+pub const HEADER_SEARCH_ID: &str = "header-search";
 
 /// Everything the layout needs to write `<head>`.
 ///
-/// Built by [`document_head`] from the request path. The three fields are
-/// optional because they are per-route, not per-site: only a song page carries
-/// social cards and structured data, and only the home page and its duplicate
-/// carry a description.
+/// Built by [`document_head`] from the request path. The optional fields are
+/// per-route, not per-site: only the pages that carry prose have a description
+/// and a card, only a song has structured data, and only a page reachable at
+/// more than one URL has somewhere else to point as canonical.
 struct DocumentHead {
     title: String,
     description: Option<String>,
     /// The preferred URL of a page reachable at more than one.
     canonical: Option<String>,
+    /// Whether a crawler may index this page.
+    ///
+    /// False for the create-song form, which is the one page here that is not
+    /// written to be found, and for the 404. The directive and `robots.txt` have
+    /// to agree for it to mean anything: a path that its own `robots.txt`
+    /// disallows is never fetched, so its `<meta name="robots">` is never read.
+    noindex: bool,
     social: Option<SocialCards>,
     /// A schema.org `application/ld+json` payload, rendered verbatim.
     jsonld: Option<String>,
@@ -67,6 +96,9 @@ struct DocumentHead {
 
 /// The Open Graph and Twitter tags, which v3 emitted per song.
 struct SocialCards {
+    /// `og:type`. A song page is `music.song`, which is what the type is for;
+    /// any card a later step gives a non-song page declares its own.
+    og_type: &'static str,
     og_title: String,
     og_description: String,
     og_url: String,
@@ -75,15 +107,18 @@ struct SocialCards {
     twitter_title: String,
     twitter_description: String,
     twitter_image: String,
-    /// `og:locale` and its alternate, for the language the page is served in.
+    /// `og:locale` and its alternates, for the language the page is served in.
     ///
     /// v3 wrote `ty_PF` and `fr_FR` as constants, Tahitian first. Step 8 makes
     /// them follow the resolved language instead: a card for a page served in
     /// French should say so, which is what `og:locale` is for. The default page
     /// therefore carries `fr_FR` where v3 carried `ty_PF`; `?lang=ty` restores
     /// v3's pair exactly.
+    ///
+    /// Three languages make it an array: every language that is not the one
+    /// served gets its own `og:locale:alternate` tag.
     locale: &'static str,
-    locale_alternate: &'static str,
+    locale_alternates: [&'static str; 2],
 }
 
 impl SocialCards {
@@ -95,6 +130,9 @@ impl SocialCards {
     /// against `/drive/genog/`) and the card is a wider crop.
     fn for_song(meta: &crate::domain::song::MetaSongData, lang: Lang) -> Self {
         Self {
+            // `music.song`, not v3's `website`: this is a song, and Open Graph
+            // has a type for one.
+            og_type: "music.song",
             og_title: meta.page_title.clone(),
             og_description: meta.meta_og_description.clone(),
             og_url: meta.meta_og_url.clone(),
@@ -104,10 +142,43 @@ impl SocialCards {
             twitter_description: meta.meta_og_description.clone(),
             twitter_image: meta.meta_img_url_tw.clone(),
             locale: lang.og_locale(),
-            locale_alternate: lang.other().og_locale(),
+            locale_alternates: lang.others().map(Lang::og_locale),
+        }
+    }
+
+    /// Reads the cards off a page that is not a song.
+    ///
+    /// The page's own words, and one card image for the whole site: a page that
+    /// is not a song has no song to draw, and the alternative — a card per page,
+    /// rendered per request — buys nothing a title and a description do not
+    /// already say. The image is absolute because a card is read out of context,
+    /// and it is the same URL for every language, because it says the site's name
+    /// and nothing that is translated.
+    ///
+    /// `og:url` is the canonical URL, not the requested one: the root and
+    /// `/faariiraa` are one page, and a card that named the second address would
+    /// be advertising a duplicate.
+    fn for_page(title: &str, description: &str, url: &str, lang: Lang) -> Self {
+        let image = format!("{SITE_URL}{}", og::SITE_CARD);
+
+        Self {
+            og_type: "website",
+            og_title: title.to_owned(),
+            og_description: description.to_owned(),
+            og_url: url.to_owned(),
+            og_image: image.clone(),
+            og_image_alt: SITE_CARD_ALT.to_owned(),
+            twitter_title: title.to_owned(),
+            twitter_description: description.to_owned(),
+            twitter_image: image,
+            locale: lang.og_locale(),
+            locale_alternates: lang.others().map(Lang::og_locale),
         }
     }
 }
+
+/// The site card's alternative text. What the card spells out is its own name.
+const SITE_CARD_ALT: &str = "Chanson du fenua";
 
 /// Decides the per-route half of `<head>`.
 ///
@@ -130,56 +201,410 @@ impl SocialCards {
 async fn document_head(cx: &Cx, lang: Lang) -> DocumentHead {
     let path = uri(cx).path();
 
-    if let Some(id) = path.strip_prefix("/himene/")
-        && !id.is_empty()
-        && !id.contains('/')
-        && let Ok(Some(song)) = db::song(state::db(cx).pool(), id).await
-        && song.is_published()
-    {
-        return song_head(&song, lang);
+    // What a song URL is is not decided here: the Markdown layer asks the same
+    // question about the same path, and two answers would be one page and its
+    // other form disagreeing about which URLs exist. The segment is a slug or an
+    // id, so the lookup is the resolver's and not `db::song`'s.
+    if let Some(segment) = negotiation::song_segment(path) {
+        if let Ok(Some(found)) = db::song_at(state::db(cx).pool(), segment).await
+            && found.song().is_published()
+        {
+            return song_head(found.song(), lang);
+        }
+
+        // A song URL is also the only path *in the router* that can still fail:
+        // the page reads the same row and raises `NotFoundError`, which the
+        // error boundary below answers with the branded 404. So a row that is
+        // missing or unpublished is not the site's head — it is the 404's.
+        return not_found_head(lang);
+    }
+
+    // A page of the index — `/himene/page/{n}`. It gets a head of its own rather
+    // than the index's, because a series of pages that all answer with one title
+    // and one description is one page in a search engine's eyes — the duplicate
+    // cluster the scope names. The number is read here, and how many pages the
+    // catalogue has with it, so a number it does not have is not a page at all:
+    // it is the branded 404 the page handler raises, and it gets the 404's head.
+    if songs::page_segment(path).is_some() {
+        let pages = match db::counts(state::db(cx).pool()).await {
+            Ok(counts) => songs::page_count(counts.songs),
+            // The page's own read fails the same way, so the response is a 500
+            // with nothing of the catalogue in it: it names the site and claims
+            // nothing more, and the error is the page's to raise.
+            Err(_) => return no_page_head(),
+        };
+
+        return match songs::page_number(path).filter(|number| (2..=pages).contains(number)) {
+            Some(number) => index_head(number, pages, lang),
+            None => not_found_head(lang),
+        };
+    }
+
+    // An artist's page. Read here for the head's sake, exactly as a song's row is
+    // read for its own: the layout cannot see the row the page loaded, and a
+    // `MusicGroup` that named a different artist than the page prints would be a
+    // lie told to a machine. An id that resolves to nothing is the 404 the page
+    // handler raises, so it gets the 404's head.
+    if let Some(id) = artist::segment(path) {
+        return match db::artist(state::db(cx).pool(), id).await {
+            Ok(Some(row)) => artist_head(cx, &row, lang).await,
+            // An id that names no row is the branded 404 the page handler
+            // raises; a read that fails makes the page raise the `500` instead.
+            // Both heads are the same, and both are `noindex`.
+            _ => not_found_head(lang),
+        };
+    }
+
+    // The search page. `noindex` and **no canonical**, the multi-lyric page's
+    // decision made for the same reason (see `pages::search`): the URL space is
+    // every string a person could type, and a canonical URL on a page a crawler is
+    // told not to index names a preferred address for nothing. The bare form gets
+    // the same head as a search, because there is nothing about a form to
+    // describe; the title is chrome and follows the request's language.
+    if path == search::PATH {
+        return DocumentHead {
+            title: format!("{} | {TITLE}", i18n::text(lang, Key::SearchTitle)),
+            description: None,
+            canonical: None,
+            noindex: true,
+            social: None,
+            jsonld: None,
+        };
     }
 
     site_head(path, lang)
 }
 
+/// The `<head>` of an artist's page.
+///
+/// Its own title, its own description, its own canonical URL and its own card,
+/// and — the reason this page exists in the search's eyes — its own structured
+/// data: a `MusicGroup` for the artist and an `ItemList` of their songs, from the
+/// same read the page renders ([`artist::jsonld`]).
+///
+/// The songs are read a second time here, after the page's own read. That is the
+/// trade the song head already makes and documents: the layout cannot see the
+/// row the page loaded, and the alternative is a head written for no artist in
+/// particular.
+async fn artist_head(cx: &Cx, artist: &Artist, lang: Lang) -> DocumentHead {
+    let listed = match db::songs_by_artist(state::db(cx).pool(), &artist.get_id()).await {
+        Ok(listed) => listed,
+        // The page's own read fails the same way, so the response is a 500 with
+        // nothing of the catalogue in it: the head claims nothing the response
+        // does not hold.
+        Err(_) => return no_page_head(),
+    };
+
+    let name = artist.get_fullname();
+    let title = format!("{name} | {TITLE}");
+    let description = artist::description(&name, lang);
+    let canonical = i18n::absolute(&artist::path_of(&artist.get_id()));
+
+    DocumentHead {
+        title: title.clone(),
+        description: Some(description.clone()),
+        canonical: Some(canonical.clone()),
+        noindex: false,
+        social: Some(SocialCards::for_page(
+            &title,
+            &description,
+            &canonical,
+            lang,
+        )),
+        jsonld: Some(artist::jsonld(artist, &canonical, &listed)),
+    }
+}
+
+/// The `<head>` of one page of the index.
+///
+/// Its own title and its own description, and they differ from page 1's by
+/// exactly one thing: the number. There is no new *word* in either — a page
+/// number is a numeral, so the title is the index's own heading with `(2/3)`
+/// after it and the description is the catalogue's own sentence with the same
+/// — which is what keeps this from being a fourth French sentence to translate
+/// for a fact that has no words in it.
+///
+/// The canonical URL is the page's own path, never the index's and never page
+/// 1's: each page of a series consolidates to itself, which is the whole point
+/// of serving the numbers on real paths — see [`songs::page_path`].
+fn index_head(number: u32, pages: u32, lang: Lang) -> DocumentHead {
+    let title = format!(
+        "{} ({number}/{pages}) | {TITLE}",
+        i18n::text(lang, Key::IndexTitle)
+    );
+    let description = format!("{} ({number}/{pages})", songs::description(lang));
+
+    page_head(
+        title,
+        &description,
+        &i18n::absolute(&songs::page_path(number)),
+        lang,
+        None,
+    )
+}
+
 /// The `<head>` of a song page, from the song's own metadata.
+///
+/// The **description** is the one field here that follows the language the page
+/// is served in: the title names the song and the structured data quotes the
+/// lyric, so neither is translated, but the sentence around the title is the
+/// site's own (step 50) — see [`Song::get_meta_data`].
+///
+/// The canonical URL is the one this response is served at: the slug's own
+/// address. A song's page is the same document in every language — the lyric is
+/// never translated, only the chrome around it changes — and since v4.1 it is
+/// also the same *URL* in every language, resolved from a cookie or from
+/// `Accept-Language`. The id and the retired-slug forms are not addresses at all;
+/// `routes::negotiation` has already sent them here.
 fn song_head(song: &Song, lang: Lang) -> DocumentHead {
-    let meta = song.get_meta_data();
+    let canonical = i18n::absolute(&song.get_path());
+    let meta = song.get_meta_data(&canonical, lang);
 
     DocumentHead {
         title: meta.page_title.clone(),
         description: Some(meta.meta_description.clone()),
+        noindex: false,
         // The song's canonical URL and its `og:url` are the same thing, which is
         // what v3 emitted — and what the identity rule in `fixing-metadata`
-        // asks for. It carries no language parameter: the canonical URL is the
-        // page, and the language is a variant of it.
-        canonical: Some(meta.meta_og_url.clone()),
+        // asks for.
+        canonical: Some(canonical),
         jsonld: Some(meta.meta_jsonld.clone()),
         social: Some(SocialCards::for_song(&meta, lang)),
     }
 }
 
-/// The `<head>` of everything that is not a song.
+/// The `<head>` of everything that is not a song, by which route it is.
+///
+/// **One title per URL.** v3 set the site's name once, on the app root, and v4
+/// inherited the consequence: the two front-page URLs and `/himene` answered
+/// with the same `<title>`, which tells a search engine that three addresses are
+/// one page. The front door keeps the name; the others say what they are and
+/// then name the site, in the chrome's own words, so the title follows the
+/// page's language the way the rest of the chrome does.
+///
+/// The same three pages get a description, a canonical URL and a social card
+/// from [`page_head`], because having prose and being shareable are the same
+/// condition. The root is the exception that proves the shape: it is the front
+/// page under a second URL — the address a reader who knows the domain and
+/// nothing else lands on — so it shares the description and the canonical that
+/// points at [`home::PATH`], and differs in the one field where two URLs must
+/// differ. The site's own structured data stays on the canonical address, since
+/// what it describes is the site and two copies on two URLs is one description
+/// competing with itself.
+///
+/// **The canonical URL is the page's own address and nothing else.** A page has
+/// exactly one URL since v4.1 — the language is resolved from a cookie or from
+/// `Accept-Language` and is not part of it — so every page canonicalises to
+/// itself, and there is no cluster of alternates to consolidate. The root is the
+/// one remaining second URL, and it does what it always did: it names the front
+/// page's own address.
 fn site_head(path: &str, lang: Lang) -> DocumentHead {
-    // `/` and `/aepa` are one page under two URLs. v3 declared `/aepa` the
-    // duplicate, and its canonical URL carries no trailing slash — that is the
-    // form the live site emits, so that is the form kept.
-    let home = matches!(path, "/" | "/aepa");
+    // `/faariiraa` and `/` are one page under two URLs. The root is the
+    // duplicate — v4.1 made the Tahitian address canonical — and the canonical
+    // URL carries no trailing slash, the form the live site emits.
+    if matches!(path, HOME | ROOT) {
+        let title = if path == ROOT {
+            format!("{} | {TITLE}", i18n::text(lang, Key::NavHome))
+        } else {
+            TITLE.to_owned()
+        };
 
-    // The create-song page is the one non-song route whose title is not the
-    // site's name. It says what it is for, which is what a `<title>` is for, and
-    // the layout is the only place that can say it: Topcoat has no per-page head
-    // API — see the module docs.
-    let title = if path == crate::pages::editor::PATH {
-        format!("{} | {TITLE}", i18n::text(lang, Key::AddLyrics))
-    } else {
-        TITLE.to_owned()
-    };
+        // The front door describes the site once, and the root — the same page
+        // under a second URL — does not repeat it: what the structured data
+        // describes is the site, and two copies on two URLs is one description
+        // competing with itself.
+        let jsonld = (path == HOME).then(website_jsonld);
 
+        return page_head(
+            title,
+            &home::copy::description(lang),
+            &i18n::absolute(HOME),
+            lang,
+            jsonld,
+        );
+    }
+
+    if path == songs::PATH {
+        return page_head(
+            format!("{} | {TITLE}", i18n::text(lang, Key::IndexTitle)),
+            songs::description(lang),
+            &i18n::absolute(songs::PATH),
+            lang,
+            None,
+        );
+    }
+
+    // The multi-lyric page — a chosen set of songs, or the picker that builds
+    // one. `noindex`, and **no canonical**, decided together and deliberately
+    // (see `pages::book`): the URL space is every ordered subset of the
+    // catalogue, so an index full of selections would be duplicate content built
+    // out of the sheets it quotes, and a canonical URL would name a preferred
+    // address for a page a crawler is being told not to index. What the title
+    // says is what the page is, and the songs inside it are the sheets' own
+    // pages — linked, canonical, and indexable.
+    if path == book::PATH {
+        return DocumentHead {
+            title: format!("{} | {TITLE}", i18n::text(lang, Key::BookTitle)),
+            description: None,
+            canonical: None,
+            noindex: true,
+            social: None,
+            jsonld: None,
+        };
+    }
+
+    // The create-song page is the one page here that is not written to be found:
+    // it holds a form. It says what it is for, which is what a `<title>` is for,
+    // and it is the only page that is kept out of an index.
+    if path == editor::PATH {
+        return DocumentHead {
+            title: format!("{} | {TITLE}", i18n::text(lang, Key::AddLyrics)),
+            description: None,
+            canonical: None,
+            noindex: true,
+            social: None,
+            jsonld: None,
+        };
+    }
+
+    // The support page. A page with prose of its own — what it is for, and the
+    // addresses — so it takes a description, a canonical URL and a card, the
+    // same way the index and an artist's page do. Its title and its description
+    // are the site's words, and both follow the request's language; the
+    // addresses in it never do.
+    if path == support::PATH {
+        return page_head(
+            format!("{} | {TITLE}", i18n::text(lang, Key::SupportTitle)),
+            support::description(lang),
+            &i18n::absolute(support::PATH),
+            lang,
+            None,
+        );
+    }
+
+    // The terms page. `noindex, follow` and **no canonical**, the multi-lyric
+    // page's decision over again and for a different reason (see
+    // `pages::terms`): the page is not written to be found — it is reached from
+    // the footer and from a link in a rights conversation — and a canonical URL
+    // on a page a crawler is told not to index names a preferred address for
+    // nothing. Its own title all the same: a crawler that reads it anyway reads
+    // what it is, and the page's statements are the site's own.
+    if path == terms::PATH {
+        return DocumentHead {
+            title: format!("{} | {TITLE}", terms::title(lang)),
+            description: None,
+            canonical: None,
+            noindex: true,
+            social: None,
+            jsonld: None,
+        };
+    }
+
+    // Everything else is a URL the site does not serve. A path no route claims
+    // *does* reach this layout: `pages::not_found!` registers a catch-all page
+    // that fails with a `NotFoundError`, precisely so the bare router cannot
+    // answer an unregistered path with nine bytes of text and no chrome. The
+    // head it gets is the 404's — its own headline rather than the front door's
+    // title, and `noindex`, so an address a crawler still holds from an old
+    // link is not indexed as a second copy of the front page.
+    not_found_head(lang)
+}
+
+/// The `<head>` of a response that holds no page at all.
+///
+/// Reached when a page's own read fails before the page can be named: the
+/// response is a `500` with nothing of the catalogue in it, so its head names
+/// the site and claims nothing else — no description, no canonical URL, no card.
+/// `noindex`, because a document that is not a page is not one for a crawler
+/// either; it is not [`not_found_head`], because the response is not a 404 and
+/// its title says so.
+fn no_page_head() -> DocumentHead {
     DocumentHead {
+        title: TITLE.to_owned(),
+        description: None,
+        canonical: None,
+        noindex: true,
+        social: None,
+        jsonld: None,
+    }
+}
+
+/// The `<head>` of a page with prose: a title of its own, a description, the
+/// canonical URL, and the site's card.
+///
+/// One function rather than a field per route, because these are the same
+/// decision four times over — a page that is worth reading is worth a snippet
+/// and a card, and the three pages this step fixes were each missing a
+/// different one of the four.
+fn page_head(
+    title: String,
+    description: &str,
+    url: &str,
+    lang: Lang,
+    jsonld: Option<String>,
+) -> DocumentHead {
+    DocumentHead {
+        social: Some(SocialCards::for_page(&title, description, url, lang)),
         title,
-        description: home.then(|| home::copy::DESCRIPTION.to_owned()),
-        canonical: (path == "/aepa").then(|| SITE_URL.to_owned()),
+        description: Some(description.to_owned()),
+        canonical: Some(url.to_owned()),
+        noindex: false,
+        jsonld,
+    }
+}
+
+/// The front door's structured data: the site, and the box that searches it.
+///
+/// A `WebSite` node with a `SearchAction` is what makes a search box appear in a
+/// result for the site's own name, and it is a statement about the site rather
+/// than about a page — so it is written on the front door's own address and not
+/// on the root, which is the same page under a second URL: one description, on
+/// the address the page canonicalises to, rather than two competing with each
+/// other. It is the same statement in every language, because the action it
+/// describes is the same address in all of them.
+///
+/// `url` is that same canonical address, because a `WebSite` node's `url` is the
+/// canonical URL of the site's home page. A node naming the root while the page
+/// carrying it canonicalises to `HOME` would be the duplicate pair this audit
+/// exists to close — declared by the page, contradicted by its own structured
+/// data.
+///
+/// `urlTemplate` names [`search::PATH`] through its own constant, so the
+/// template and the page cannot drift; the placeholder is schema.org's own
+/// required name, not a translatable string.
+fn website_jsonld() -> String {
+    serde_json::json!({
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": TITLE,
+        "url": i18n::absolute(HOME),
+        "inLanguage": Lang::DEFAULT.code(),
+        "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+                "@type": "EntryPoint",
+                "urlTemplate": format!("{}{}?{}={{search_term_string}}", SITE_URL, search::PATH, search::PARAM),
+            },
+            "query-input": "required name=search_term_string",
+        },
+    })
+    .to_string()
+}
+
+/// The `<head>` of a URL that names no page: a song that is not published, or a
+/// page of the index the catalogue does not have.
+///
+/// The page it lands on is the branded 404, so its title is the 404's own
+/// headline rather than the site's: an address a crawler may still hold from an
+/// old link must not answer with the front door's title, which is what made a
+/// missing song a duplicate of `/`. No canonical either — there is nothing here
+/// to consolidate, and the same rule the create-song page follows.
+fn not_found_head(lang: Lang) -> DocumentHead {
+    DocumentHead {
+        title: format!("{} | {TITLE}", i18n::text(lang, Key::NotFoundTitle)),
+        description: None,
+        canonical: None,
+        noindex: true,
         social: None,
         jsonld: None,
     }
@@ -195,7 +620,9 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let head = document_head(cx, lang).await;
     let home_link = href!(home::home);
-    let path = i18n::path(cx);
+    // The 404's way home, resolved here because the closure below cannot borrow
+    // `cx` to build it.
+    let home_href = home_link.resolve(cx);
 
     Ok(view! {
         <!DOCTYPE html>
@@ -210,7 +637,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
         // controls, which reads as a rendering fault.
         //
         // `lang` is the request's language, not a constant: it is what tells a
-        // screen reader and a search engine which of the site's two languages
+        // screen reader and a search engine which of the site's three languages
         // this response is written in. See `crate::i18n`.
         <html lang=(lang.code()) class="dark">
             <head>
@@ -229,34 +656,31 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                     Some(canonical) => <link rel="canonical" href=(canonical)/>,
                     None => "",
                 }
-                // The language alternates. Every URL on this site exists in
-                // both languages, and the parameter is the only difference:
-                // so each page names all of them, itself included, which is
-                // what a `hreflang` cluster is and what tells a search engine
-                // that the two URLs are one page rather than duplicates
-                // competing for the same query.
-                //
-                // The URLs are origin-qualified because a search engine reads
-                // them out of context, and `x-default` points at the page with
-                // no parameter — the form a reader who has expressed no
-                // preference should land on.
-                for alternate in Lang::ALL {
-                    <link
-                        rel="alternate"
-                        hreflang=(alternate.code())
-                        href=(format!("{SITE_URL}{path}?lang={}", alternate.code()))
-                    />
+                // The one page here that is not written to be found. It is a
+                // `<meta>` and not a `Disallow` because a disallowed URL is never
+                // fetched, and a directive no crawler reads is not a directive —
+                // see `crate::routes::robots`, which is where the two agree.
+                match head.noindex {
+                    true => <meta name="robots" content="noindex, follow"/>,
+                    false => "",
                 }
-                <link rel="alternate" hreflang="x-default" href=(format!("{SITE_URL}{path}"))/>
+                // No `hreflang` cluster, and no `x-default`: a page has one URL
+                // since v4.1 — the language is resolved from a cookie or from
+                // `Accept-Language`, not from the address — so there are no
+                // alternates to declare. The switcher below still marks each
+                // link with the language it leads to, which is a different
+                // statement about a different thing.
                 // The social tags, only on a song page. v3 declared them on the
                 // song route, so the home page has never carried them.
                 match head.social {
                     Some(cards) => {
                         <meta property="fb:app_id" content="383599779228826"/>
                         <meta property="fb:pages" content="109134754150923"/>
-                        <meta property="og:type" content="website"/>
+                        <meta property="og:type" content=(cards.og_type)/>
                         <meta property="og:locale" content=(cards.locale)/>
-                        <meta property="og:locale:alternate" content=(cards.locale_alternate)/>
+                        for alternate in cards.locale_alternates {
+                            <meta property="og:locale:alternate" content=(alternate)/>
+                        }
                         <meta property="og:title" content=(cards.og_title)/>
                         <meta property="og:description" content=(cards.og_description)/>
                         <meta property="og:url" content=(cards.og_url)/>
@@ -270,7 +694,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                         <meta name="twitter:description" content=(cards.twitter_description)/>
                         <meta name="twitter:image" content=(cards.twitter_image)/>
                         <meta name="twitter:image:width" content="1200"/>
-                        <meta name="twitter:image:height" content="628"/>
+                        <meta name="twitter:image:height" content="630"/>
                         <meta name="twitter:creator" content="@raonagos"/>
                         <meta name="twitter:site" content="@raonagos"/>
                     },
@@ -329,7 +753,7 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
                                     <p class=(theme::LEAD)>
                                         (i18n::text(lang, Key::NotFoundBody))
                                     </p>
-                                    <a href=(home_link) class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))>
+                                    <a href=(home_href) class=(class!(theme::BUTTON_PRIMARY, theme::FOCUS))>
                                         (i18n::text(lang, Key::NotFoundCta))
                                     </a>
                                 </section>
@@ -353,22 +777,32 @@ pub async fn root_layout(cx: &Cx, slot: Slot<'_>) -> Result<impl View> {
 pub async fn header(cx: &Cx) -> Result<impl View> {
     let lang = i18n::resolve(cx);
     let home_link = href!(home::home);
-    let aepa_link = href!(home::aepa);
+    let root_link = href!(home::root);
     let songs_link = href!(songs::songs);
 
-    let on_aepa = aepa_link.is_current(cx);
+    let on_root = root_link.is_current(cx);
     let on_home = home_link.is_current(cx);
-    let on_songs = songs_link.is_current(cx);
+    let on_songs = songs_link.is_current(cx) || names_the_index(uri(cx).path());
 
-    // v3 linked "Accueil" at `/aepa` and nothing at `/`. Both are the same page,
-    // so both light up for it.
-    let on_accueil = on_aepa || on_home;
+    // The front page is served at two URLs — its own address and the root — and
+    // the nav's "Accueil" lights up on both. Topcoat's `is_current` compares the
+    // handler the router matched, and the two URLs are two handlers, so asking
+    // one of them would leave the highlight dark on the other.
+    let on_accueil = on_root || on_home;
+
+    // Every link the chrome emits is the page's own address, because a page has
+    // one: the language is the response's, not the URL's. `is_current` is asked
+    // of the route, and the resolved href is what the page is published at. The
+    // "Accueil" link names the front page's own address, never the root, so one
+    // page has one address in the chrome.
+    let home_href = home_link.resolve(cx);
+    let songs_href = songs_link.resolve(cx);
 
     Ok(view! {
         <header class=(theme::HEADER)>
             <div class=(theme::HEADER_INNER)>
                 <div>
-                    <a href=(home_link) class=(class!(theme::FOCUS))>
+                    <a href=(home_href.clone()) class=(class!(theme::FOCUS))>
                         <img
                             class=(theme::LOGO)
                             src=(assets::LOGO)
@@ -379,6 +813,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                     </a>
                 </div>
                 <span class="flex-1"></span>
+                language_switcher()
                 // Must stay a *previous sibling* of the nav for `peer-checked`
                 // to reach it.
                 <input id="nav-toggle" type="checkbox" class=(theme::NAV_TOGGLE)/>
@@ -387,10 +822,15 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                     <span class=(theme::HAMBURGER_BAR_ANIMATED)></span>
                     <span class=(theme::HAMBURGER_BAR_ANIMATED)></span>
                 </label>
+                // After the hamburger and before the nav, in that order, so the
+                // phone's header breaks into two rows — the chrome, then this —
+                // and the nav's own row is the disclosure's. See
+                // [`theme::SEARCH_FORM`].
+                search_box()
                 <nav id="navigation" class=(theme::NAV)>
                     <span class=(theme::NAV_SPACER)></span>
                     <a
-                        href=(aepa_link)
+                        href=(home_href)
                         aria-current=(on_accueil.then_some("page"))
                         class=(class!(
                             theme::NAV_LINK,
@@ -401,7 +841,7 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
                         (i18n::text(lang, Key::NavHome))
                     </a>
                     <a
-                        href=(songs_link)
+                        href=(songs_href)
                         aria-current=(on_songs.then_some("page"))
                         class=(class!(
                             theme::NAV_LINK,
@@ -417,13 +857,196 @@ pub async fn header(cx: &Cx) -> Result<impl View> {
     })
 }
 
-/// Site footer. v3's wording, kept, including the link to the maintainer's site.
+/// The header's search box — the way to `/paimi` from every page.
+///
+/// His review's question was *"I know the `/recherche` path exist but how can I
+/// access to this page"*: the search page existed, the catalogue was indexed for
+/// it, and nothing on the site led a reader to it. This is that link, drawn as
+/// the thing a reader is looking for rather than as a word in the nav.
+///
+/// # A form, and nothing else
+///
+/// `<form method="get" action="/paimi">` with one labeled field and one button:
+/// the browser builds the URL and submits it, with JavaScript off, from any
+/// page. The address it makes is `/paimi?q=…` — the same one the search page's
+/// own form makes and the same one the front page's `SearchAction` template
+/// promises a crawler, through the same two constants ([`search::PATH`],
+/// [`search::PARAM`]).
+///
+/// # The field's id is not the search page's
+///
+/// The box is in the header of every page, `/paimi` among them, and that page's
+/// own field is `id="q"`. The header's field therefore carries
+/// [`HEADER_SEARCH_ID`], and the two agree in `name` — which is the parameter
+/// the search reads — and never in `id`, which is only what a label points at.
+///
+/// # The words come from the catalog
+///
+/// The label is [`Key::SearchLabel`] and the button is [`Key::SearchSubmit`],
+/// the two keys the search page's own box already reads, so the chrome of the
+/// site says *what a search is* in one place. The label is
+/// [`theme::VISUALLY_HIDDEN`] — the box is identified by its button and its
+/// placeholder — but it is a real `<label>`, bound to the field: a placeholder
+/// is not a name, and a box named only by one is a box a screen reader
+/// announces as "edit text".
 #[component]
-pub async fn footer() -> Result<impl View> {
+pub async fn search_box(cx: &Cx) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
+    let value = search_value(uri(cx).query().unwrap_or(""));
+
+    Ok(view! {
+        <form method="get" action=(search::PATH) role="search" class=(theme::SEARCH_FORM)>
+            <label class=(theme::VISUALLY_HIDDEN) for=(HEADER_SEARCH_ID)>
+                (i18n::text(lang, Key::SearchLabel))
+            </label>
+            <input
+                id=(HEADER_SEARCH_ID)
+                type="search"
+                name=(search::PARAM)
+                value=(value)
+                placeholder=(i18n::text(lang, Key::SearchLabel))
+                class=(class!(theme::SEARCH_INPUT, theme::FOCUS))
+            />
+            <button type="submit" class=(class!(theme::SEARCH_SUBMIT, theme::FOCUS))>
+                (i18n::text(lang, Key::SearchSubmit))
+            </button>
+        </form>
+    })
+}
+
+/// The needle the header's box shows back.
+///
+/// On the search page it is the search itself — the same words the page's own
+/// field holds, read by [`search::needle`] from the page's own query string — so
+/// a reader who searched from the header can refine the search from the header.
+/// Everywhere else it is empty: the site keeps no session, so a box that
+/// remembered the last search would be remembering something it was never told.
+fn search_value(query: &str) -> String {
+    search::needle(query).unwrap_or_default()
+}
+
+/// The language switcher: this page, in each of the site's three languages — a
+/// globe that opens a flag per language.
+///
+/// Three real links with no script anywhere near them, and since v4.1 they are
+/// not three addresses of the page — a page has one address — but three
+/// *choices*: each link names the language and carries the page the reader is on
+/// (see [`language::switch`]), and the route behind it sets the cookie and sends
+/// the reader back to the same page written in that language. With JavaScript
+/// off the list still opens: the control is a `<details>` and the browser toggles
+/// it, so the whole switcher is a navigation a reader can make with nothing
+/// running.
+///
+/// **A flag per language, and the flags are drawings** ([`flags`]) rather than
+/// the letters that spell a flag on a machine whose fonts have them: the same
+/// page has to look the same on a reader's Chromium and on their phone. The
+/// drawings are `aria-hidden`; the words are still there, [`VISUALLY_HIDDEN`], so
+/// a screen reader reads a language and not a picture.
+///
+/// `hreflang` says which language a link leads to and `lang` says which language
+/// its own name is written in — the pair is what lets a screen reader say *Reo
+/// Tahiti* in Tahitian while reading an English page.
+///
+/// The current language is a link like the others, marked with `aria-current` and
+/// a ring. A switcher that turns it into plain text reads as "you cannot go
+/// here", and following it re-states the language the reader is already reading —
+/// which is what a reader does after a cookie went missing.
+#[component]
+pub async fn language_switcher(cx: &Cx) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
+    // The page the switcher's route will send the reader back to: the one they
+    // are on, with its query string, because a selection and a search are part
+    // of the page.
+    let next = i18n::path_and_query(cx);
+
+    Ok(view! {
+        <nav class=(theme::LANGUAGE_SWITCH) aria-label=(i18n::text(lang, Key::Language))>
+            // The disclosure: the globe is the control, the word beside it names
+            // it for a reader who cannot see the globe, and the list below is
+            // what it opens. No `open` attribute: the list starts closed, which
+            // is the state a reader who does not want it should find it in.
+            <details>
+                <summary class=(theme::LANGUAGE_SUMMARY)>
+                    (Unescaped::new_unchecked(flags::GLOBE))
+                    <span class=(theme::VISUALLY_HIDDEN)>
+                        (i18n::text(lang, Key::Language))
+                    </span>
+                </summary>
+                <div class=(class!(theme::LANGUAGE_MENU, theme::CARD))>
+                    for target in Lang::ALL {
+                        <a
+                            href=(language::switch(target, &next))
+                            hreflang=(target.code())
+                            lang=(target.code())
+                            aria-current=((target == lang).then_some("true"))
+                            class=(class!(
+                                theme::LANGUAGE_FLAG,
+                                theme::FOCUS,
+                                theme::LANGUAGE_FLAG_CURRENT if target == lang,
+                            ))
+                        >
+                            (Unescaped::new_unchecked(flags::svg(target)))
+                            <span class=(theme::VISUALLY_HIDDEN)>(target.name())</span>
+                        </a>
+                    }
+                </div>
+            </details>
+        </nav>
+    })
+}
+
+/// Whether a path is the song index — `/himene`, or one of its later pages.
+///
+/// Topcoat's `is_current` compares the **handler the router matched**, and a page
+/// of the index is a handler of its own, so `href!(songs::songs)` answers `false`
+/// on `/himene/page/2` and the nav would go dark on every page but the first.
+/// This is the widening the scope asks for, and it is asked of the *path* rather
+/// than of the handler because there is no handler for "the index" — there are
+/// two, and the pages they serve are one series.
+///
+/// The path here is the page's own, because a prefixed one never reaches a page
+/// any more: `/ty/himene/page/2` is a `301` to `/himene/page/2`, answered by the
+/// language layer before routing.
+fn names_the_index(path: &str) -> bool {
+    path == songs::PATH || songs::page_segment(path).is_some()
+}
+
+/// The site footer. v3's sentence, split into its two clauses so that each can
+/// be written in the page's own language — and, under it, the way to the page
+/// that asks for support.
+///
+/// The sentence used to be one literal string — French rights, then English words
+/// around a link to the project — and it stayed that way on purpose, because a
+/// single sentence with two links spliced into the middle of it is not four
+/// catalog fragments. It is two *clauses*, though, and each one is a whole phrase
+/// with one link in it: [`Key::FooterRights`] and [`Key::FooterContributing`],
+/// each written once per language, and the markup does no more than put the year
+/// and the two anchors between them.
+///
+/// The support link is the reviewer's "the link to the support page would be add
+/// to the footer section, hiding on an icon and the text `donate` … `don` … or
+/// `tautururaa`": one `<a>` to [`support::PATH`], a drawing beside a word. The
+/// drawing is [`icons::DONATE`] and is `aria-hidden` — decoration has no
+/// accessible name, and the link is named by the word the catalog supplies. It
+/// is a real link to a page of this site, on every page, with no script and
+/// nothing fetched from a third party: a reader with JavaScript off can follow
+/// it as easily as any other link, which is the whole of what it has to do.
+///
+/// Under it, since step 46, the site's one other foot-of-the-page link: the
+/// terms page ([`terms::PATH`]). It carries no drawing — the support link's
+/// heart is the exception, not the shape — and its word is the page's own name,
+/// so the footer, the heading and the `<title>` cannot drift apart. The two are
+/// stacked rather than put on one line, because a way to give and a statement of
+/// rights are not two halves of one control.
+#[component]
+pub async fn footer(cx: &Cx) -> Result<impl View> {
+    let lang = i18n::resolve(cx);
+
     Ok(view! {
         <footer class=(theme::FOOTER)>
             <p>
-                "2024 Chanson du fenua. Tous droits réservés "
+                (i18n::text(lang, Key::FooterRights))
+                " "
                 <a
                     class=(theme::LINK)
                     href="https://www.rao-nagos.pf"
@@ -432,17 +1055,448 @@ pub async fn footer() -> Result<impl View> {
                 >
                     "❤️"
                 </a>
-                ". Contributing to this "
+                ". "
                 <a
                     class=(theme::LINK)
                     href="https://github.com/raonagos/chansondufenua"
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    "project"
+                    (i18n::text(lang, Key::FooterContributing))
                 </a>
                 "."
             </p>
+            <a href=(support::PATH) class=(class!(theme::LINK, theme::SUPPORT_LINK))>
+                (Unescaped::new_unchecked(icons::DONATE))
+                (i18n::text(lang, Key::FooterDonate))
+            </a>
+            // The terms page's link, on every page, one step under the support
+            // one. The word is the page's own name — [`Key::TermsTitle`], the
+            // same string its `<h1>` and its `<title>` carry — because a link
+            // that called the page something else would be a second name for it,
+            // and there is no second name this catalog could keep true.
+            <a href=(terms::PATH) class=(class!(theme::LINK, theme::TERMS_LINK))>
+                (terms::title(lang))
+            </a>
         </footer>
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+    use crate::domain::song::DESCRIPTION_MAX;
+
+    /// Every page whose `<head>` this module decides, in the order it decides
+    /// them. The pages that carry a path of their own — a song, an artist, a page
+    /// of the index — are decided by functions of their own and are not here.
+    const PAGES: [&str; 6] = [
+        HOME,
+        ROOT,
+        songs::PATH,
+        editor::PATH,
+        support::PATH,
+        terms::PATH,
+    ];
+
+    /// `<title>` is the one field a search result leads with, and two URLs
+    /// answering with the same one tells a crawler they are the same page. Three
+    /// of these used to answer with the site's own name.
+    #[test]
+    fn no_two_pages_share_a_title() {
+        let titles: Vec<String> = PAGES
+            .iter()
+            .map(|path| site_head(path, Lang::Fr).title)
+            .collect();
+        let unique: BTreeSet<&String> = titles.iter().collect();
+
+        assert_eq!(unique.len(), titles.len(), "{titles:?}");
+    }
+
+    /// The pages that have prose to offer a search engine carry all four
+    /// fields — a description inside the budget a snippet is read at, the
+    /// canonical URL, and a card whose `og:url` is that same URL. Each of them
+    /// was missing a different one in v4, and the support page (step 30) joined
+    /// them by having all four from its first day.
+    #[test]
+    fn the_prose_pages_have_a_description_a_canonical_and_a_card() {
+        for path in [HOME, ROOT, songs::PATH, support::PATH] {
+            let head = site_head(path, Lang::Fr);
+            let description = head.description.expect("a description");
+            let canonical = head.canonical.expect("a canonical URL");
+            let cards = head.social.expect("social cards");
+
+            assert!(
+                description.chars().count() <= DESCRIPTION_MAX,
+                "{path} describes itself in {} characters",
+                description.chars().count()
+            );
+            assert!(canonical.starts_with(SITE_URL), "{path}: {canonical}");
+            assert_eq!(cards.og_url, canonical, "{path}");
+            assert_eq!(cards.og_type, "website", "{path}");
+            assert_eq!(cards.og_description, description, "{path}");
+            assert_eq!(cards.twitter_description, description, "{path}");
+            assert!(
+                cards.og_image.starts_with(SITE_URL),
+                "{path}: {}",
+                cards.og_image
+            );
+            assert!(!head.noindex, "{path}");
+        }
+    }
+
+    /// The front page under its second address — the root — is the same page, so
+    /// it points at the same canonical URL and offers the same description, and it
+    /// still names itself in its own title.
+    #[test]
+    fn the_two_front_page_urls_point_home() {
+        let home = site_head(HOME, Lang::Fr);
+        let root = site_head(ROOT, Lang::Fr);
+
+        assert_eq!(
+            home.canonical.as_deref(),
+            Some(i18n::absolute(HOME).as_str())
+        );
+        assert_eq!(home.canonical, root.canonical);
+        assert_eq!(home.description, root.description);
+        assert_ne!(home.title, root.title);
+    }
+
+    /// The front door names the site and the box that searches it, and the root
+    /// — the same page under a second URL — does not repeat either.
+    ///
+    /// The node's `url` is the front door's own address: schema.org wants the
+    /// canonical URL of the site's home page there, and anything else would have
+    /// the page's structured data contradict the page's canonical link.
+    ///
+    /// The `SearchAction`'s template is the search page's own path and parameter,
+    /// through their constants: a template and a form that disagree would send a
+    /// client to a URL this site does not answer.
+    #[test]
+    fn the_front_door_describes_the_site_and_its_search() {
+        let home = site_head(HOME, Lang::Fr);
+        let jsonld = home.jsonld.expect("the front door carries structured data");
+        let document: serde_json::Value = serde_json::from_str(&jsonld).expect("valid JSON");
+
+        assert_eq!(document["@type"], "WebSite");
+        assert_eq!(document["url"], i18n::absolute(HOME));
+        assert_eq!(
+            document["url"],
+            home.canonical.clone().expect("a canonical URL")
+        );
+        assert_eq!(document["name"], TITLE);
+        assert_eq!(
+            document["potentialAction"]["@type"], "SearchAction",
+            "the search box is missing"
+        );
+        let template = format!(
+            "{}{}?{}={{search_term_string}}",
+            SITE_URL,
+            search::PATH,
+            search::PARAM
+        );
+        assert_eq!(
+            document["potentialAction"]["target"]["urlTemplate"], template,
+            "the template does not name the search page"
+        );
+        assert_eq!(
+            document["potentialAction"]["query-input"],
+            "required name=search_term_string"
+        );
+
+        assert!(
+            site_head(ROOT, Lang::Fr).jsonld.is_none(),
+            "the root repeats the site description"
+        );
+        assert!(site_head(songs::PATH, Lang::Fr).jsonld.is_none());
+    }
+
+    /// The index is the one page that is not the front door and has an address of
+    /// its own to canonicalise to — its own, and not the root's.
+    #[test]
+    fn the_index_canonicalises_to_its_own_path() {
+        let head = site_head(songs::PATH, Lang::Fr);
+
+        assert_eq!(head.canonical, Some(i18n::absolute(songs::PATH).to_owned()));
+        assert_ne!(head.canonical, Some(SITE_URL.to_owned()));
+    }
+
+    /// A page of the index is its own page: its own number in the title and the
+    /// description, and its own URL as the canonical — never the index's, which
+    /// would make page 2 a duplicate of page 1 and the series a cluster
+    /// competing with itself.
+    #[test]
+    fn a_page_of_the_index_names_its_own_number_and_its_own_url() {
+        let second = index_head(2, 3, Lang::Fr);
+
+        assert_eq!(second.title, format!("Toutes les chansons (2/3) | {TITLE}"));
+        assert!(
+            second
+                .description
+                .as_deref()
+                .expect("a description")
+                .ends_with("(2/3)")
+        );
+        assert_eq!(second.canonical, Some(i18n::absolute("/himene/page/2")));
+        assert_eq!(
+            second.social.as_ref().expect("cards").og_url,
+            second.canonical.clone().expect("a canonical URL")
+        );
+        assert!(!second.noindex);
+
+        // Two pages of one series share no field a search engine leads with.
+        let third = index_head(3, 3, Lang::Fr);
+        assert_ne!(second.title, third.title);
+        assert_ne!(second.description, third.description);
+        assert_ne!(second.canonical, third.canonical);
+
+        // And page 1 is not one of these: its address is `/himene`, and it keeps
+        // the head it has always had — the index's title, with no number in it.
+        assert_eq!(songs::page_path(1), songs::PATH);
+        assert_eq!(
+            site_head(songs::PATH, Lang::Fr).title,
+            format!("Toutes les chansons | {TITLE}")
+        );
+    }
+
+    /// The nav's "Chanson" link is current on the index **and on its later
+    /// pages**. Topcoat compares the handler it matched, and a page of the index
+    /// is a handler of its own, so without this widening the nav would go dark
+    /// from page 2 on — the defect the scope names.
+    #[test]
+    fn the_header_stays_current_on_every_page_of_the_index() {
+        for path in [songs::PATH, "/himene/page/2", "/himene/page/43"] {
+            assert!(names_the_index(path), "{path}");
+        }
+
+        // A song under the same prefix is not the index, and neither is the
+        // book: the nav would be lying about which page the reader is on.
+        for path in [
+            HOME,
+            ROOT,
+            "/himene/ahani-e",
+            "/puta-himene",
+            "/himene/sitemap.xml",
+            editor::PATH,
+        ] {
+            assert!(!names_the_index(path), "{path}");
+        }
+    }
+
+    /// **One canonical per page, and it is the page's own address.** The language
+    /// is not part of a URL any more, so a page canonicalises to itself in every
+    /// language its response can be written in — and the root, the one remaining
+    /// second URL, still points at the front page.
+    #[test]
+    fn every_page_canonicalises_to_its_own_address() {
+        for lang in Lang::ALL {
+            for path in [HOME, ROOT, songs::PATH, support::PATH] {
+                let head = site_head(path, lang);
+                let canonical = head.canonical.expect("a canonical URL");
+
+                // The root is the front page under a second URL: it canonicalises
+                // to the front page.
+                let canonical_path = if path == ROOT { HOME } else { path };
+                assert_eq!(
+                    canonical,
+                    i18n::absolute(canonical_path),
+                    "{path} in {}",
+                    lang.code()
+                );
+                assert_eq!(head.social.expect("cards").og_url, canonical);
+            }
+        }
+    }
+
+    /// **The switcher names the language and the page, not a second URL.** Each
+    /// of its three links is the language route carrying this page back to
+    /// itself — a page has one address since v4.1, and the switcher must not
+    /// invent three.
+    ///
+    /// It also pins the two properties a switcher is easy to get wrong: it names
+    /// *this* page (not the front door, and not another language's index), and
+    /// its own language is among its links rather than left out.
+    #[test]
+    fn the_switcher_links_to_this_page_in_each_language() {
+        // The wire format from the layout's own side: the route, the language,
+        // and the page percent-encoded into `next`.
+        assert_eq!(
+            language::switch(Lang::Ty, songs::PATH),
+            "/reo/ty?next=%2Fhimene"
+        );
+
+        for path in [
+            HOME,
+            songs::PATH,
+            editor::PATH,
+            support::PATH,
+            terms::PATH,
+            "/himene/ahani-e",
+        ] {
+            let links: Vec<(Lang, String)> = Lang::ALL
+                .iter()
+                .map(|lang| (*lang, language::switch(*lang, path)))
+                .collect();
+
+            assert_eq!(links.len(), Lang::ALL.len());
+            for (index, (_, left)) in links.iter().enumerate() {
+                for (_, right) in &links[index + 1..] {
+                    assert_ne!(left, right, "two languages share a link: {links:?}");
+                }
+            }
+
+            for (lang, href) in &links {
+                assert!(
+                    href.starts_with(&format!(
+                        "{}/{}?{}=",
+                        language::PATH,
+                        lang.code(),
+                        language::PARAM
+                    )),
+                    "{path} in {}: {href}",
+                    lang.code()
+                );
+            }
+
+            // The current language is one of the links, not a hole in the row.
+            assert!(links.iter().any(|(lang, _)| *lang == Lang::DEFAULT));
+        }
+    }
+
+    /// A language's own name is what the link says: the switcher is the one
+    /// place the chrome does not translate, and that is deliberate.
+    #[test]
+    fn the_switcher_labels_each_language_in_its_own_words() {
+        for lang in Lang::ALL {
+            assert!(!lang.name().trim().is_empty());
+            assert_ne!(lang.name(), i18n::text(lang, Key::Language));
+        }
+    }
+
+    /// The header's search box reaches the search page, is named by the search
+    /// page's own parameter, and keeps an id of its own.
+    ///
+    /// The last one is the trap: the box is in the header of *every* page, and
+    /// the search page's own field is `id="q"`. Two fields with one id would be
+    /// a document whose `<label for="q">` points at whichever the browser
+    /// happened to find first — which is the header's, not the page's.
+    #[test]
+    fn the_header_search_box_submits_to_the_search_page_under_its_own_id() {
+        assert_eq!(search::PATH, "/paimi");
+        assert_eq!(search::PARAM, "q");
+        assert_ne!(HEADER_SEARCH_ID, search::PARAM);
+        assert!(!HEADER_SEARCH_ID.is_empty());
+    }
+
+    /// The box shows the reader's own search back, and never anyone else's.
+    ///
+    /// The site keeps no session, so the only search a page can know about is
+    /// the one in its own URL — read here through the same
+    /// [`search::needle`] the search page reads its own query with, so the two
+    /// boxes cannot disagree about what the page is about.
+    #[test]
+    fn the_header_box_shows_the_needle_the_page_is_about() {
+        assert_eq!(search_value("q=ahani"), "ahani");
+        assert_eq!(search_value("q=M%C4%81m%C4%81+Tahiti"), "Māmā Tahiti");
+        assert_eq!(search_value("q=ahani&ref=nav"), "ahani");
+
+        // A page that names no search, and a query that names one under another
+        // form's parameter, leave the box empty rather than showing a needle
+        // this page is not about.
+        for query in ["", "q=", "q=%20", "page=2", "song=ahani", "=ahani"] {
+            assert_eq!(search_value(query), "", "{query}");
+        }
+    }
+
+    /// Two pages are written not to be found, and both say so the same way: the
+    /// create-song form (step 12), and the terms page (step 46), which a reader
+    /// reaches from the footer.
+    ///
+    /// All three halves are asserted together because they are one decision —
+    /// `noindex`, and no canonical, and nothing for a snippet to quote. A
+    /// canonical URL on a page a crawler is told not to index names a preferred
+    /// address for nothing, and a card whose `og:url` is that address is the same
+    /// promise made to a different machine. Every other page may be indexed, and
+    /// a 404 never is.
+    #[test]
+    fn only_the_pages_written_not_to_be_found_are_kept_out_of_an_index() {
+        const KEPT_OUT: [&str; 2] = [editor::PATH, terms::PATH];
+
+        for path in PAGES {
+            assert_eq!(
+                site_head(path, Lang::Fr).noindex,
+                KEPT_OUT.contains(&path),
+                "{path}"
+            );
+        }
+
+        for path in KEPT_OUT {
+            let head = site_head(path, Lang::Fr);
+
+            assert!(head.noindex, "{path}");
+            assert!(head.canonical.is_none(), "{path} names a canonical URL");
+            assert!(head.description.is_none(), "{path} offers a snippet");
+            assert!(head.social.is_none(), "{path} carries social cards");
+        }
+
+        assert!(not_found_head(Lang::Fr).noindex);
+    }
+
+    /// A song URL that names no published song is answered by the branded 404, so
+    /// its head is the 404's: its own headline, and not the front door's title.
+    #[test]
+    fn a_missing_song_gets_the_not_found_head() {
+        let head = not_found_head(Lang::Fr);
+
+        assert!(
+            head.title
+                .contains(i18n::text(Lang::Fr, Key::NotFoundTitle))
+        );
+        assert!(head.title.contains(TITLE));
+        assert!(head.description.is_none());
+        assert!(head.canonical.is_none());
+        assert!(head.social.is_none());
+    }
+
+    /// A URL no page claims gets the 404's head too, and never the site's.
+    ///
+    /// The catch-all (`pages::not_found!`) means such a request reaches the
+    /// layout rather than the bare router, so this is the head the branded 404
+    /// is rendered with: `noindex`, and the 404's own headline. The front door's
+    /// title here would be the site claiming a page it does not serve — and,
+    /// because `/` is the front page's second address, another copy of the front
+    /// page's head on an address that is not the front page.
+    #[test]
+    fn a_url_no_page_claims_gets_the_not_found_head() {
+        for path in ["/no-such-page", "/himene/ahani-e/extra", "/reo", "/xx"] {
+            let head = site_head(path, Lang::Fr);
+
+            assert!(head.noindex, "{path} may be indexed");
+            assert!(head.canonical.is_none(), "{path} names a canonical URL");
+            assert!(head.social.is_none(), "{path} carries social cards");
+            assert!(
+                head.title
+                    .contains(i18n::text(Lang::Fr, Key::NotFoundTitle)),
+                "{path}: {}",
+                head.title
+            );
+        }
+    }
+
+    /// A response that holds no page — the `500` a failed read makes — names the
+    /// site and claims nothing else, and is kept out of an index like every other
+    /// document that is not a page.
+    #[test]
+    fn a_response_that_holds_no_page_claims_nothing() {
+        let head = no_page_head();
+
+        assert_eq!(head.title, TITLE);
+        assert!(head.description.is_none());
+        assert!(head.canonical.is_none());
+        assert!(head.social.is_none());
+        assert!(head.jsonld.is_none());
+        assert!(head.noindex);
+    }
 }
