@@ -55,6 +55,14 @@ const SPEED_ID: &str = "autoscroll-speed";
 /// The start/stop button's id.
 const TOGGLE_ID: &str = "autoscroll-toggle";
 
+/// The slowest and the fastest step the reader can pick.
+///
+/// The range's bounds are also the scale [`SCRIPT`]'s pace is written against —
+/// a step is a multiple of it — so the two live together here and the pace test
+/// reads these rather than its own copy of `1` and `5`.
+const SPEED_MIN: u8 = 1;
+const SPEED_MAX: u8 = 5;
+
 /// The speed bar: a labelled range and one button, both unusable until a script
 /// un-hides them.
 ///
@@ -82,8 +90,8 @@ pub async fn speed_bar(cx: &Cx) -> Result<impl View> {
             <input
                 id=(SPEED_ID)
                 type="range"
-                min="1"
-                max="5"
+                min=(SPEED_MIN.to_string())
+                max=(SPEED_MAX.to_string())
                 step="1"
                 value="3"
                 class=(class!(theme::AUTOSCROLL_RANGE, theme::FOCUS))
@@ -113,7 +121,7 @@ pub async fn speed_bar(cx: &Cx) -> Result<impl View> {
 /// showing the code rather than running it. Nothing here comes from a request,
 /// so there is nothing in it to escape.
 ///
-/// Three rules it keeps, each of them a thing this codebase has already paid
+/// Four rules it keeps, each of them a thing this codebase has already paid
 /// for once:
 ///
 /// * **No scroll listener.** The page is moved by `requestAnimationFrame`, which
@@ -128,6 +136,11 @@ pub async fn speed_bar(cx: &Cx) -> Result<impl View> {
 ///   once, when the reader asks to move, because a lyric does not change height
 ///   while it is being read; the loop ends on the frame that finds nothing left
 ///   below the fold, and the button goes back to its start word.
+/// * **A reading pace.** The five steps move the page 8 to 40 pixels a second:
+///   the middle step takes about 1.8 seconds over a lyric line, which is a
+///   pace a singer can read at, and the fastest is a skim. It was 40 px/s a
+///   step — 200 at the top, and better than two lines a second at the middle —
+///   until the owner's report of 2026-10-13 that auto-scroll "is too fast".
 ///
 /// It moves the whole **document**, which is what makes it one script for both
 /// pages: a sheet's article and the book's whole selection are the same measure
@@ -152,6 +165,15 @@ pub const SCRIPT: &str = r##"
   var edge = 0;
   var running = false;
 
+  // Pixels a second at the range's *slowest* step; the value the reader picked
+  // multiplies it, so the bar covers 8 to 40 px/s. A lyric line is 44 pixels
+  // tall (`theme::LYRIC_LINE`'s margin under `theme::LYRICS`' doubled leading),
+  // which puts the middle step at about 1.8 seconds a line. It was 40 a step
+  // until 2026-10-13 — 120 at the middle, better than two lines a second — and
+  // that is the owner's "too fast". `the_pace_is_a_reading_pace` is the
+  // arithmetic that keeps it there.
+  var PACE = 8;
+
   var draw = function () {
     toggle.textContent = toggle.getAttribute(running ? "data-stop" : "data-start");
     toggle.setAttribute("aria-pressed", running ? "true" : "false");
@@ -175,7 +197,7 @@ pub const SCRIPT: &str = r##"
       stop();
       return;
     }
-    var distance = (Number(bar.value) * 40 * elapsed) / 1000;
+    var distance = (Number(bar.value) * PACE * elapsed) / 1000;
     window.scrollBy(0, Math.min(distance, left));
     frame = window.requestAnimationFrame(step);
   };
@@ -266,5 +288,60 @@ mod tests {
         // One panel per page: `getElementById` would answer the first of two, so
         // the script asks for exactly the three it needs and no more.
         assert_eq!(SCRIPT.matches("document.getElementById").count(), 3);
+    }
+
+    /// Auto-scroll has to stay a pace a reader can *read* at.
+    ///
+    /// The owner's report (2026-10-13) was that it "is too fast", and it was:
+    /// the distance was computed as `value * 40` pixels a second, so the
+    /// slowest step moved 40 px/s and the middle step — the one the bar starts
+    /// on — 120. A lyric line is [`LINE_PX`] tall, so even step 1 read about a
+    /// line a second and the default read better than two.
+    ///
+    /// The pace is now one named number in the script and this is the
+    /// arithmetic that keeps it from drifting back up: the slowest step has to
+    /// be slow enough to sing along with, the fastest still a skim rather than a
+    /// scramble, and the multiplication has to stay *per step* — the pace is
+    /// meaningless if the script stops scaling it by the range's value.
+    #[test]
+    fn the_pace_is_a_reading_pace() {
+        // One lyric line as the sheet lays it out: `text-lg` (18px) at
+        // `theme::LYRICS`' doubled leading, plus `theme::LYRIC_LINE`'s bottom
+        // margin, which is what separates one line's top from the next.
+        const LINE_PX: f64 = 36.0 + 8.0;
+
+        assert!(
+            SCRIPT.contains("Number(bar.value) * PACE"),
+            "the pace is no longer scaled by the step the reader picked"
+        );
+
+        let pace: f64 = SCRIPT
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("var PACE = "))
+            .and_then(|value| value.trim_end_matches(';').trim().parse().ok())
+            .expect("the script names its pace in one `var PACE = <number>;` line");
+
+        let slowest = pace * f64::from(SPEED_MIN);
+        let fastest = pace * f64::from(SPEED_MAX);
+
+        assert!(
+            (5.0..=12.0).contains(&slowest),
+            "the slowest step is not a reading pace: {slowest} px/s, {:.1} s a line",
+            LINE_PX / slowest
+        );
+        assert!(
+            (24.0..=48.0).contains(&fastest),
+            "the fastest step is off its band: {fastest} px/s, {:.1} s a line",
+            LINE_PX / fastest
+        );
+
+        // The middle step is where the bar starts, so it is the pace most
+        // readers will meet first: it has to be the calm one, not the skim.
+        let middle = pace * 3.0;
+        assert!(
+            LINE_PX / middle >= 1.4,
+            "the bar's default step reads faster than a line every 1.4 s: {:.1} s a line",
+            LINE_PX / middle
+        );
     }
 }
