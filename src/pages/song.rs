@@ -192,7 +192,7 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                 }
             </div>
 
-            <script type="text/javascript">(Unescaped::new_unchecked(autoscroll::SCRIPT))</script>
+            <script type="text/javascript">(Unescaped::new_unchecked(autoscroll::SERVED.as_str()))</script>
         </article>
     })
 }

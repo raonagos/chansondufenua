@@ -252,7 +252,7 @@ pub async fn book(cx: &Cx) -> Result<impl View> {
                     for sheet in sheets {
                         chosen_sheet(sheet: sheet)
                     }
-                    <script type="text/javascript">(Unescaped::new_unchecked(autoscroll::SCRIPT))</script>
+                    <script type="text/javascript">(Unescaped::new_unchecked(autoscroll::SERVED.as_str()))</script>
                 },
                 None => {
                     <p class=(theme::LEAD)>(i18n::text(lang, Key::BookHint))</p>

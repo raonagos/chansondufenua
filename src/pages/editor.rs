@@ -60,6 +60,7 @@ use topcoat::{
 };
 
 use serde::Deserialize;
+use std::sync::LazyLock;
 
 use crate::db::{self, DbError};
 use crate::domain::{AppError, Artist, sanitise_lyrics};
@@ -67,7 +68,7 @@ use crate::i18n::{self, Key};
 use crate::log;
 use crate::pages::song as sheet;
 use crate::state;
-use crate::ui::theme;
+use crate::ui::{script, theme};
 
 /// The route, in one place.
 ///
@@ -370,7 +371,7 @@ pub async fn form_body(
                 </div>
             </form>
 
-            <script type="text/javascript">(Unescaped::new_unchecked(EDITOR_JS))</script>
+            <script type="text/javascript">(Unescaped::new_unchecked(EDITOR_JS_SERVED.as_str()))</script>
         </div>
     })
 }
@@ -387,7 +388,7 @@ pub async fn form_body(
 /// the credit field. Every lookup is guarded — the script is also served on a
 /// page whose editor was rejected, and a script that throws on a missing node
 /// would take the rest of the page with it.
-const EDITOR_JS: &str = r##"
+pub(crate) const EDITOR_JS: &str = r##"
 (function () {
   var area = document.getElementById("lyrics-value");
   var box = document.getElementById("lyrics-editor");
@@ -496,6 +497,10 @@ const EDITOR_JS: &str = r##"
   draw();
 })();
 "##;
+
+/// [`EDITOR_JS`] as the form serves it: the same script without its indentation
+/// and its comments. See `crate::ui::script`.
+pub(crate) static EDITOR_JS_SERVED: LazyLock<String> = LazyLock::new(|| script::compact(EDITOR_JS));
 
 #[cfg(test)]
 mod tests {
