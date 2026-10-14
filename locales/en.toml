@@ -27,6 +27,18 @@ scroll = "Auto-scroll"
 scroll_speed = "Speed"
 scroll_start = "Start"
 scroll_stop = "Stop"
+# The play-along panel: a silent tempo clock, and the words it reads back. The
+# three `player_*` templates carry the counter's numbers as `{placeholders}`;
+# the panel's script substitutes them.
+player = "Play-along"
+player_play = "Play"
+player_pause = "Pause"
+player_tempo = "Tempo"
+player_beats = "Beats a line"
+player_tap = "Tap"
+player_line = "line {line} / {total}"
+player_beats_line = "{beats} beats a line"
+player_seconds = "{seconds} s a line"
 book_title = "Several songs"
 book_hint = "Pick songs to read their lyrics one after another."
 book_read = "Read the selection"
