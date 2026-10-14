@@ -372,6 +372,34 @@ pub enum Key {
     /// where the reader is, which is what a pause does, and "stop" is the word
     /// the two other catalogs already have for a control that is not moving.
     ScrollStop,
+    /// The play-along panel's own name: what the group of controls is, read
+    /// aloud, and the one word on the page that says a sheet can be sung along
+    /// to rather than only read.
+    Player,
+    /// The panel's button while the clock is stopped. "Play" and not "Start",
+    /// which is the speed bar's word: what this control starts is a tempo, and
+    /// the reader hears the count-in before the sheet moves.
+    PlayerPlay,
+    /// The panel's button while the clock is running.
+    PlayerPause,
+    /// The word beside the tempo slider: what the range sets.
+    PlayerTempo,
+    /// The group of beats-a-line choices, read aloud.
+    PlayerBeats,
+    /// The tap button: one press moves the sheet on a line, and three presses
+    /// in time are the tempo the reader is keeping.
+    PlayerTap,
+    /// The counter's line number, with `{line}` and `{total}` filled in by the
+    /// panel's script.
+    PlayerLine,
+    /// The counter's second fact, with `{beats}` filled in.
+    PlayerBeatsLine,
+    /// The counter's third fact, with `{seconds}` filled in.
+    ///
+    /// Three lines rather than one sentence, because the script joins them in
+    /// one order and a translator may want another: what a page says is each
+    /// line's own words.
+    PlayerSeconds,
     /// The heading of `/puta-himene` — the page that reads several songs one
     /// after another, and the picker that builds the selection.
     BookTitle,
@@ -503,7 +531,7 @@ pub enum Key {
 
 impl Key {
     /// Every key, for exhaustiveness checks in tests.
-    pub const ALL: [Key; 70] = [
+    pub const ALL: [Key; 79] = [
         Key::NavHome,
         Key::NavSongs,
         Key::Language,
@@ -529,6 +557,15 @@ impl Key {
         Key::ScrollSpeed,
         Key::ScrollStart,
         Key::ScrollStop,
+        Key::Player,
+        Key::PlayerPlay,
+        Key::PlayerPause,
+        Key::PlayerTempo,
+        Key::PlayerBeats,
+        Key::PlayerTap,
+        Key::PlayerLine,
+        Key::PlayerBeatsLine,
+        Key::PlayerSeconds,
         Key::BookTitle,
         Key::BookHint,
         Key::BookRead,
@@ -672,6 +709,15 @@ impl Key {
             Key::ScrollSpeed => "scroll_speed",
             Key::ScrollStart => "scroll_start",
             Key::ScrollStop => "scroll_stop",
+            Key::Player => "player",
+            Key::PlayerPlay => "player_play",
+            Key::PlayerPause => "player_pause",
+            Key::PlayerTempo => "player_tempo",
+            Key::PlayerBeats => "player_beats",
+            Key::PlayerTap => "player_tap",
+            Key::PlayerLine => "player_line",
+            Key::PlayerBeatsLine => "player_beats_line",
+            Key::PlayerSeconds => "player_seconds",
             Key::BookTitle => "book_title",
             Key::BookHint => "book_hint",
             Key::BookRead => "book_read",
@@ -948,6 +994,23 @@ mod tests {
         // `ty.toml` (the other link's word is a brand, and is a constant).
         const ADDED_AT_STEP_42: [Key; 1] = [Key::Share];
 
+        // Step 52's nine: the play-along panel — its own name, the two words on
+        // its button, the tempo's label, the beats-a-line group's name, the tap
+        // button, and the three lines its counter is written from. Chrome: the
+        // panel draws every one of them and its script reads them back, so the
+        // script carries no language (see `ui::player`).
+        const ADDED_AT_STEP_52: [Key; 9] = [
+            Key::Player,
+            Key::PlayerPlay,
+            Key::PlayerPause,
+            Key::PlayerTempo,
+            Key::PlayerBeats,
+            Key::PlayerTap,
+            Key::PlayerLine,
+            Key::PlayerBeatsLine,
+            Key::PlayerSeconds,
+        ];
+
         // Step 36's eighteen: the same move, for the maintainer's own prose —
         // the front page's sentences, the footer's two clauses, and the
         // descriptions a search engine reads. Not chrome, and pinned separately
@@ -1053,6 +1116,7 @@ mod tests {
                 + ADDED_SINCE.len()
                 + ADDED_AT_STEP_38.len()
                 + ADDED_AT_STEP_42.len()
+                + ADDED_AT_STEP_52.len()
                 + 1
                 + PROSE_AT_STEP_36.len()
                 + PROSE_AT_STEP_46.len()
@@ -1062,6 +1126,7 @@ mod tests {
             .into_iter()
             .chain(ADDED_AT_STEP_38)
             .chain(ADDED_AT_STEP_42)
+            .chain(ADDED_AT_STEP_52)
             .chain(PROSE_AT_STEP_46)
             .chain(PROSE_AT_STEP_50)
         {

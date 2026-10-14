@@ -54,8 +54,10 @@ use topcoat::{
     view::{Unescaped, View, class, view},
 };
 
+use std::sync::LazyLock;
+
 use crate::i18n::{self, Key, Lang};
-use crate::ui::{icons, theme};
+use crate::ui::{icons, script, theme};
 
 /// `/tauturu` — the address, in one place.
 ///
@@ -217,7 +219,7 @@ pub async fn soutenir(cx: &Cx) -> Result<impl View> {
         // It returns before un-hiding anything unless the clipboard API is
         // actually there — an insecure origin, or a reader whose browser has
         // none, gets the page it had before this step: the addresses, selectable.
-        <script type="text/javascript">(Unescaped::new_unchecked(COPY_JS))</script>
+        <script type="text/javascript">(Unescaped::new_unchecked(COPY_JS_SERVED.as_str()))</script>
     })
 }
 
@@ -238,7 +240,7 @@ pub async fn soutenir(cx: &Cx) -> Result<impl View> {
 ///   reader says no) leaves the button as it was.
 /// * **The words are rendered into the markup**, both of them, and read back —
 ///   so this script carries no language and a translator never opens it.
-const COPY_JS: &str = r##"
+pub(crate) const COPY_JS: &str = r##"
 (function () {
   var buttons = document.querySelectorAll("[data-copy]");
   if (!buttons.length || !navigator.clipboard || !navigator.clipboard.writeText) return;
@@ -255,6 +257,10 @@ const COPY_JS: &str = r##"
   }
 })();
 "##;
+
+/// [`COPY_JS`] as the page serves it: the same script without its indentation
+/// and its comments. See `crate::ui::script`.
+pub(crate) static COPY_JS_SERVED: LazyLock<String> = LazyLock::new(|| script::compact(COPY_JS));
 
 #[cfg(test)]
 mod tests {

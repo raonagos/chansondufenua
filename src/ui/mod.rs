@@ -13,6 +13,8 @@ pub mod fonts;
 pub mod icons;
 pub mod layout;
 pub mod palette;
+pub mod player;
+pub mod script;
 pub mod share;
 pub mod theme;
 

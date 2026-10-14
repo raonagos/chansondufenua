@@ -43,8 +43,10 @@ use topcoat::{
     view::{View, class, component, view},
 };
 
+use std::sync::LazyLock;
+
 use crate::i18n::{self, Key};
-use crate::ui::theme;
+use crate::ui::{script, theme};
 
 /// The panel's id — also the name the script asks the document for.
 const PANEL_ID: &str = "autoscroll";
@@ -217,6 +219,15 @@ pub const SCRIPT: &str = r##"
 })();
 "##;
 
+/// [`SCRIPT`] as the two pages serve it: the same script without its
+/// indentation and its comments.
+///
+/// Both pages render this and not the const above, so the sheet and the book
+/// cannot ship two spellings of one script. Compacting is done once, on the
+/// first page that carries it: a page renders per request and the script does
+/// not change between them. See `crate::ui::script`.
+pub static SERVED: LazyLock<String> = LazyLock::new(|| script::compact(SCRIPT));
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +354,38 @@ mod tests {
             "the bar's default step reads faster than a line every 1.4 s: {:.1} s a line",
             LINE_PX / middle
         );
+    }
+
+    /// What ships is what was audited.
+    ///
+    /// Both pages render [`SERVED`], not [`SCRIPT`], so a compacted script that
+    /// lost a rule would be a control that reads correctly in the source and
+    /// misbehaves in the browser — the one failure this pair of forms could
+    /// introduce. The properties the tests above pin to the source are checked
+    /// against the text the two pages actually put in the `<script>` element.
+    #[test]
+    fn the_served_script_is_the_script_that_was_audited() {
+        for (form, text) in [("SCRIPT", SCRIPT), ("SERVED", SERVED.as_str())] {
+            assert!(
+                text.contains("prefers-reduced-motion"),
+                "{form} would move a reader who asked it not to"
+            );
+            assert!(
+                text.contains("requestAnimationFrame"),
+                "{form} lost the loop"
+            );
+            assert!(
+                text.contains("document.documentElement.scrollHeight"),
+                "{form} lost the measurement the stop condition needs"
+            );
+            for id in [PANEL_ID, SPEED_ID, TOGGLE_ID] {
+                assert!(
+                    text.contains(&format!(r#""{id}""#)),
+                    "{form} does not name {id}"
+                );
+            }
+        }
+
+        assert!(SERVED.len() < SCRIPT.len(), "nothing was removed");
     }
 }

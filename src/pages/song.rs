@@ -46,6 +46,7 @@ use crate::i18n::{self, Key};
 use crate::pages::artist;
 use crate::state;
 use crate::ui::autoscroll::{self, speed_bar};
+use crate::ui::player::{self, panel as play_along};
 use crate::ui::share::row as share_row;
 use crate::ui::theme;
 
@@ -172,6 +173,12 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                 // it is drawn only by that script, so a sheet read with
                 // JavaScript off shows no button that could not work.
                 speed_bar()
+                // The reader's third control over the same sheet: a silent
+                // tempo clock that walks the lyric a line at a time, and the
+                // tap that is the same move by hand. `ui::player` owns the
+                // panel, the words, the numbers and the script, for the reason
+                // it owns the speed bar — the control is the reader's.
+                play_along()
                 // Handing the sheet to somebody else. `ui::share` owns the row
                 // and the two addresses; what this page hands it is its own
                 // **canonical** URL — the address this sheet consolidates to,
@@ -186,13 +193,14 @@ pub async fn sheet_body(cx: &Cx, sheet: Song) -> Result<impl View> {
                 </a>
             </header>
 
-            <div class=(theme::LYRICS)>
+            <div id=(player::LINES_ID) class=(theme::LYRICS)>
                 for line in lines {
                     lyric_line(line: line)
                 }
             </div>
 
-            <script type="text/javascript">(Unescaped::new_unchecked(autoscroll::SCRIPT))</script>
+            <script type="text/javascript">(Unescaped::new_unchecked(autoscroll::SERVED.as_str()))</script>
+            <script type="text/javascript">(Unescaped::new_unchecked(player::SERVED.as_str()))</script>
         </article>
     })
 }
@@ -248,7 +256,10 @@ pub async fn lyric_line(line: LyricLine) -> Result<impl View> {
     let placed = chunks(&line);
 
     Ok(view! {
-        <div class=(class!(theme::LYRIC_LINE, theme::LYRIC_GAP if blank))>
+        <div
+            class=(class!(theme::LYRIC_LINE, theme::LYRIC_GAP if blank))
+            data-gap=(if blank { "true" } else { "false" })
+        >
             for chunk in placed {
                 match chunk {
                     Chunk::Text(text) => { (text) },

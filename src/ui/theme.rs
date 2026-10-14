@@ -661,7 +661,14 @@ pub const LYRICS: StaticClass = class!("text-lg leading-loose text-mist-100 prin
 /// own box and the chord keeps its place over the syllable, which is what a
 /// sheet a singer reads cannot lose. `a_line_keeps_room_for_the_chord_of_the_line_above`
 /// is the arithmetic, and it fails if any class here stops being a margin.
-pub const LYRIC_LINE: StaticClass = class!("relative mb-2");
+pub const LYRIC_LINE: StaticClass = class!(
+    "relative mb-2",
+    "data-[current=true]:text-mist-100",
+    "data-[current=true]:before:absolute data-[current=true]:before:bottom-2 \
+     data-[current=true]:before:-left-4 data-[current=true]:before:top-2 \
+     data-[current=true]:before:w-0.5 data-[current=true]:before:rounded-full \
+     data-[current=true]:before:bg-tahiti-400"
+);
 
 /// The blank line between two verses.
 ///
@@ -807,6 +814,38 @@ pub const AUTOSCROLL_RANGE: StaticClass = class!("h-4 w-20 cursor-pointer accent
 pub const AUTOSCROLL_BUTTON: StaticClass = class!(
     "flex-none rounded-full px-2 whitespace-nowrap text-mist-100 \
      transition-colors hover:text-tahiti-300"
+);
+
+// ---------------------------------------------------------------------------
+// Playing along with a sheet
+// ---------------------------------------------------------------------------
+
+/// The counter under the play-along panel: which line of the song the clock is
+/// on, how many beats a line takes, and how long that is.
+///
+/// Monospaced and small, so a line number that changes while the reader watches
+/// does not shuffle the words around it, and mute rather than the lyric's own
+/// colour: it is a readout of the clock, not part of the song. Hidden on paper
+/// for [`AUTOSCROLL`]'s reason — a silent clock prints nothing.
+pub const PLAYER_STATUS: StaticClass = class!("mt-2 font-mono text-xs text-mist-500 print:hidden");
+
+/// The beats-a-line group: three buttons, one of them the reader's answer.
+///
+/// The rounded ends and the one border belong to the group, so the three read as
+/// one control holding a chosen value rather than as three controls side by
+/// side — the same shape the header's pills have, on purpose.
+pub const PLAYER_BEATS: StaticClass =
+    class!("flex flex-none overflow-hidden rounded-full border border-ink-700 print:hidden");
+
+/// One of the three beats-a-line choices.
+///
+/// The pressed one says so in colour *and* in background, because it is the only
+/// one of the three that is the reader's answer — and `aria-pressed` is what
+/// carries that to a screen reader, so the two are the same fact rather than a
+/// drawing that happens to look pressed.
+pub const PLAYER_BEATS_BUTTON: StaticClass = class!(
+    "rounded-none px-2 py-1 text-sm text-mist-500 \
+     aria-pressed:bg-ink-700 aria-pressed:text-mist-100"
 );
 
 // ---------------------------------------------------------------------------
@@ -1237,6 +1276,9 @@ mod tests {
         AUTOSCROLL_SPEED,
         AUTOSCROLL_RANGE,
         AUTOSCROLL_BUTTON,
+        PLAYER_STATUS,
+        PLAYER_BEATS,
+        PLAYER_BEATS_BUTTON,
         SHARE,
         SHARE_LINK,
         BOOK_HEAD,
@@ -2025,9 +2067,15 @@ mod tests {
         // ...and the room is a margin, which sits *between* the rows. A padding
         // or a leading would move the lyric inside its own box, and this step may
         // not move a lyric line.
+        // One exception, and it is not one: the play-along clock marks the line
+        // it has reached with an attribute, and the utilities answering that
+        // attribute are state variants — they apply only while the clock is on
+        // that line — and none of them displaces a word: the brightening is a
+        // colour and the bar beside the line is drawn out of the flow.
+        const CURRENT: &str = "data-[current=true]:";
         for name in &line {
             assert!(
-                *name == "relative" || name.starts_with("mb-"),
+                *name == "relative" || name.starts_with("mb-") || name.starts_with(CURRENT),
                 "`{name}` moves the lyric inside its own line box: a chord reaching \
                  the line above is fixed by the space between rows, never by \
                  displacing the words"
