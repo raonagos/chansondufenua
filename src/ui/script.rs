@@ -180,6 +180,7 @@ mod tests {
             ("autoscroll", crate::ui::autoscroll::SCRIPT),
             ("editor", crate::pages::editor::EDITOR_JS),
             ("support", crate::pages::support::COPY_JS),
+            ("player", crate::ui::player::SCRIPT),
         ] {
             let compacted = compact(script);
 
